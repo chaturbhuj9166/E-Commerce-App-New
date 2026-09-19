@@ -1,0 +1,10 @@
+{
+  "name": "ntsa", "private": true,
+  "workspaces": ["Backend", "Frontend/web"],
+  "scripts": {
+    "dev:api": "npm run dev -w Backend", "dev:web": "npm run dev -w Frontend/web",
+    "db:generate": "npm run db:generate -w Backend", "db:migrate": "npm run db:migrate -w Backend",
+    "db:seed": "npm run db:seed -w Backend", "test": "npm test -w Backend",
+    "build": "npm run build -w Frontend/web"
+  }
+}

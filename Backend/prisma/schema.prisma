@@ -1,0 +1,276 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+enum OrderStatus {
+  PENDING_PAYMENT
+  PLACED
+  PACKED
+  SHIPPED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+}
+enum DiscountType {
+  PERCENT
+  FLAT
+}
+model User {
+  id String @id @default(cuid())
+  firebaseUid String @unique
+  name String @default("")
+  email String?
+  phone String?
+  photoUrl String?
+  fcmToken String?
+  createdAt DateTime @default(now())
+  addresses Address[]
+  orders Order[]
+  reviews Review[]
+  wallet Wallet?
+  wishlist Wishlist[]
+  cart CartItem[]
+  @@map("users")
+}
+model Admin {
+  id String @id @default(cuid())
+  email String @unique
+  passwordHash String
+  sessionVersion Int @default(0)
+  @@map("admins")
+}
+model Vendor {
+  id String @id @default(cuid())
+  name String
+  username String @unique
+  passwordHash String
+  email String?
+  phone String?
+  // KYC captured when the super admin onboards a wholesale partner.
+  // Note: storing a full Aadhaar number has its own compliance
+  // considerations under the Aadhaar Act for non-UIDAI-authorized
+  // entities -- flagged for the business to review, not enforced here.
+  aadharNumber String?
+  panNumber String?
+  enabled Boolean @default(true)
+  deleted Boolean @default(false)
+  sessionVersion Int @default(0)
+  createdAt DateTime @default(now())
+  limits VendorLimit?
+  orders Order[]
+  messages VendorMessage[]
+  @@map("vendors")
+}
+// A simple two-way thread between one wholesale buyer and the admin team,
+// for the "message admin" option on the wholesale portal.
+model VendorMessage {
+  id String @id @default(cuid())
+  vendorId String
+  sender String // "VENDOR" | "ADMIN"
+  body String
+  createdAt DateTime @default(now())
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  @@index([vendorId, createdAt])
+  @@map("vendor_messages")
+}
+model VendorLimit {
+  id String @id @default(cuid())
+  vendorId String @unique
+  minPaise Int
+  maxPaise Int
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  @@map("vendor_limits")
+}
+// The Home screen's top banner/slider -- fully admin-managed so a super
+// admin can change its image, text and color without a code change.
+model Banner {
+  id String @id @default(cuid())
+  title String
+  subtitle String?
+  imageUrl String?
+  backgroundColor String? // hex, e.g. "#13224A"; falls back to the app's default brand color when unset
+  buttonText String @default("Shop Now")
+  active Boolean @default(true)
+  sortOrder Int @default(0)
+  createdAt DateTime @default(now())
+  @@map("banners")
+}
+model Coupon {
+  id String @id @default(cuid())
+  code String @unique
+  description String @default("")
+  discountType DiscountType
+  value Int // percent (1-100) or flat paise, per discountType
+  minOrderPaise Int @default(0)
+  maxDiscountPaise Int? // caps a PERCENT discount; ignored for FLAT
+  usageLimit Int? // total redemptions allowed across all customers; null = unlimited
+  usedCount Int @default(0)
+  expiresAt DateTime?
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  @@map("coupons")
+}
+model Category {
+  id String @id @default(cuid())
+  name String @unique
+  icon String @default("shopping_bag")
+  products Product[]
+  @@map("categories")
+}
+model Product {
+  id String @id @default(cuid())
+  name String
+  description String
+  pricePaise Int
+  wholesalePaise Int
+  mrpPaise Int?
+  stock Int
+  categoryId String
+  images String[]
+  // Informational variant options an admin can set per product (e.g. ["S",
+  // "M", "L"] / ["Black", "White"]). Selecting one doesn't change price or
+  // stock -- there's no per-variant inventory, just like the reference
+  // layout's chips.
+  sizes String[]
+  // Optional {"Black": "https://...", "White": "https://..."} -- when a color
+  // has a matching photo, the app shows that photo when the color is picked
+  // instead of always showing the generic gallery.
+  colorImages Json?
+  colors String[]
+  // Free-form extra specs an admin can add per product, e.g.
+  // [{"label": "Capacity", "value": "20L"}, {"label": "Material", "value": "Nylon"}] --
+  // for details that don't fit any fixed field (a bag's capacity, a phone's
+  // RAM, etc). Shown as a "Specifications" list on the product page.
+  attributes Json?
+  refundWindowHours Int @default(24)
+  deal Boolean @default(false)
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  category Category @relation(fields: [categoryId], references: [id])
+  orderItems OrderItem[]
+  reviews Review[]
+  wishlist Wishlist[]
+  cart CartItem[]
+  @@index([categoryId, active])
+  @@map("products")
+}
+model Address {
+  id String @id @default(cuid())
+  userId String
+  name String
+  phone String
+  line1 String
+  city String
+  state String
+  postalCode String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("addresses")
+}
+model Order {
+  id String @id @default(cuid())
+  userId String?
+  vendorId String?
+  status OrderStatus @default(PENDING_PAYMENT)
+  totalPaise Int
+  couponCode String?
+  discountPaise Int @default(0)
+  address Json
+  paymentMethod String
+  paymentId String? @unique
+  razorpayOrderId String? @unique
+  checkoutKey String @unique
+  deliveredAt DateTime?
+  refundEligible Boolean @default(false)
+  deliveryOtpHash String?
+  deliveryOtpExpiresAt DateTime?
+  deliveryOtpAttempts Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User? @relation(fields: [userId], references: [id])
+  vendor Vendor? @relation(fields: [vendorId], references: [id])
+  items OrderItem[]
+  @@index([status, createdAt])
+  @@map("orders")
+}
+model OrderItem {
+  id String @id @default(cuid())
+  orderId String
+  productId String
+  name String
+  quantity Int
+  unitPaise Int
+  refundWindowHours Int
+  refundExpiresAt DateTime?
+  refundEligible Boolean @default(false)
+  order Order @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+  refund Refund?
+  @@index([refundEligible, refundExpiresAt])
+  @@map("order_items")
+}
+model Refund {
+  id String @id @default(cuid())
+  orderItemId String @unique
+  reason String
+  status RefundStatus @default(REQUESTED)
+  createdAt DateTime @default(now())
+  reviewedAt DateTime?
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id])
+  @@map("refunds")
+}
+model Review {
+  id String @id @default(cuid())
+  userId String
+  productId String
+  rating Int
+  comment String
+  images String[]
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+  @@unique([userId, productId])
+  @@map("reviews")
+}
+model Wallet {
+  id String @id @default(cuid())
+  userId String @unique
+  balancePaise Int @default(0)
+  user User @relation(fields: [userId], references: [id])
+  transactions WalletTransaction[]
+  @@map("wallets")
+}
+model WalletTransaction {
+  id String @id @default(cuid())
+  walletId String
+  amountPaise Int
+  kind String
+  reference String @unique
+  createdAt DateTime @default(now())
+  wallet Wallet @relation(fields: [walletId], references: [id])
+  @@map("wallet_transactions")
+}
+model Wishlist {
+  userId String
+  productId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+  @@id([userId, productId])
+  @@map("wishlists")
+}
+model CartItem {
+  userId String
+  productId String
+  quantity Int
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+  @@id([userId, productId])
+  @@map("cart_items")
+}

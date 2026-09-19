@@ -1,0 +1,86 @@
+import { z } from 'zod';
+import { MAX_MONEY } from './rules.js';
+import { config } from '../config.js';
+export { z };
+const text = z.string().trim().min(1).max(200);
+export const money = z.number().int().min(1).max(MAX_MONEY);
+export const addressSchema = z.object({ name: text, phone: z.string().regex(/^\+?[0-9]{10,15}$/), line1: text, city: text, state: text, postalCode: z.string().regex(/^[0-9]{6}$/) });
+// DEMO_MODE also allows plain http:// so admin/products/:id images can point
+// at the local dev upload server (services/storage.js) before Cloudinary is
+// configured; production always requires HTTPS.
+export const imageUrlSchema = z.string().url().refine(v => v.startsWith('https://') || (config.DEMO_MODE && v.startsWith('http://')), 'Image URL must use HTTPS');
+const optionList = z.array(z.string().trim().min(1).max(30)).max(10).default([]);
+export const productSchema = z.object({ name: text, description: z.string().trim().min(1).max(5000), pricePaise: money, wholesalePaise: money,
+  mrpPaise: money.optional(), stock: z.number().int().min(0).max(1000000), categoryId: text,
+  images: z.array(imageUrlSchema).max(5),
+  sizes: optionList, colors: optionList,
+  // Optional per-color photo, e.g. { "Black": "https://...", "White": "https://..." }.
+  colorImages: z.record(z.string(), imageUrlSchema).optional(),
+  // Free-form extra specs, e.g. [{ label: "Capacity", value: "20L" }] -- for
+  // anything that doesn't fit a fixed field.
+  attributes: z.array(z.object({ label: z.string().trim().min(1).max(50), value: z.string().trim().min(1).max(200) })).max(20).default([]),
+  refundWindowHours: z.number().int().min(0).max(720), deal: z.boolean().default(false),
+}).refine(v => v.wholesalePaise <= v.pricePaise, 'Wholesale price cannot exceed retail price')
+  .refine(v => !v.mrpPaise || v.mrpPaise >= v.pricePaise, 'MRP cannot be lower than the selling price');
+export const reviewSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  comment: z.string().trim().min(1).max(1000),
+  images: z.array(imageUrlSchema).max(3).default([]),
+});
+export const limitSchema = z.object({ minPaise: money, maxPaise: money }).refine(v => v.minPaise <= v.maxPaise, 'Minimum must not exceed maximum');
+// Wholesale partner KYC, per the client's brief: the super admin fills this
+// in when onboarding a vendor (not self-service). Fields are optional so an
+// admin can add them later, but each is validated when provided.
+const vendorContact = {
+  email: z.string().trim().toLowerCase().email().max(200).optional(),
+  phone: z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+  aadharNumber: z.string().regex(/^[0-9]{12}$/, 'Aadhaar number must be exactly 12 digits').optional(),
+  panNumber: z.string().trim().toUpperCase().regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, 'Enter a valid PAN (e.g. ABCDE1234F)').optional(),
+};
+export const vendorCreateSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  // The admin picks these directly -- no auto-generated credentials.
+  username: z.string().trim().min(3).max(50).regex(/^[a-zA-Z0-9_.-]+$/, 'Only letters, numbers, dots, hyphens and underscores'),
+  password: z.string().min(8).max(100),
+  ...vendorContact,
+  limits: limitSchema,
+});
+export const vendorUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
+  enabled: z.boolean().optional(),
+  ...vendorContact,
+  limits: limitSchema.optional(),
+});
+export const vendorPasswordSchema = z.object({ password: z.string().min(8).max(100) });
+export const vendorMessageSchema = z.object({ body: z.string().trim().min(1).max(1000) });
+// The Home screen's top banner/slider, fully admin-managed.
+export const bannerSchema = z.object({
+  title: z.string().trim().min(1).max(100),
+  subtitle: z.string().trim().max(200).optional(),
+  imageUrl: imageUrlSchema.optional(),
+  backgroundColor: z.string().trim().regex(/^#[0-9A-Fa-f]{6}$/, 'Use a hex color like #13224A').optional(),
+  buttonText: z.string().trim().min(1).max(30).default('Shop Now'),
+  active: z.boolean().default(true),
+  sortOrder: z.number().int().min(0).max(1000).default(0),
+});
+// Coupon codes are matched case-insensitively but stored uppercase.
+const couponCode = z.string().trim().toUpperCase().min(3).max(30).regex(/^[A-Z0-9]+$/, 'Only letters and numbers');
+export const couponSchema = z.object({
+  code: couponCode,
+  description: z.string().trim().max(200).default(''),
+  discountType: z.enum(['PERCENT', 'FLAT']),
+  value: z.number().int().min(1),
+  minOrderPaise: money.optional().default(1),
+  maxDiscountPaise: money.optional(),
+  usageLimit: z.number().int().min(1).optional(),
+  expiresAt: z.string().datetime().optional(),
+  active: z.boolean().default(true),
+}).refine(v => v.discountType !== 'PERCENT' || v.value <= 100, 'A percent discount cannot exceed 100');
+export const checkoutSchema = z.object({
+  items: z.array(z.object({ productId: text, quantity: z.number().int().min(1).max(10000) })).min(1).max(100)
+    .refine(items => new Set(items.map(i => i.productId)).size === items.length, 'Duplicate products are not allowed'),
+  addressId: text.optional(), address: addressSchema.optional(),
+  paymentMethod: z.enum(['COD', 'WALLET', 'RAZORPAY', 'DEMO']),
+  couponCode: couponCode.optional(),
+  checkoutKey: z.string().uuid(),
+});
