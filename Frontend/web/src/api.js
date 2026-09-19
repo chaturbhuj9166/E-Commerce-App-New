@@ -1,9 +1,15 @@
+// In dev, Vite's own proxy (vite.config.js) forwards a relative /api path to
+// the local backend. In production there's no such proxy, so VITE_API_URL
+// must point straight at the deployed backend -- a static site's own
+// Redirect/Rewrite rules only reliably handle GET navigation, not POST
+// bodies, so routing API calls through one silently breaks every write.
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 export async function api(path, options = {}) {
   const token = sessionStorage.getItem('ntsa-token');
   const form = options.body instanceof FormData;
   let response;
   try {
-    response = await fetch(`/api${path}`, { ...options, headers: { ...(!form ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers }, body: options.body ? (form ? options.body : JSON.stringify(options.body)) : undefined });
+    response = await fetch(`${API_BASE}${path}`, { ...options, headers: { ...(!form ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers }, body: options.body ? (form ? options.body : JSON.stringify(options.body)) : undefined });
   } catch {
     throw new Error('Could not reach the NTSA server. Check your connection and try again.');
   }
