@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/app_colors.dart';
 import '../../providers/shop_provider.dart';
 import '../../widgets/category_icon.dart';
 import '../products/product_listing_screen.dart';
@@ -27,7 +28,8 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final categories = context.watch<ShopProvider>().categories;
+    final shop = context.watch<ShopProvider>();
+    final categories = shop.categories;
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: !widget.embedded,
@@ -35,7 +37,15 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
       ),
       body: SafeArea(
         child: categories.isEmpty
-            ? const Center(child: CircularProgressIndicator())
+            ? Center(
+                child: shop.categoriesError == null
+                    ? (shop.categoriesLoaded ? Text('No categories yet', style: TextStyle(color: AppColors.textMuted)) : const CircularProgressIndicator())
+                    : Column(mainAxisSize: MainAxisSize.min, children: [
+                        Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Text(shop.categoriesError!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger))),
+                        const SizedBox(height: 12),
+                        OutlinedButton(onPressed: () => context.read<ShopProvider>().loadCategories(), child: const Text('Retry')),
+                      ]),
+              )
             : RefreshIndicator(
                 onRefresh: () => context.read<ShopProvider>().loadCategories(),
                 child: GridView.builder(
@@ -45,7 +55,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
                   itemBuilder: (context, i) {
                     final c = categories[i];
                     return CategoryIcon(
-                      icon: c.name.toLowerCase().replaceAll(' & ', '_').replaceAll(' ', '_'),
+                      icon: categoryIconKey(c),
                       label: c.name,
                       size: 60,
                       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductListingScreen(title: c.name, categoryId: c.id))),

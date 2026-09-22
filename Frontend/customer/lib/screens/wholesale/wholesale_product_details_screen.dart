@@ -1,24 +1,83 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../models/product.dart';
 import '../../providers/vendor_provider.dart';
+import '../../widgets/app_network_image.dart';
 import '../../widgets/price_tag.dart';
+import '../../widgets/wholesale_product_grid.dart';
 
 /// A single product's full details for a wholesale buyer -- the retail
 /// ProductDetailsScreen isn't reused here since it's wired to
 /// CartProvider/WishlistProvider (customer-only endpoints) and shows
 /// reviews/retail price, neither of which apply to a bulk buyer.
-class WholesaleProductDetailsScreen extends StatelessWidget {
+class WholesaleProductDetailsScreen extends StatefulWidget {
   const WholesaleProductDetailsScreen({super.key, required this.product});
 
   final Product product;
 
   @override
+  State<WholesaleProductDetailsScreen> createState() => _WholesaleProductDetailsScreenState();
+}
+
+class _WholesaleProductDetailsScreenState extends State<WholesaleProductDetailsScreen> {
+  // Size and color must be picked on purpose, like in the retail app; each
+  // pick is its own line in the wholesale order.
+  String? _size;
+  String? _color;
+  bool _missingPick = false;
+
+  Product get _product => context.read<VendorProvider>().productById(widget.product.id) ?? widget.product;
+  bool get _picked => (_product.sizes.isEmpty || _size != null) && (_product.colors.isEmpty || _color != null);
+
+  void _add() {
+    if (!_picked) {
+      setState(() => _missingPick = true);
+      final p = _product;
+      final missing = [if (p.colors.isNotEmpty && _color == null) 'color', if (p.sizes.isNotEmpty && _size == null) p.sizeLabel.toLowerCase()].join(' and ');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please select a $missing first')));
+      return;
+    }
+    context.read<VendorProvider>().setQuantity(_product.id, 1, size: _size, color: _color);
+  }
+
+  Widget _chips(String title, List<String> options, String? selected, ValueChanged<String> onPick, {String Function(String)? label}) {
+    final missing = _missingPick && selected == null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(selected == null ? 'Select $title' : '$title : $selected', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: missing ? AppColors.danger : AppColors.textPrimary)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: options
+              .map((o) => ChoiceChip(
+                    label: Text(label?.call(o) ?? o, style: const TextStyle(fontSize: 12)),
+                    selected: selected == o,
+                    side: missing ? const BorderSide(color: AppColors.danger) : null,
+                    onSelected: (_) => setState(() {
+                      onPick(o);
+                      _missingPick = false;
+                    }),
+                  ))
+              .toList(),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final vendor = context.watch<VendorProvider>();
-    final qty = vendor.cart[product.id] ?? 0;
+    final product = vendor.productById(widget.product.id) ?? widget.product;
+    final VendorLine line = (productId: product.id, size: _size, color: _color);
+    final qty = _picked ? vendor.cart[line] ?? 0 : 0;
+    final max = vendor.lineMax(line);
+    // Other sizes/colors of this product already in the order.
+    final otherLines = vendor.cart.entries.where((e) => e.key.productId == product.id && e.key != line).toList();
+    final image = _color != null ? product.colorImages[_color] ?? product.image : product.image;
     return Scaffold(
       appBar: AppBar(title: Text(product.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
       body: SafeArea(
@@ -27,9 +86,9 @@ class WholesaleProductDetailsScreen extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 1.1,
-              child: product.image.isEmpty
+              child: image.isEmpty
                   ? Container(color: AppColors.background, child: Icon(Icons.image_outlined, size: 48, color: AppColors.textMuted))
-                  : CachedNetworkImage(imageUrl: product.image, fit: BoxFit.cover, errorWidget: (context, url, error) => const Icon(Icons.image_outlined)),
+                  : AppNetworkImage(image),
             ),
             Padding(
               padding: const EdgeInsets.all(16),
@@ -42,24 +101,32 @@ class WholesaleProductDetailsScreen extends StatelessWidget {
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      PriceTag(pricePaise: product.wholesalePaise ?? product.pricePaise, size: 22),
+                      PriceTag(pricePaise: product.wholesaleFor(_size), size: 22),
                       const SizedBox(width: 10),
-                      Text('Customer price ${formatPaise(product.pricePaise)}', style: TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+                      Flexible(child: Text('Customer price ${formatPaise(product.priceFor(_size))}', style: TextStyle(fontSize: 12.5, color: AppColors.textMuted))),
                     ],
                   ),
+                  if (product.sizePrices.isNotEmpty && _size == null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text('Price depends on the ${product.sizeLabel.toLowerCase()} you choose', style: TextStyle(fontSize: 12, color: AppColors.orange, fontWeight: FontWeight.w500)),
+                    ),
                   const SizedBox(height: 6),
                   Text('${product.stock} units in stock', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
                   const SizedBox(height: 18),
-                  if (product.colors.isNotEmpty) ...[
-                    Text('Available Colors', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 8, runSpacing: 8, children: product.colors.map((c) => Chip(label: Text(c, style: const TextStyle(fontSize: 12)))).toList()),
-                    const SizedBox(height: 16),
-                  ],
-                  if (product.sizes.isNotEmpty) ...[
-                    Text('Available Sizes', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 8, runSpacing: 8, children: product.sizes.map((s) => Chip(label: Text(s, style: const TextStyle(fontSize: 12)))).toList()),
+                  if (product.colors.isNotEmpty) _chips('Color', product.colors, _color, (c) => _color = c),
+                  if (product.sizes.isNotEmpty)
+                    _chips(product.sizeLabel, product.sizes, _size, (s) => _size = s, label: (s) {
+                      final extra = product.sizePrices[s] != null ? product.wholesaleFor(s) - product.wholesaleFor(null) : 0;
+                      return extra > 0 ? '$s  (+${formatPaise(extra)})' : s;
+                    }),
+                  if (otherLines.isNotEmpty) ...[
+                    Text('Already in your order', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
+                    const SizedBox(height: 6),
+                    ...otherLines.map((e) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: Text('• ${[?e.key.size, ?e.key.color].join(' · ')} × ${e.value}', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                        )),
                     const SizedBox(height: 16),
                   ],
                   Text('Description', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
@@ -95,41 +162,20 @@ class WholesaleProductDetailsScreen extends StatelessWidget {
               ? SizedBox(
                   height: 46,
                   child: ElevatedButton(
-                    onPressed: () => context.read<VendorProvider>().setQuantity(product.id, 1),
+                    onPressed: VendorProvider.maxQuantity(product) == 0 || (_picked && max == 0) ? null : _add,
                     style: ElevatedButton.styleFrom(backgroundColor: AppColors.orange, foregroundColor: Colors.white),
-                    child: const Text('Add to Order', style: TextStyle(fontWeight: FontWeight.w700)),
+                    child: Text(VendorProvider.maxQuantity(product) == 0 || (_picked && max == 0) ? 'Out of Stock' : 'Add to Order', style: const TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 )
               : Row(
                   children: [
-                    Text('In your order:', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-                    const Spacer(),
-                    _QtyButton(icon: Icons.remove, onTap: () => context.read<VendorProvider>().setQuantity(product.id, qty - 1)),
+                    Expanded(child: Text('In your order${[?_size, ?_color].isEmpty ? '' : ' (${[?_size, ?_color].join(' · ')})'}:', style: TextStyle(fontSize: 13, color: AppColors.textSecondary))),
+                    WholesaleQtyButton(icon: Icons.remove, size: 36, onTap: () => vendor.setQuantity(product.id, qty - 1, size: _size, color: _color)),
                     Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text('$qty', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16))),
-                    _QtyButton(icon: Icons.add, onTap: () => context.read<VendorProvider>().setQuantity(product.id, qty + 1)),
+                    WholesaleQtyButton(icon: Icons.add, size: 36, onTap: qty >= max ? null : () => vendor.setQuantity(product.id, qty + 1, size: _size, color: _color)),
                   ],
                 ),
         ),
-      ),
-    );
-  }
-}
-
-class _QtyButton extends StatelessWidget {
-  const _QtyButton({required this.icon, required this.onTap});
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(8)),
-        child: Icon(icon, size: 18, color: Colors.white),
       ),
     );
   }

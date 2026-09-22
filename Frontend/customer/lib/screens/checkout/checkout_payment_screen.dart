@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
+import '../../providers/cart_provider.dart';
 import '../../widgets/checkout_stepper.dart';
 import '../../widgets/price_tag.dart';
 import '../../widgets/primary_button.dart';
@@ -19,7 +21,10 @@ class CheckoutPaymentScreen extends StatefulWidget {
 
 class _CheckoutPaymentScreenState extends State<CheckoutPaymentScreen> {
   PaymentMethod _method = PaymentMethod.razorpay;
-  int _walletBalance = 0;
+  // UPI, card and net banking all go through the same gateway method; this
+  // only tracks which tile the shopper picked.
+  String _gatewayTile = 'upi';
+  int? _walletBalance;
 
   @override
   void initState() {
@@ -29,8 +34,18 @@ class _CheckoutPaymentScreenState extends State<CheckoutPaymentScreen> {
     }).catchError((_) {});
   }
 
+  void _pickGateway(String tile) => setState(() {
+        _method = PaymentMethod.razorpay;
+        _gatewayTile = tile;
+      });
+
   @override
   Widget build(BuildContext context) {
+    // Coupons are applied on the next step, so this is an upper bound.
+    final totalPaise = context.watch<CartProvider>().subtotalPaise;
+    final walletUsable = _walletBalance != null && _walletBalance! >= totalPaise;
+    // The balance may have loaded (or the cart changed) after Wallet was picked.
+    final method = _method == PaymentMethod.wallet && !walletUsable ? PaymentMethod.razorpay : _method;
     return Scaffold(
       appBar: AppBar(title: const Text('Checkout')),
       body: SafeArea(
@@ -48,32 +63,34 @@ class _CheckoutPaymentScreenState extends State<CheckoutPaymentScreen> {
                   _PaymentTile(
                     icon: Icons.qr_code_rounded,
                     title: 'UPI (Google Pay, PhonePe, etc.)',
-                    selected: _method == PaymentMethod.razorpay,
-                    onTap: () => setState(() => _method = PaymentMethod.razorpay),
+                    selected: method == PaymentMethod.razorpay && _gatewayTile == 'upi',
+                    onTap: () => _pickGateway('upi'),
                   ),
                   _PaymentTile(
                     icon: Icons.credit_card_rounded,
                     title: 'Credit / Debit Card',
-                    selected: false,
-                    onTap: () => setState(() => _method = PaymentMethod.razorpay),
+                    selected: method == PaymentMethod.razorpay && _gatewayTile == 'card',
+                    onTap: () => _pickGateway('card'),
                   ),
                   _PaymentTile(
                     icon: Icons.account_balance_rounded,
                     title: 'Net Banking',
-                    selected: false,
-                    onTap: () => setState(() => _method = PaymentMethod.razorpay),
+                    selected: method == PaymentMethod.razorpay && _gatewayTile == 'netbanking',
+                    onTap: () => _pickGateway('netbanking'),
                   ),
                   _PaymentTile(
                     icon: Icons.account_balance_wallet_rounded,
                     title: 'Wallet (NTSA Wallet)',
-                    subtitle: 'Balance: ${formatPaise(_walletBalance)}',
-                    selected: _method == PaymentMethod.wallet,
-                    onTap: () => setState(() => _method = PaymentMethod.wallet),
+                    subtitle: _walletBalance == null
+                        ? 'Balance unavailable'
+                        : 'Balance: ${formatPaise(_walletBalance!)}${walletUsable ? '' : ' — insufficient'}',
+                    selected: method == PaymentMethod.wallet,
+                    onTap: walletUsable ? () => setState(() => _method = PaymentMethod.wallet) : null,
                   ),
                   _PaymentTile(
                     icon: Icons.payments_outlined,
                     title: 'Cash on Delivery',
-                    selected: _method == PaymentMethod.cod,
+                    selected: method == PaymentMethod.cod,
                     onTap: () => setState(() => _method = PaymentMethod.cod),
                   ),
                   const SizedBox(height: 12),
@@ -97,7 +114,7 @@ class _CheckoutPaymentScreenState extends State<CheckoutPaymentScreen> {
                   label: 'Continue',
                   orange: true,
                   onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => OrderSummaryScreen(addressId: widget.addressId, method: _method),
+                    builder: (_) => OrderSummaryScreen(addressId: widget.addressId, method: method),
                   )),
                 ),
               ),
@@ -115,37 +132,40 @@ class _PaymentTile extends StatelessWidget {
   final String title;
   final String? subtitle;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: selected ? AppColors.navy : AppColors.border, width: selected ? 1.6 : 1),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: AppColors.navy, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
-                    if (subtitle != null) Text(subtitle!, style: TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
-                  ],
+      child: Opacity(
+        opacity: onTap == null ? 0.5 : 1,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: selected ? AppColors.navy : AppColors.border, width: selected ? 1.6 : 1),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: AppColors.navy, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
+                      if (subtitle != null) Text(subtitle!, style: TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+                    ],
+                  ),
                 ),
-              ),
-              Icon(selected ? Icons.check_circle_rounded : Icons.circle_outlined, color: selected ? AppColors.navy : AppColors.border),
-            ],
+                Icon(selected ? Icons.check_circle_rounded : Icons.circle_outlined, color: selected ? AppColors.navy : AppColors.border),
+              ],
+            ),
           ),
         ),
       ),

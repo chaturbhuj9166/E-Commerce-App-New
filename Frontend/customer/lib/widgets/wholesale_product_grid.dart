@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../core/app_colors.dart';
 import '../models/product.dart';
 import '../providers/vendor_provider.dart';
+import 'app_network_image.dart';
 import 'price_tag.dart';
 
 /// The wholesale-priced product grid, shared by the wholesale Home tab and
@@ -28,12 +29,19 @@ class WholesaleProductGrid extends StatelessWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: products.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 0.62),
+      // A fixed tile height (not an aspect ratio) so the text block below the
+      // image can't overflow narrow tiles or large text scales.
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, mainAxisExtent: 290),
       itemBuilder: (context, i) {
         final p = products[i];
-        final qty = vendor.cart[p.id] ?? 0;
+        // Products with sizes/colors are added from their details page, where
+        // the option is picked; the rest get quick -/+ controls here.
+        final VendorLine line = (productId: p.id, size: null, color: null);
+        final qty = p.hasVariants ? vendor.productQuantity(p.id) : vendor.cart[line] ?? 0;
+        final max = vendor.lineMax(line);
+        final openDetails = onTapProduct == null ? null : () => onTapProduct!(p);
         return GestureDetector(
-          onTap: onTapProduct == null ? null : () => onTapProduct!(p),
+          onTap: openDetails,
           child: Container(
           decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.border)),
           child: Column(
@@ -43,8 +51,8 @@ class WholesaleProductGrid extends StatelessWidget {
                 child: ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
                   child: p.image.isEmpty
-                      ? Container(color: AppColors.background, child: const Icon(Icons.image_outlined))
-                      : Image.network(p.image, fit: BoxFit.cover, width: double.infinity),
+                      ? Container(color: AppColors.background, child: const Center(child: Icon(Icons.image_outlined)))
+                      : AppNetworkImage(p.image, width: double.infinity),
                 ),
               ),
               Padding(
@@ -54,24 +62,36 @@ class WholesaleProductGrid extends StatelessWidget {
                   children: [
                     Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5)),
                     const SizedBox(height: 4),
-                    PriceTag(pricePaise: p.wholesalePaise ?? p.pricePaise, mrpPaise: p.pricePaise, size: 14),
-                    Text('Customer price ${formatPaise(p.pricePaise)}', style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                    PriceTag(pricePaise: p.wholesaleFor(null), mrpPaise: p.pricePaise, size: 14),
+                    Text('Customer price ${formatPaise(p.pricePaise)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
                     const SizedBox(height: 6),
-                    qty == 0
+                    p.hasVariants
                         ? SizedBox(
                             width: double.infinity,
                             height: 32,
                             child: OutlinedButton(
-                              onPressed: () => context.read<VendorProvider>().setQuantity(p.id, 1),
-                              child: const Text('Add', style: TextStyle(fontSize: 12)),
+                              onPressed: VendorProvider.maxQuantity(p) == 0 ? null : openDetails,
+                              child: Text(
+                                VendorProvider.maxQuantity(p) == 0 ? 'Out of stock' : qty > 0 ? '$qty in order · Edit' : 'Choose options',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          )
+                        : qty == 0
+                        ? SizedBox(
+                            width: double.infinity,
+                            height: 32,
+                            child: OutlinedButton(
+                              onPressed: max == 0 ? null : () => context.read<VendorProvider>().setQuantity(p.id, 1),
+                              child: Text(max == 0 ? 'Out of stock' : 'Add', style: const TextStyle(fontSize: 12)),
                             ),
                           )
                         : Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              _QtyButton(icon: Icons.remove, onTap: () => context.read<VendorProvider>().setQuantity(p.id, qty - 1)),
+                              WholesaleQtyButton(icon: Icons.remove, onTap: () => context.read<VendorProvider>().setQuantity(p.id, qty - 1)),
                               Text('$qty', style: const TextStyle(fontWeight: FontWeight.w700)),
-                              _QtyButton(icon: Icons.add, onTap: () => context.read<VendorProvider>().setQuantity(p.id, qty + 1)),
+                              WholesaleQtyButton(icon: Icons.add, onTap: qty >= max ? null : () => context.read<VendorProvider>().setQuantity(p.id, qty + 1)),
                             ],
                           ),
                   ],
@@ -86,21 +106,24 @@ class WholesaleProductGrid extends StatelessWidget {
   }
 }
 
-class _QtyButton extends StatelessWidget {
-  const _QtyButton({required this.icon, required this.onTap});
+/// The wholesale portal's -/+ quantity button; a null [onTap] shows it disabled.
+class WholesaleQtyButton extends StatelessWidget {
+  const WholesaleQtyButton({super.key, required this.icon, required this.onTap, this.size = 24});
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(size / 4);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: radius,
       child: Container(
-        width: 24,
-        height: 24,
-        decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(6)),
-        child: Icon(icon, size: 14, color: Colors.white),
+        width: size,
+        height: size,
+        decoration: BoxDecoration(color: onTap == null ? AppColors.textMuted : AppColors.navy, borderRadius: radius),
+        child: Icon(icon, size: size * 0.55, color: Colors.white),
       ),
     );
   }

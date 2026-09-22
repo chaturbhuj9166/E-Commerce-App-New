@@ -30,7 +30,13 @@ class _WholesaleCatalogTabState extends State<WholesaleCatalogTab> {
     final shop = context.watch<ShopProvider>();
     return SafeArea(
       child: RefreshIndicator(
-        onRefresh: () => Future.wait([vendor.loadProducts(), context.read<ShopProvider>().loadHome()]),
+        onRefresh: () async {
+          try {
+            await Future.wait([vendor.loadProducts(), context.read<ShopProvider>().loadHome()]);
+          } catch (_) {
+            // Banner failures are non-fatal; product errors show inline below.
+          }
+        },
         child: ListView(
           padding: const EdgeInsets.only(bottom: 14),
           children: [
@@ -53,8 +59,31 @@ class _WholesaleCatalogTabState extends State<WholesaleCatalogTab> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Text('Available to Order', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppColors.textPrimary)),
             ),
-            vendor.products.isEmpty
-                ? const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+            if (vendor.limitsMissing)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 10),
+                child: Text(VendorProvider.noLimitsMessage, style: TextStyle(color: AppColors.danger, fontSize: 12.5)),
+              ),
+            vendor.productsError != null && vendor.products.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        Text(vendor.productsError!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger)),
+                        const SizedBox(height: 10),
+                        OutlinedButton(onPressed: vendor.loadProducts, child: const Text('Retry')),
+                      ],
+                    ),
+                  )
+                : vendor.products.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Center(
+                      child: vendor.productsLoaded
+                          ? Text('No products available', style: TextStyle(color: AppColors.textMuted))
+                          : const CircularProgressIndicator(),
+                    ),
+                  )
                 : WholesaleProductGrid(
                     products: vendor.products,
                     onTapProduct: (p) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => WholesaleProductDetailsScreen(product: p))),

@@ -2,10 +2,13 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
+import { randomInt } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { db, atomic } from './db.js';
 import { config } from './config.js';
 import { z, productSchema, addressSchema, vendorCreateSchema, vendorUpdateSchema, vendorPasswordSchema, vendorMessageSchema, bannerSchema, reviewSchema, couponSchema } from './lib/validation.js';
 import { requireThat } from './lib/rules.js';
+import { variantFor, priceFor, publicSizePrices } from './lib/variants.js';
 import { auth, roles, tokenFor } from './services/auth.js';
 import { verifyCustomer } from './services/firebase.js';
 import { uploadImage } from './services/storage.js';
@@ -30,13 +33,35 @@ router.post('/auth/firebase', loginLimiter, async (req, res) => {
   const { idToken } = z.object({ idToken: z.string().min(1).max(10000) }).parse(req.body);
   res.json(await customerSession(await verifyCustomer(idToken)));
 });
+// Demo stand-in for Firebase phone-OTP until SMS credentials exist: the OTP
+// is generated and checked here, but "delivered" by logging it and returning
+// it in the response (DEMO_MODE only) instead of an SMS. In-memory, so it
+// assumes a single server instance, which is all DEMO_MODE runs on.
+const demoOtps = new Map();
+const OTP_TTL_MS = 5 * 60000, OTP_RESEND_MS = 30000, OTP_MAX_ATTEMPTS = 5;
+const demoPhone = z.string().trim().regex(/^[6-9][0-9]{9}$/, 'Enter a valid 10-digit mobile number');
+router.post('/auth/demo/otp', loginLimiter, async (req, res) => {
+  requireThat(config.DEMO_MODE, 404, 'Not found');
+  const { phone } = z.object({ phone: demoPhone }).parse(req.body ?? {});
+  const existing = demoOtps.get(phone);
+  requireThat(!existing || Date.now() - existing.sentAt >= OTP_RESEND_MS, 429, 'Please wait a few seconds before requesting another OTP');
+  const otp = String(randomInt(100000, 1000000));
+  demoOtps.set(phone, { otp, sentAt: Date.now(), expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 });
+  console.log(`[demo OTP] +91 ${phone}: ${otp}`);
+  res.json({ sent: true, expiresInSeconds: OTP_TTL_MS / 1000, resendInSeconds: OTP_RESEND_MS / 1000, demoOtp: otp });
+});
 router.post('/auth/demo', loginLimiter, async (req, res) => {
   requireThat(config.DEMO_MODE, 404, 'Not found');
-  // A stand-in for real Firebase phone-OTP verification: since there's no
-  // real OTP check yet, the number the shopper types is trusted as-is and
-  // maps to its own account, the same way a real phone login would give a
-  // different person a different account for a different number.
-  const { phone } = z.object({ phone: z.string().trim().regex(/^[0-9]{6,15}$/).optional() }).parse(req.body ?? {});
+  // Each number maps to its own account, the same way a real phone login
+  // would. No phone (the Google/Apple buttons) uses one shared demo account.
+  const { phone, otp } = z.object({ phone: demoPhone.optional(), otp: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit OTP').optional() }).parse(req.body ?? {});
+  if (phone) {
+    const entry = demoOtps.get(phone);
+    requireThat(entry && entry.expiresAt > Date.now() && entry.attempts < OTP_MAX_ATTEMPTS, 400, 'OTP expired. Please request a new one');
+    requireThat(otp, 400, 'Enter the 6-digit OTP');
+    if (otp !== entry.otp) { entry.attempts++; requireThat(false, 400, 'Incorrect OTP'); }
+    demoOtps.delete(phone);
+  }
   const uid = phone ? `local-demo-${phone}` : 'local-demo-customer';
   res.json(await customerSession({ uid, name: '', phone_number: phone }));
 });
@@ -48,11 +73,11 @@ router.get('/products', async (req, res) => {
   // both the name and description, since a shopper describing what they want
   // ("something to carry my laptop") rarely types the exact product name.
   const products = await db.product.findMany({ where: { active: true, categoryId: q.categoryId, deal: q.deal ? q.deal === 'true' : undefined, ...(q.search ? { OR: [{ name: { contains: q.search, mode: 'insensitive' } }, { description: { contains: q.search, mode: 'insensitive' } }] } : {}) }, include: { category: true, reviews: { select: { rating: true } } }, orderBy: { createdAt: 'desc' }, take: 200 });
-  res.json(products.map(({ wholesalePaise, reviews, ...p }) => ({ ...p, rating: reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : null, reviewCount: reviews.length })));
+  res.json(products.map(({ wholesalePaise, reviews, ...p }) => ({ ...p, sizePrices: publicSizePrices(p.sizePrices), rating: reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : null, reviewCount: reviews.length })));
 });
 router.get('/products/:id', async (req, res) => {
   const p = await db.product.findFirst({ where: { id: req.params.id, active: true }, include: { category: true, reviews: { select: { rating: true, comment: true, images: true, createdAt: true, user: { select: { name: true } } }, take: 100, orderBy: { createdAt: 'desc' } } } });
-  requireThat(p, 404, 'Product not found'); const { wholesalePaise, ...safe } = p; res.json(safe);
+  requireThat(p, 404, 'Product not found'); const { wholesalePaise, ...safe } = p; res.json({ ...safe, sizePrices: publicSizePrices(safe.sizePrices) });
 });
 router.get('/coupons', async (req, res) => res.json(await db.coupon.findMany({ where: { active: true, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }, orderBy: { createdAt: 'desc' } })));
 router.use(auth);
@@ -79,15 +104,29 @@ router.put('/addresses/:id', customer, async (req, res) => {
 });
 router.delete('/addresses/:id', customer, async (req, res) => { await db.address.deleteMany({ where: { id: req.params.id, userId: req.actor.id } }); res.status(204).end(); });
 router.get('/wallet', customer, async (req, res) => res.json(await db.wallet.findUnique({ where: { userId: req.actor.id }, include: { transactions: { orderBy: { createdAt: 'desc' }, take: 100 } } })));
-router.get('/cart', customer, async (req, res) => res.json(await db.cartItem.findMany({ where: { userId: req.actor.id }, include: { product: { select: { id: true, name: true, pricePaise: true, stock: true, active: true, images: true } } } })));
+// Each cart line is one product + size + color; unitPaise/mrpPaise are that
+// option's price so the app doesn't have to work it out.
+router.get('/cart', customer, async (req, res) => {
+  const items = await db.cartItem.findMany({ where: { userId: req.actor.id }, include: { product: { select: { id: true, name: true, pricePaise: true, wholesalePaise: true, mrpPaise: true, stock: true, active: true, images: true, sizes: true, colors: true, sizeLabel: true, sizePrices: true, category: true } } } });
+  res.json(items.map(({ product: { wholesalePaise, sizePrices, ...product }, ...item }) => {
+    const { pricePaise, mrpPaise } = priceFor({ ...product, wholesalePaise, sizePrices }, item.size);
+    return { ...item, unitPaise: pricePaise, mrpPaise, product: { ...product, sizePrices: publicSizePrices(sizePrices) } };
+  }));
+});
+const cartKey = z.object({ size: z.string().trim().max(30).optional(), color: z.string().trim().max(30).optional() });
 router.put('/cart/:id', customer, async (req, res) => {
-  const { quantity } = z.object({ quantity: z.number().int().min(1).max(10000) }).parse(req.body);
+  const { quantity, ...pick } = cartKey.extend({ quantity: z.number().int().min(1).max(10000) }).parse(req.body);
   const p = await db.product.findFirst({ where: { id: req.params.id, active: true } });
   requireThat(p && p.stock >= quantity, 400, 'Product unavailable or insufficient stock');
-  res.json(await db.cartItem.upsert({ where: { userId_productId: { userId: req.actor.id, productId: p.id } }, update: { quantity }, create: { userId: req.actor.id, productId: p.id, quantity } }));
+  const { size, color } = variantFor(p, pick.size, pick.color);
+  const key = { userId: req.actor.id, productId: p.id, size, color };
+  res.json(await db.cartItem.upsert({ where: { userId_productId_size_color: key }, update: { quantity }, create: { ...key, quantity } }));
 });
-router.delete('/cart/:id', customer, async (req, res) => { await db.cartItem.deleteMany({ where: { userId: req.actor.id, productId: req.params.id } }); res.status(204).end(); });
-router.get('/wishlist', customer, async (req, res) => res.json(await db.wishlist.findMany({ where: { userId: req.actor.id }, include: { product: { select: { id: true, name: true, pricePaise: true, images: true, stock: true, active: true } } } })));
+router.delete('/cart/:id', customer, async (req, res) => {
+  const { size = '', color = '' } = cartKey.parse(req.query);
+  await db.cartItem.deleteMany({ where: { userId: req.actor.id, productId: req.params.id, size, color } }); res.status(204).end();
+});
+router.get('/wishlist', customer, async (req, res) => res.json(await db.wishlist.findMany({ where: { userId: req.actor.id }, include: { product: { select: { id: true, name: true, pricePaise: true, images: true, stock: true, active: true, sizes: true, colors: true } } } })));
 router.put('/wishlist/:id', customer, async (req, res) => {
   requireThat(await db.product.findFirst({ where: { id: req.params.id, active: true } }), 404, 'Product not found');
   const key = { userId: req.actor.id, productId: req.params.id };
@@ -155,13 +194,30 @@ router.post('/vendor/messages', roles('VENDOR'), async (req, res) => {
 });
 router.use('/admin', admin);
 router.get('/admin/products', async (req, res) => res.json(await db.product.findMany({ where: { active: true }, include: { category: true }, orderBy: { createdAt: 'desc' } })));
-router.post('/admin/products', async (req, res) => res.status(201).json(await db.product.create({ data: productSchema.parse(req.body) })));
-router.put('/admin/products/:id', async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: productSchema.parse(req.body) })));
+// Prisma won't take a bare null for a Json column; DbNull clears it.
+const productData = body => {
+  const data = productSchema.parse(body);
+  for (const key of ['colorImages', 'sizePrices']) if (data[key] === null) data[key] = Prisma.DbNull;
+  return data;
+};
+router.post('/admin/products', async (req, res) => res.status(201).json(await db.product.create({ data: productData(req.body) })));
+router.put('/admin/products/:id', async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: productData(req.body) })));
 router.delete('/admin/products/:id', async (req, res) => { await db.product.update({ where: { id: req.params.id }, data: { active: false } }); res.status(204).end(); });
 const categorySchema = z.object({ name: z.string().trim().min(1).max(80), icon: z.string().max(50).default('shopping_bag') });
 router.post('/admin/categories', async (req, res) => res.status(201).json(await db.category.create({ data: categorySchema.parse(req.body) })));
 router.put('/admin/categories/:id', async (req, res) => res.json(await db.category.update({ where: { id: req.params.id }, data: categorySchema.parse(req.body) })));
-router.delete('/admin/categories/:id', async (req, res) => { await db.category.delete({ where: { id: req.params.id } }); res.status(204).end(); });
+router.delete('/admin/categories/:id', async (req, res) => {
+  // Removed products are only deactivated (kept for order history), so they
+  // still reference the category; Postgres would reject the delete with a raw
+  // RESTRICT error that surfaces as a 500.
+  const [active, total] = await Promise.all([
+    db.product.count({ where: { categoryId: req.params.id, active: true } }),
+    db.product.count({ where: { categoryId: req.params.id } }),
+  ]);
+  requireThat(!active, 409, `This category still has ${active} product(s). Move or remove them first.`);
+  requireThat(!total, 409, 'This category is linked to removed products kept for order history, so it cannot be deleted. Rename it instead.');
+  await db.category.delete({ where: { id: req.params.id } }); res.status(204).end();
+});
 router.post('/admin/images', multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => res.status(201).json(await uploadImage(req.file)));
 router.get('/admin/banners', async (req, res) => res.json(await db.banner.findMany({ orderBy: { sortOrder: 'asc' } })));
 router.post('/admin/banners', async (req, res) => res.status(201).json(await db.banner.create({ data: bannerSchema.parse(req.body) })));

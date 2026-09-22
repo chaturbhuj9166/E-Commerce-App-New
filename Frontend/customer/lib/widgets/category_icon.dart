@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
+import '../models/category.dart';
 
 /// The client hasn't supplied per-category icon artwork, so each category
 /// gets its own solid brand color (matching the multi-colored icon grid in
@@ -59,6 +60,11 @@ const Map<String, Color> _categoryColors = {
 };
 
 Color colorForCategory(String key) => _categoryColors[key] ?? AppColors.iconAccent;
+
+/// The admin-picked icon wins; 'shopping_bag' is the backend default (i.e.
+/// nothing picked), so fall back to a key derived from the category name.
+String categoryIconKey(ShopCategory c) =>
+    c.icon.isNotEmpty && c.icon != 'shopping_bag' ? c.icon : c.name.toLowerCase().replaceAll(' & ', '_').replaceAll(' ', '_');
 
 class CategoryIcon extends StatelessWidget {
   const CategoryIcon({super.key, required this.icon, required this.label, this.onTap, this.size = 52});

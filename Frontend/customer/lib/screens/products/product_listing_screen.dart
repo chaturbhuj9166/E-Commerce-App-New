@@ -24,6 +24,7 @@ class ProductListingScreen extends StatefulWidget {
 class _ProductListingScreenState extends State<ProductListingScreen> {
   List<Product> _products = [];
   bool _loading = true;
+  String? _error;
   _SortBy _sort = _SortBy.relevance;
 
   @override
@@ -33,17 +34,30 @@ class _ProductListingScreenState extends State<ProductListingScreen> {
   }
 
   Future<void> _fetch() async {
-    setState(() => _loading = true);
-    final shop = context.read<ShopProvider>();
-    var results = widget.searchQuery != null || widget.categoryId != null
-        ? await shop.searchProducts(widget.searchQuery ?? '', categoryId: widget.categoryId)
-        : (widget.dealsOnly ? shop.deals : shop.latest);
-    if (widget.dealsOnly && widget.categoryId == null && widget.searchQuery == null) results = shop.deals;
     setState(() {
-      _products = results;
-      _loading = false;
+      _loading = true;
+      _error = null;
     });
-    _applySort();
+    final shop = context.read<ShopProvider>();
+    try {
+      final query = widget.searchQuery?.trim();
+      final results = query != null || widget.categoryId != null
+          ? await shop.searchProducts(query == null || query.length <= 100 ? query ?? '' : query.substring(0, 100), categoryId: widget.categoryId)
+          : (widget.dealsOnly ? shop.deals : shop.latest);
+      if (!mounted) return;
+      // A copy, so sorting never reorders ShopProvider's own lists.
+      setState(() => _products = List.of(results));
+      _applySort();
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _toggleWishlist(String id) async {
+    final error = await context.read<WishlistProvider>().toggleOrReport(id);
+    if (error != null && mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
   }
 
   void _applySort() {
@@ -98,7 +112,15 @@ class _ProductListingScreenState extends State<ProductListingScreen> {
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
-                  : _products.isEmpty
+                  : _error != null
+                      ? Center(
+                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger))),
+                            const SizedBox(height: 12),
+                            OutlinedButton(onPressed: _fetch, child: const Text('Retry')),
+                          ]),
+                        )
+                      : _products.isEmpty
                       ? Center(child: Text('No products found', style: TextStyle(color: AppColors.textMuted)))
                       : GridView.builder(
                           padding: const EdgeInsets.all(14),
@@ -109,7 +131,7 @@ class _ProductListingScreenState extends State<ProductListingScreen> {
                             return ProductCard(
                               product: p,
                               wished: wishlist.contains(p.id),
-                              onWishlist: () => context.read<WishlistProvider>().toggle(p.id),
+                              onWishlist: () => _toggleWishlist(p.id),
                               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductDetailsScreen(productId: p.id))),
                             );
                           },
@@ -159,17 +181,13 @@ class _SortSheet extends StatelessWidget {
       _SortBy.rating: 'Customer Rating',
     };
     return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: labels.entries
-            .map((e) => RadioListTile<_SortBy>(
-                  value: e.key,
-                  groupValue: current,
-                  title: Text(e.value),
-                  activeColor: AppColors.navy,
-                  onChanged: (v) => Navigator.of(context).pop(v),
-                ))
-            .toList(),
+      child: RadioGroup<_SortBy>(
+        groupValue: current,
+        onChanged: (v) => Navigator.of(context).pop(v),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: labels.entries.map((e) => RadioListTile<_SortBy>(value: e.key, title: Text(e.value), activeColor: AppColors.navy)).toList(),
+        ),
       ),
     );
   }

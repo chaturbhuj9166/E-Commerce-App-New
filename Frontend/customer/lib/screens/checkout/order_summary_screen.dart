@@ -6,6 +6,7 @@ import '../../core/app_colors.dart';
 import '../../models/coupon.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/shop_provider.dart';
+import '../../widgets/app_network_image.dart';
 import '../../widgets/checkout_stepper.dart';
 import '../../widgets/price_tag.dart';
 import '../../widgets/primary_button.dart';
@@ -28,6 +29,17 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
   final _couponController = TextEditingController();
   Coupon? _appliedCoupon;
   String? _couponError;
+  bool _applying = false;
+  // One key per checkout attempt: a retry after a timeout/network error
+  // reuses it, so the backend returns the existing order instead of
+  // creating a duplicate.
+  final _checkoutKey = const Uuid().v4();
+
+  @override
+  void dispose() {
+    _couponController.dispose();
+    super.dispose();
+  }
 
   /// UPI / card / net-banking route through the real payment gateway once
   /// the client supplies live Razorpay keys. Backend/src/services/payments.js
@@ -53,7 +65,16 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
     final code = _couponController.text.trim().toUpperCase();
     if (code.isEmpty) return;
     final shop = context.read<ShopProvider>();
-    if (shop.coupons.isEmpty) await shop.loadCoupons();
+    setState(() => _applying = true);
+    // Always refetch: the cached list may be stale (new, expired or
+    // deactivated coupons).
+    await shop.loadCoupons();
+    if (!mounted) return;
+    setState(() => _applying = false);
+    if (shop.couponsError != null) {
+      setState(() => _couponError = shop.couponsError);
+      return;
+    }
     final match = shop.coupons.where((c) => c.code == code).toList();
     if (match.isEmpty) {
       setState(() => _couponError = 'Invalid or expired coupon');
@@ -73,11 +94,11 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
     });
     try {
       final order = await ApiClient.instance.post('/orders', data: {
-        'items': cart.items.map((i) => {'productId': i.product.id, 'quantity': i.quantity}).toList(),
+        'items': cart.items.where((i) => i.available).map((i) => {'productId': i.product.id, 'quantity': i.quantity, 'size': ?i.size, 'color': ?i.color}).toList(),
         'addressId': widget.addressId,
         'paymentMethod': _backendMethod,
         if (_appliedCoupon != null) 'couponCode': _appliedCoupon!.code,
-        'checkoutKey': const Uuid().v4(),
+        'checkoutKey': _checkoutKey,
       }) as Map<String, dynamic>;
       await cart.load();
       if (!mounted) return;
@@ -86,7 +107,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
         (route) => route.isFirst,
       );
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _placing = false);
     }
@@ -110,7 +131,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                 children: [
                   const Text('Order Summary', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                   const SizedBox(height: 10),
-                  ...cart.items.map((item) => Padding(
+                  ...cart.items.where((i) => i.available).map((item) => Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: Row(
                           children: [
@@ -118,10 +139,18 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                               borderRadius: BorderRadius.circular(8),
                               child: item.product.image.isEmpty
                                   ? Container(width: 48, height: 48, color: AppColors.background, child: const Icon(Icons.image_outlined, size: 20))
-                                  : Image.network(item.product.image, width: 48, height: 48, fit: BoxFit.cover),
+                                  : AppNetworkImage(item.product.image, width: 48, height: 48),
                             ),
                             const SizedBox(width: 10),
-                            Expanded(child: Text(item.product.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5))),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('${item.product.name} × ${item.quantity}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5)),
+                                  if (item.variantText.isNotEmpty) Text(item.variantText, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                ],
+                              ),
+                            ),
                             Text(formatPaise(item.lineTotalPaise), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
                           ],
                         ),
@@ -153,7 +182,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        OutlinedButton(onPressed: () => _applyCoupon(cart.subtotalPaise), child: const Text('Apply')),
+                        OutlinedButton(onPressed: _applying ? null : () => _applyCoupon(cart.subtotalPaise), child: const Text('Apply')),
                       ],
                     ),
                   if (_couponError != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_couponError!, style: const TextStyle(color: AppColors.danger, fontSize: 12))),
@@ -174,7 +203,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
               top: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
-                child: PrimaryButton(label: 'Place Order', loading: _placing, onPressed: cart.items.isEmpty ? null : () => _placeOrder(cart)),
+                child: PrimaryButton(label: 'Place Order', loading: _placing, onPressed: cart.items.isEmpty || cart.hasUnavailable || cart.loading ? null : () => _placeOrder(cart)),
               ),
             ),
           ],

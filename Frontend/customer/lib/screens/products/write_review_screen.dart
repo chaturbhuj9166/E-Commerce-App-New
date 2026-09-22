@@ -1,9 +1,10 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
+import '../../core/image_upload.dart';
 import '../../widgets/primary_button.dart';
 
 class WriteReviewScreen extends StatefulWidget {
@@ -19,14 +20,16 @@ class WriteReviewScreen extends StatefulWidget {
 class _WriteReviewScreenState extends State<WriteReviewScreen> {
   int _rating = 5;
   final _comment = TextEditingController();
-  final _photos = <String>[]; // local file paths pending upload
+  final _photos = <(XFile, Uint8List)>[]; // picked images pending upload, with preview bytes
   bool _submitting = false;
   String? _error;
 
   Future<void> _addPhoto() async {
     if (_photos.length >= 3) return;
     final picked = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1200);
-    if (picked != null) setState(() => _photos.add(picked.path));
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    setState(() => _photos.add((picked, bytes)));
   }
 
   Future<void> _submit() async {
@@ -40,8 +43,8 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
     });
     try {
       final uploadedUrls = <String>[];
-      for (final path in _photos) {
-        final form = FormData.fromMap({'image': await MultipartFile.fromFile(path)});
+      for (final (file, _) in _photos) {
+        final form = FormData.fromMap({'image': await imagePart(file)});
         final data = await ApiClient.instance.post('/uploads', data: form) as Map<String, dynamic>;
         uploadedUrls.add(data['url'] as String);
       }
@@ -88,17 +91,17 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
             const SizedBox(height: 8),
             Row(
               children: [
-                ..._photos.map((path) => Padding(
+                ..._photos.map((photo) => Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: Stack(
                         children: [
-                          ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(File(path), width: 64, height: 64, fit: BoxFit.cover)),
+                          ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.memory(photo.$2, width: 64, height: 64, fit: BoxFit.cover)),
                           Positioned(
                             right: -6,
                             top: -6,
                             child: IconButton(
                               icon: const Icon(Icons.cancel, size: 18, color: AppColors.danger),
-                              onPressed: () => setState(() => _photos.remove(path)),
+                              onPressed: () => setState(() => _photos.remove(photo)),
                             ),
                           ),
                         ],

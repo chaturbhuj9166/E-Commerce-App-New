@@ -11,7 +11,9 @@ class Review {
         rating: (json['rating'] as num).toInt(),
         comment: json['comment'] as String,
         images: (json['images'] as List?)?.map((e) => e.toString()).toList() ?? const [],
-        reviewerName: (json['user'] as Map<String, dynamic>?)?['name'] as String? ?? 'NTSA Customer',
+        reviewerName: _name((json['user'] as Map<String, dynamic>?)?['name'] as String?),
         createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
       );
+
+  static String _name(String? name) => name != null && name.trim().isNotEmpty ? name : 'NTSA Customer';
 }

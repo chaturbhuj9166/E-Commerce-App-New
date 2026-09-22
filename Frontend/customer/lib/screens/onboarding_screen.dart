@@ -27,6 +27,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _OnboardingPage('assets/images/onboarding_delivery.png', 'Fast & Reliable Delivery', 'Your favorites, delivered with care — right to your doorstep.'),
   ];
 
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   void _goToLogin() => Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
 
   @override

@@ -1,7 +1,7 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../models/banner.dart';
+import 'app_network_image.dart';
 
 /// The Home screen's top banner -- swipeable when the admin has configured
 /// more than one (GET /banners). Falls back to a default look if the admin
@@ -34,17 +34,41 @@ class _BannerSliderState extends State<BannerSlider> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _measure(_banners.first));
   }
 
+  @override
+  void didUpdateWidget(BannerSlider oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.banners == widget.banners) return;
+    if (_page >= _banners.length) {
+      _page = 0;
+      if (_controller.hasClients) _controller.jumpToPage(0);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _measure(_banners[_page.clamp(0, _banners.length - 1)]);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   void _measure(AppBanner banner) {
     if (banner.imageUrl == null) {
-      setState(() => _aspectRatio = 2.6);
+      if (mounted) setState(() => _aspectRatio = 2.6);
       return;
     }
-    final stream = CachedNetworkImageProvider(banner.imageUrl!).resolve(const ImageConfiguration());
+    final stream = appImageProvider(banner.imageUrl!).resolve(const ImageConfiguration());
     late ImageStreamListener listener;
     listener = ImageStreamListener((info, _) {
-      final ratio = info.image.width / info.image.height;
-      if (mounted) setState(() => _aspectRatio = ratio.clamp(1.4, 3.2));
       stream.removeListener(listener);
+      try {
+        final ratio = info.image.width / info.image.height;
+        if (mounted) setState(() => _aspectRatio = ratio.clamp(1.4, 3.2));
+      } catch (_) {
+        // The web <img> fallback exposes no pixel data (info.image throws
+        // UnsupportedError), so the default ratio stays.
+      }
     }, onError: (error, stack) => stream.removeListener(listener));
     stream.addListener(listener);
   }
@@ -107,8 +131,7 @@ class _BannerCard extends StatelessWidget {
             // The surrounding box is already sized to this image's exact
             // aspect ratio (see _BannerSliderState._measure), so cover fills
             // it edge to edge without cropping or leaving gaps.
-            if (banner.imageUrl != null)
-              CachedNetworkImage(imageUrl: banner.imageUrl!, fit: BoxFit.cover, errorWidget: (context, url, error) => const SizedBox.shrink()),
+            if (banner.imageUrl != null) AppNetworkImage(banner.imageUrl!, fit: BoxFit.cover, error: const SizedBox.shrink()),
             // A scrim so the title/button stay readable over any photo.
             if (banner.imageUrl != null) Container(color: Colors.black.withValues(alpha: 0.32)),
             Padding(
@@ -116,22 +139,40 @@ class _BannerCard extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(banner.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, height: 1.25)),
-                        if (banner.subtitle != null) ...[
-                          const SizedBox(height: 4),
-                          Text(banner.subtitle!, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                        ],
-                        const SizedBox(height: 12),
-                        ElevatedButton(
-                          onPressed: onShopNow,
-                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.orange, foregroundColor: Colors.white, minimumSize: const Size(110, 36), padding: const EdgeInsets.symmetric(horizontal: 16)),
-                          child: Text(banner.buttonText, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    // A wide image can leave the card under 100px tall, so the
+                    // text block scales down instead of overflowing.
+                    child: LayoutBuilder(
+                      builder: (context, c) => FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: SizedBox(
+                          width: c.maxWidth,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(banner.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, height: 1.25)),
+                              if (banner.subtitle != null) ...[
+                                const SizedBox(height: 4),
+                                Text(banner.subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                              ],
+                              const SizedBox(height: 12),
+                              ElevatedButton(
+                                onPressed: onShopNow,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.orange,
+                                  foregroundColor: Colors.white,
+                                  minimumSize: const Size(110, 36),
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                ),
+                                child: Text(banner.buttonText, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
                   if (banner.imageUrl == null) Icon(Icons.shopping_bag_rounded, color: Colors.white.withValues(alpha: 0.85), size: 56),

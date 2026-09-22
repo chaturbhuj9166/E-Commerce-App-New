@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/api_client.dart';
@@ -7,6 +6,7 @@ import '../../models/product.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../providers/wishlist_provider.dart';
+import '../../widgets/app_network_image.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/price_tag.dart';
 import '../../widgets/rating_stars.dart';
@@ -35,6 +35,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   // Separate flags so tapping one button doesn't spin the other one too.
   bool _addingToCart = false;
   bool _buyingNow = false;
+  String? _error;
+  // colorImages URLs usually aren't part of `images`, so the selected
+  // color's photo is shown directly until the shopper taps a thumbnail.
+  bool _showColorImage = false;
+  // Set when the shopper tries to buy without picking a size/option.
+  bool _missingSize = false;
 
   bool get _busy => _addingToCart || _buyingNow;
 
@@ -45,28 +51,49 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   }
 
   Future<void> _load() async {
-    final results = await Future.wait([
-      context.read<ShopProvider>().productDetails(widget.productId),
-      ApiClient.instance.get('/products/${widget.productId}/review-eligibility').catchError((_) => {'canReview': false, 'hasReviewed': false}),
-    ]);
+    if (_error != null) setState(() => _error = null);
+    final List<Object?> results;
+    try {
+      results = await Future.wait([
+        context.read<ShopProvider>().productDetails(widget.productId),
+        ApiClient.instance.get('/products/${widget.productId}/review-eligibility').catchError((_) => {'canReview': false, 'hasReviewed': false}),
+      ]);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+      return;
+    }
     if (!mounted) return;
     final p = results[0] as Product;
     final eligibility = results[1] as Map<String, dynamic>;
+    final firstLoad = _product == null;
     setState(() {
       _product = p;
       _canReview = eligibility['canReview'] as bool? ?? false;
       _hasReviewed = eligibility['hasReviewed'] as bool? ?? false;
-      _selectedColor = p.colors.isNotEmpty ? p.colors.first : null;
-      _selectedSize = p.sizes.isNotEmpty ? p.sizes.first : null;
-      final colorImage = _selectedColor != null ? p.colorImages[_selectedColor] : null;
-      _activeImage = colorImage != null ? p.images.indexOf(colorImage).clamp(0, p.images.length - 1) : 0;
+      // A reload (after posting a review) keeps the shopper's picks.
+      if (firstLoad || !p.colors.contains(_selectedColor)) _selectedColor = p.colors.isNotEmpty ? p.colors.first : null;
+      // No default size: shoes, phones etc. must be picked on purpose.
+      if (firstLoad || !p.sizes.contains(_selectedSize)) _selectedSize = null;
+      if (_activeImage >= p.images.length) _activeImage = 0;
+      if (firstLoad) _showColorImage = true;
     });
   }
 
+  Future<void> _toggleWishlist(String id) async {
+    final error = await context.read<WishlistProvider>().toggleOrReport(id);
+    if (error != null && mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+  }
+
   Future<void> _addToCart({bool buyNow = false}) async {
+    final p = _product!;
+    if (p.sizes.isNotEmpty && _selectedSize == null) {
+      setState(() => _missingSize = true);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please select a ${p.sizeLabel.toLowerCase()} first')));
+      return;
+    }
     setState(() => buyNow ? _buyingNow = true : _addingToCart = true);
     try {
-      await context.read<CartProvider>().setQuantity(widget.productId, 1);
+      await context.read<CartProvider>().add(widget.productId, size: _selectedSize, color: _selectedColor, onlyIfMissing: buyNow);
       if (!mounted) return;
       if (buyNow) {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CartScreen()));
@@ -84,6 +111,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   Widget build(BuildContext context) {
     final p = _product;
     final wishlist = context.watch<WishlistProvider>();
+    final colorImage = p != null && _showColorImage && _selectedColor != null ? p.colorImages[_selectedColor] : null;
+    final mainImage = colorImage ?? (p == null || p.images.isEmpty ? null : p.images[_activeImage.clamp(0, p.images.length - 1)]);
+    // GET /products/:id has no aggregate rating, so average the reviews it includes.
+    final rating = p == null || p.reviews.isEmpty ? p?.rating : p.reviews.fold<int>(0, (s, r) => s + r.rating) / p.reviews.length;
+    final reviewCount = p == null || p.reviews.isEmpty ? p?.reviewCount : p.reviews.length;
     return Scaffold(
       appBar: AppBar(
         actions: p == null
@@ -91,13 +123,24 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             : [
                 IconButton(
                   icon: Icon(wishlist.contains(p.id) ? Icons.favorite : Icons.favorite_border, color: wishlist.contains(p.id) ? AppColors.danger : null),
-                  onPressed: () => context.read<WishlistProvider>().toggle(p.id),
+                  onPressed: () => _toggleWishlist(p.id),
                 ),
                 IconButton(icon: const Icon(Icons.share_outlined), onPressed: () {}),
               ],
       ),
       body: p == null
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: _error == null
+                  ? const CircularProgressIndicator()
+                  : Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger)),
+                        const SizedBox(height: 12),
+                        OutlinedButton(onPressed: _load, child: const Text('Retry')),
+                      ]),
+                    ),
+            )
           : SafeArea(
               child: Column(
                 children: [
@@ -106,9 +149,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       children: [
                         AspectRatio(
                           aspectRatio: 1,
-                          child: p.images.isEmpty
+                          child: mainImage == null
                               ? Container(color: AppColors.background, child: Icon(Icons.image_outlined, size: 64, color: AppColors.textMuted))
-                              : CachedNetworkImage(imageUrl: p.images[_activeImage], fit: BoxFit.cover),
+                              : AppNetworkImage(mainImage),
                         ),
                         if (p.images.length > 1)
                           SizedBox(
@@ -119,14 +162,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               itemCount: p.images.length,
                               separatorBuilder: (context, index) => const SizedBox(width: 8),
                               itemBuilder: (_, i) => GestureDetector(
-                                onTap: () => setState(() => _activeImage = i),
+                                onTap: () => setState(() {
+                                  _activeImage = i;
+                                  _showColorImage = false;
+                                }),
                                 child: Container(
                                   width: 56,
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: i == _activeImage ? AppColors.navy : AppColors.border, width: i == _activeImage ? 2 : 1),
+                                    border: Border.all(color: i == _activeImage && colorImage == null ? AppColors.navy : AppColors.border, width: i == _activeImage && colorImage == null ? 2 : 1),
                                   ),
-                                  child: ClipRRect(borderRadius: BorderRadius.circular(9), child: CachedNetworkImage(imageUrl: p.images[i], fit: BoxFit.cover)),
+                                  child: ClipRRect(borderRadius: BorderRadius.circular(9), child: AppNetworkImage(p.images[i], width: 56, height: 48)),
                                 ),
                               ),
                             ),
@@ -138,9 +184,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             children: [
                               Text(p.name, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
                               const SizedBox(height: 6),
-                              RatingStars(rating: p.rating, reviewCount: p.reviewCount, size: 14),
+                              RatingStars(rating: rating, reviewCount: reviewCount, size: 14),
                               const SizedBox(height: 10),
-                              PriceTag(pricePaise: p.pricePaise, mrpPaise: p.mrpPaise, size: 22),
+                              PriceTag(pricePaise: p.priceFor(_selectedSize), mrpPaise: p.mrpFor(_selectedSize), size: 22),
+                              if (p.sizePrices.isNotEmpty && _selectedSize == null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text('Price depends on the ${p.sizeLabel.toLowerCase()} you choose', style: TextStyle(fontSize: 12, color: AppColors.orange, fontWeight: FontWeight.w500)),
+                                ),
                               const SizedBox(height: 4),
                               Text('Inclusive of all taxes', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
                               const SizedBox(height: 14),
@@ -162,27 +213,41 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                           // Jump the photo to this color's own image, when the
                                           // admin has set one, instead of leaving whatever was
                                           // showing (e.g. a different color's photo).
-                                          final colorImage = p.colorImages[c];
-                                          if (colorImage != null) {
-                                            final i = p.images.indexOf(colorImage);
-                                            if (i != -1) _activeImage = i;
-                                          }
+                                          _showColorImage = true;
+                                          final i = p.colorImages[c] == null ? -1 : p.images.indexOf(p.colorImages[c]!);
+                                          if (i != -1) _activeImage = i;
                                         }),
                                       )).toList(),
                                 ),
                               ],
                               if (p.sizes.isNotEmpty) ...[
                                 const SizedBox(height: 14),
-                                Text('Size : ${_selectedSize ?? ''}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                Text(
+                                  _selectedSize == null ? 'Select ${p.sizeLabel}' : '${p.sizeLabel} : $_selectedSize',
+                                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: _missingSize ? AppColors.danger : null),
+                                ),
                                 const SizedBox(height: 8),
                                 Wrap(
                                   spacing: 8,
-                                  children: p.sizes.map((s) => ChoiceChip(
-                                        label: Text(s),
-                                        selected: _selectedSize == s,
-                                        onSelected: (_) => setState(() => _selectedSize = s),
-                                      )).toList(),
+                                  runSpacing: 8,
+                                  children: p.sizes.map((s) {
+                                    final extra = p.sizePrices[s] != null ? p.priceFor(s) - p.pricePaise : 0;
+                                    return ChoiceChip(
+                                      label: Text(extra > 0 ? '$s  (+${formatPaise(extra)})' : s),
+                                      selected: _selectedSize == s,
+                                      side: _missingSize ? const BorderSide(color: AppColors.danger) : null,
+                                      onSelected: (_) => setState(() {
+                                        _selectedSize = s;
+                                        _missingSize = false;
+                                      }),
+                                    );
+                                  }).toList(),
                                 ),
+                                if (_missingSize)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Text('Please select a ${p.sizeLabel.toLowerCase()} to continue', style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+                                  ),
                               ],
                               const SizedBox(height: 14),
                               const Divider(),
@@ -256,7 +321,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                               separatorBuilder: (context, index) => const SizedBox(width: 6),
                                               itemBuilder: (context, i) => ClipRRect(
                                                 borderRadius: BorderRadius.circular(8),
-                                                child: CachedNetworkImage(imageUrl: r.images[i], width: 60, height: 60, fit: BoxFit.cover),
+                                                child: AppNetworkImage(r.images[i], width: 60, height: 60),
                                               ),
                                             ),
                                           ),

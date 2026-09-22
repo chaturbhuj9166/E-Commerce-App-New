@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 
-String formatPaise(int paise) => '₹${(paise / 100).toStringAsFixed(0)}';
+/// Whole rupees print without decimals; anything with paise shows both
+/// digits (rounding ₹99.50 up to ₹100 would misstate the price).
+String formatPaise(int paise) => '${paise < 0 ? '-' : ''}₹${(paise.abs() / 100).toStringAsFixed(paise % 100 == 0 ? 0 : 2)}';
 
 class PriceTag extends StatelessWidget {
   const PriceTag({super.key, required this.pricePaise, this.mrpPaise, this.size = 16});

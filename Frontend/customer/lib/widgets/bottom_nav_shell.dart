@@ -13,6 +13,14 @@ import '../screens/wishlist/wishlist_screen.dart';
 /// The 5 root sections from the layout's bottom nav: Home, Categories,
 /// Cart, Wishlist, Account (screens 6, 7, 11, 12 & 18).
 class BottomNavShell extends StatefulWidget {
+  /// Switches the shell's tab from a screen inside it (e.g. the empty cart's
+  /// "Start Shopping" going back to Home). Returns false outside the shell.
+  static bool selectTab(BuildContext context, int index) {
+    final state = context.findAncestorStateOfType<_BottomNavShellState>();
+    state?._select(index);
+    return state != null;
+  }
+
   const BottomNavShell({super.key});
 
   @override
@@ -20,6 +28,8 @@ class BottomNavShell extends StatefulWidget {
 }
 
 class _BottomNavShellState extends State<BottomNavShell> {
+  void _select(int index) => setState(() => _index = index);
+
   int _index = 0;
 
   final _tabs = [

@@ -12,6 +12,7 @@ class AddressesScreen extends StatefulWidget {
 
 class _AddressesScreenState extends State<AddressesScreen> {
   List<Address>? _addresses;
+  String? _error;
 
   @override
   void initState() {
@@ -20,8 +21,34 @@ class _AddressesScreenState extends State<AddressesScreen> {
   }
 
   Future<void> _load() async {
-    final data = await ApiClient.instance.get('/addresses') as List;
-    if (mounted) setState(() => _addresses = data.map((e) => Address.fromJson(e as Map<String, dynamic>)).toList());
+    if (_error != null) setState(() => _error = null);
+    try {
+      final data = await ApiClient.instance.get('/addresses') as List;
+      if (mounted) setState(() => _addresses = data.map((e) => Address.fromJson(e as Map<String, dynamic>)).toList());
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
+  Future<void> _delete(Address a) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete address?'),
+        content: Text('${a.name}, ${a.line1}, ${a.city}'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), style: TextButton.styleFrom(foregroundColor: AppColors.danger), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ApiClient.instance.delete('/addresses/${a.id}');
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
   }
 
   @override
@@ -31,7 +58,15 @@ class _AddressesScreenState extends State<AddressesScreen> {
       appBar: AppBar(title: const Text('My Addresses')),
       body: SafeArea(
         child: addresses == null
-            ? const Center(child: CircularProgressIndicator())
+            ? Center(
+                child: _error == null
+                    ? const CircularProgressIndicator()
+                    : Column(mainAxisSize: MainAxisSize.min, children: [
+                        Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger))),
+                        const SizedBox(height: 12),
+                        OutlinedButton(onPressed: _load, child: const Text('Retry')),
+                      ]),
+              )
             : addresses.isEmpty
                 ? Center(child: Text('No saved addresses', style: TextStyle(color: AppColors.textMuted)))
                 : ListView.separated(
@@ -52,16 +87,13 @@ class _AddressesScreenState extends State<AddressesScreen> {
                                   Text(a.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                                   const SizedBox(height: 2),
                                   Text('${a.line1}, ${a.city}, ${a.state} - ${a.postalCode}', style: TextStyle(color: AppColors.textSecondary, fontSize: 12.5)),
-                                  Text('+91 ${a.phone}', style: TextStyle(color: AppColors.textSecondary, fontSize: 12.5)),
+                                  Text(a.phone.startsWith('+') ? a.phone : '+91 ${a.phone}', style: TextStyle(color: AppColors.textSecondary, fontSize: 12.5)),
                                 ],
                               ),
                             ),
                             IconButton(
                               icon: Icon(Icons.delete_outline, color: AppColors.textMuted),
-                              onPressed: () async {
-                                await ApiClient.instance.delete('/addresses/${a.id}');
-                                _load();
-                              },
+                              onPressed: () => _delete(a),
                             ),
                           ],
                         ),

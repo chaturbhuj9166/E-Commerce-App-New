@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/cart_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/vendor_provider.dart';
+import '../../providers/wishlist_provider.dart';
+import '../../widgets/bottom_nav_shell.dart';
 import '../../widgets/price_tag.dart';
 import '../account/about_screen.dart';
 import '../account/legal_text_screen.dart';
@@ -14,9 +18,17 @@ class WholesaleSettingsScreen extends StatelessWidget {
 
   final bool embedded;
 
+  /// Back to the customer who opened the portal (token stashed at vendor
+  /// login), or to sign-in when there was none / it no longer works.
   Future<void> _exit(BuildContext context) async {
-    await context.read<VendorProvider>().signOut();
-    if (context.mounted) Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
+    final nav = Navigator.of(context);
+    final auth = context.read<AuthProvider>();
+    context.read<CartProvider>().clear();
+    context.read<WishlistProvider>().clear();
+    final restored = await context.read<VendorProvider>().signOut();
+    final signedIn = restored && await auth.restoreSession();
+    if (!signedIn) await auth.signOut();
+    nav.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => signedIn ? const BottomNavShell() : const LoginScreen()), (route) => false);
   }
 
   @override

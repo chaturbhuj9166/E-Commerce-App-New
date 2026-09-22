@@ -1,7 +1,7 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../models/product.dart';
+import 'app_network_image.dart';
 import 'price_tag.dart';
 import 'rating_stars.dart';
 
@@ -34,7 +34,7 @@ class ProductCard extends StatelessWidget {
                     child: SizedBox.expand(
                       child: product.image.isEmpty
                           ? Container(color: AppColors.background, child: Icon(Icons.image_outlined, color: AppColors.textMuted))
-                          : CachedNetworkImage(imageUrl: product.image, fit: BoxFit.cover, errorWidget: (context, url, error) => const Icon(Icons.image_outlined)),
+                          : AppNetworkImage(product.image, fit: BoxFit.cover),
                     ),
                   ),
                   Positioned(

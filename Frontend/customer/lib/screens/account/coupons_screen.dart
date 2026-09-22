@@ -49,7 +49,11 @@ class _CouponsScreenState extends State<CouponsScreen> {
               const SizedBox(height: 18),
               const Text('Available Coupons', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
               const SizedBox(height: 10),
-              if (shop.coupons.isEmpty)
+              if (shop.couponsError != null)
+                Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Text(shop.couponsError!, style: const TextStyle(color: AppColors.danger)))
+              else if (shop.coupons.isEmpty && shop.couponsLoading)
+                const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Center(child: CircularProgressIndicator()))
+              else if (shop.coupons.isEmpty)
                 Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Text('No active coupons right now. Check back soon!', style: TextStyle(color: AppColors.textMuted))),
               ...shop.coupons.map((c) => Container(
                     margin: const EdgeInsets.only(bottom: 10),

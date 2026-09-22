@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/wishlist_provider.dart';
+import '../../widgets/app_network_image.dart';
 import '../../widgets/price_tag.dart';
 import '../products/product_details_screen.dart';
 
@@ -22,6 +23,28 @@ class _WishlistScreenState extends State<WishlistScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => context.read<WishlistProvider>().load());
   }
 
+  Future<bool> _run(Future<void> Function() action) async {
+    try {
+      await action();
+      return true;
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      return false;
+    }
+  }
+
+  Future<void> _addToCart(String productId, {bool hasVariants = false}) async {
+    // A size/color has to be picked first -- that happens on the product page.
+    if (hasVariants) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Choose a size / option first')));
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductDetailsScreen(productId: productId)));
+      return;
+    }
+    if (await _run(() => context.read<CartProvider>().add(productId)) && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added to cart')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final wishlist = context.watch<WishlistProvider>();
@@ -31,7 +54,15 @@ class _WishlistScreenState extends State<WishlistScreen> {
         child: wishlist.loading
             ? const Center(child: CircularProgressIndicator())
             : wishlist.items.isEmpty
-                ? Center(child: Text('Nothing here yet', style: TextStyle(color: AppColors.textMuted)))
+                ? Center(
+                    child: wishlist.error == null
+                        ? Text('Nothing here yet', style: TextStyle(color: AppColors.textMuted))
+                        : Column(mainAxisSize: MainAxisSize.min, children: [
+                            Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Text(wishlist.error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger))),
+                            const SizedBox(height: 12),
+                            OutlinedButton(onPressed: () => context.read<WishlistProvider>().load(), child: const Text('Retry')),
+                          ]),
+                  )
                 : ListView.separated(
                     padding: const EdgeInsets.all(14),
                     itemCount: wishlist.items.length,
@@ -50,7 +81,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                                 borderRadius: BorderRadius.circular(8),
                                 child: p.image.isEmpty
                                     ? Container(width: 60, height: 60, color: AppColors.background, child: const Icon(Icons.image_outlined))
-                                    : Image.network(p.image, width: 60, height: 60, fit: BoxFit.cover),
+                                    : AppNetworkImage(p.image, width: 60, height: 60),
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -69,11 +100,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                                   SizedBox(
                                     height: 30,
                                     child: OutlinedButton(
-                                      onPressed: p.stock == 0
-                                          ? null
-                                          : () => context.read<CartProvider>().setQuantity(p.id, 1).then((_) {
-                                                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added to cart')));
-                                              }),
+                                      onPressed: p.stock == 0 ? null : () => _addToCart(p.id, hasVariants: p.hasVariants),
                                       style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12), visualDensity: VisualDensity.compact),
                                       child: const Text('Add to Cart', style: TextStyle(fontSize: 12)),
                                     ),
@@ -81,7 +108,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                                 ],
                               ),
                             ),
-                            IconButton(icon: const Icon(Icons.favorite, color: AppColors.danger), onPressed: () => context.read<WishlistProvider>().toggle(p.id)),
+                            IconButton(icon: const Icon(Icons.favorite, color: AppColors.danger), onPressed: () => _run(() => context.read<WishlistProvider>().toggle(p.id))),
                           ],
                         ),
                       );

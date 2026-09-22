@@ -13,6 +13,10 @@ class ShopProvider extends ChangeNotifier {
   List<Coupon> coupons = [];
   bool loading = false;
   String? error;
+  String? categoriesError;
+  bool categoriesLoaded = false;
+  String? couponsError;
+  bool couponsLoading = false;
 
   Future<void> loadHome() async {
     loading = true;
@@ -26,6 +30,7 @@ class ShopProvider extends ChangeNotifier {
         ApiClient.instance.get('/banners'),
       ]);
       categories = (results[0] as List).map((e) => ShopCategory.fromJson(e as Map<String, dynamic>)).toList();
+      categoriesLoaded = true;
       deals = (results[1] as List).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
       latest = (results[2] as List).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
       banners = (results[3] as List).map((e) => AppBanner.fromJson(e as Map<String, dynamic>)).toList();
@@ -37,19 +42,37 @@ class ShopProvider extends ChangeNotifier {
     }
   }
 
+  /// Never throws; failures land in [categoriesError].
   Future<void> loadCategories() async {
-    categories = (await ApiClient.instance.get('/categories') as List).map((e) => ShopCategory.fromJson(e as Map<String, dynamic>)).toList();
+    categoriesError = null;
+    notifyListeners();
+    try {
+      categories = (await ApiClient.instance.get('/categories') as List).map((e) => ShopCategory.fromJson(e as Map<String, dynamic>)).toList();
+      categoriesLoaded = true;
+    } catch (e) {
+      categoriesError = e.toString();
+    }
     notifyListeners();
   }
 
+  /// Never throws; failures land in [couponsError].
   Future<void> loadCoupons() async {
-    coupons = (await ApiClient.instance.get('/coupons') as List).map((e) => Coupon.fromJson(e as Map<String, dynamic>)).toList();
+    couponsLoading = true;
+    couponsError = null;
     notifyListeners();
+    try {
+      coupons = (await ApiClient.instance.get('/coupons') as List).map((e) => Coupon.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (e) {
+      couponsError = e.toString();
+    } finally {
+      couponsLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<List<Product>> searchProducts(String query, {String? categoryId}) async {
     final data = await ApiClient.instance.get('/products', query: {
-      if (query.isNotEmpty) 'search': query,
+      if (query.isNotEmpty) 'search': query.length > 100 ? query.substring(0, 100) : query,
       'categoryId': ?categoryId,
     });
     return (data as List).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();

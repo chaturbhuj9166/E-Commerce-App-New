@@ -20,7 +20,15 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void initState() {
     super.initState();
-    SharedPreferences.getInstance().then((prefs) => setState(() => _recent = prefs.getStringList(_prefKey) ?? []));
+    SharedPreferences.getInstance().then((prefs) {
+      if (mounted) setState(() => _recent = prefs.getStringList(_prefKey) ?? []);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   Future<void> _search(String query) async {
@@ -30,12 +38,13 @@ class _SearchScreenState extends State<SearchScreen> {
     final updated = [q, ..._recent.where((r) => r != q)].take(8).toList();
     await prefs.setStringList(_prefKey, updated);
     if (!mounted) return;
+    setState(() => _recent = updated);
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductListingScreen(title: 'Results for "$q"', searchQuery: q)));
   }
 
   Future<void> _clearRecent() async {
     await (await SharedPreferences.getInstance()).remove(_prefKey);
-    setState(() => _recent = []);
+    if (mounted) setState(() => _recent = []);
   }
 
   @override
@@ -48,8 +57,9 @@ class _SearchScreenState extends State<SearchScreen> {
           child: TextField(
             controller: _controller,
             autofocus: true,
+            maxLength: 100, // backend rejects longer search queries
             onSubmitted: _search,
-            decoration: const InputDecoration(hintText: 'Search for products...', prefixIcon: Icon(Icons.search, size: 20), suffixIcon: Icon(Icons.mic_none_rounded)),
+            decoration: const InputDecoration(counterText: '', hintText: 'Search for products...', prefixIcon: Icon(Icons.search, size: 20), suffixIcon: Icon(Icons.mic_none_rounded)),
           ),
         ),
       ),

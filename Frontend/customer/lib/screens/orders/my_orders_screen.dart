@@ -14,13 +14,22 @@ class MyOrdersScreen extends StatefulWidget {
 
 class _MyOrdersScreenState extends State<MyOrdersScreen> {
   List<Order>? _orders;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    ApiClient.instance.get('/orders').then((data) {
-      if (mounted) setState(() => _orders = (data as List).map((e) => Order.fromJson(e as Map<String, dynamic>)).toList());
-    });
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (_error != null) setState(() => _error = null);
+    try {
+      final data = await ApiClient.instance.get('/orders') as List;
+      if (mounted) setState(() => _orders = data.map((e) => Order.fromJson(e as Map<String, dynamic>)).toList());
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    }
   }
 
   @override
@@ -30,7 +39,15 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
       appBar: AppBar(title: const Text('My Orders')),
       body: SafeArea(
         child: orders == null
-            ? const Center(child: CircularProgressIndicator())
+            ? Center(
+                child: _error == null
+                    ? const CircularProgressIndicator()
+                    : Column(mainAxisSize: MainAxisSize.min, children: [
+                        Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger))),
+                        const SizedBox(height: 12),
+                        OutlinedButton(onPressed: _load, child: const Text('Retry')),
+                      ]),
+              )
             : orders.isEmpty
                 ? Center(child: Text('No orders yet', style: TextStyle(color: AppColors.textMuted)))
                 : ListView.separated(
@@ -41,7 +58,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                       final order = orders[i];
                       return InkWell(
                         borderRadius: BorderRadius.circular(12),
-                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrderTrackingScreen(orderId: order.id))),
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrderTrackingScreen(orderId: order.id))).then((_) => _load()),
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),

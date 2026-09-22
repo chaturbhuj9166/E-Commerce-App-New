@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
+import '../../models/address.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../providers/wishlist_provider.dart';
+import '../../widgets/app_network_image.dart';
 import '../../widgets/banner_slider.dart';
 import '../../widgets/category_icon.dart';
 import '../../widgets/product_card.dart';
@@ -22,13 +25,34 @@ class HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<HomeTab> {
+  /// "City, State" of the customer's first saved address; null until they add one.
+  String? _location;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ShopProvider>().loadHome();
       context.read<WishlistProvider>().load();
+      _loadLocation();
     });
+  }
+
+  Future<void> _loadLocation() async {
+    try {
+      final data = await ApiClient.instance.get('/addresses') as List;
+      final first = data.isEmpty ? null : Address.fromJson(data.first as Map<String, dynamic>);
+      if (mounted) setState(() => _location = first == null ? null : '${first.city}, ${first.state}');
+    } catch (_) {
+      // Header just shows the "add an address" prompt.
+    }
+  }
+
+  Future<void> _refresh() => Future.wait([context.read<ShopProvider>().loadHome(), _loadLocation()]);
+
+  Future<void> _toggleWishlist(String id) async {
+    final error = await context.read<WishlistProvider>().toggleOrReport(id);
+    if (error != null && mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
   }
 
   @override
@@ -39,7 +63,7 @@ class _HomeTabState extends State<HomeTab> {
 
     return SafeArea(
       child: RefreshIndicator(
-        onRefresh: () => context.read<ShopProvider>().loadHome(),
+        onRefresh: _refresh,
         child: ListView(
           padding: const EdgeInsets.only(bottom: 24),
           children: [
@@ -50,7 +74,8 @@ class _HomeTabState extends State<HomeTab> {
                   CircleAvatar(
                     radius: 20,
                     backgroundColor: AppColors.navy,
-                    backgroundImage: user?.photoUrl != null ? NetworkImage(user!.photoUrl!) : null,
+                    backgroundImage: user?.photoUrl != null ? appImageProvider(user!.photoUrl!) : null,
+                    onBackgroundImageError: user?.photoUrl != null ? (_, _) {} : null,
                     child: user?.photoUrl == null ? const Icon(Icons.person, color: Colors.white, size: 20) : null,
                   ),
                   const SizedBox(width: 10),
@@ -58,12 +83,12 @@ class _HomeTabState extends State<HomeTab> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(user?.name ?? 'NTSA', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                        Text(user != null && user.rawName.trim().isNotEmpty ? user.rawName : 'Welcome to NTSA', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                         Row(
                           children: [
                             const Icon(Icons.location_on, size: 13, color: AppColors.orange),
                             const SizedBox(width: 2),
-                            Text('Jaipur, Rajasthan', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                            Flexible(child: Text(_location ?? 'Add a delivery address', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: AppColors.textSecondary))),
                           ],
                         ),
                       ],
@@ -118,7 +143,7 @@ class _HomeTabState extends State<HomeTab> {
                   physics: const NeverScrollableScrollPhysics(),
                   mainAxisSpacing: 10,
                   children: shop.categories.take(12).map((c) => CategoryIcon(
-                        icon: c.name.toLowerCase().replaceAll(' & ', '_').replaceAll(' ', '_'),
+                        icon: categoryIconKey(c),
                         label: c.name,
                         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductListingScreen(title: c.name, categoryId: c.id))),
                       )).toList(),
@@ -154,7 +179,7 @@ class _HomeTabState extends State<HomeTab> {
                   return ProductCard(
                     product: p,
                     wished: wishlist.contains(p.id),
-                    onWishlist: () => context.read<WishlistProvider>().toggle(p.id),
+                    onWishlist: () => _toggleWishlist(p.id),
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductDetailsScreen(productId: p.id))),
                   );
                 },

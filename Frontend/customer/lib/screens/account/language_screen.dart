@@ -18,24 +18,25 @@ class _LanguageScreenState extends State<LanguageScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Language')),
       body: SafeArea(
-        child: Column(
-          children: [
-            RadioListTile<String>(
-              title: const Text('English'),
-              value: 'English',
-              groupValue: _selected,
-              activeColor: AppColors.navy,
-              onChanged: (v) => setState(() => _selected = v!),
-            ),
-            RadioListTile<String>(
-              title: const Text('हिन्दी (Hindi)'),
-              subtitle: Text('Coming soon', style: TextStyle(color: AppColors.textMuted)),
-              value: 'Hindi',
-              groupValue: _selected,
-              activeColor: AppColors.navy,
-              onChanged: null,
-            ),
-          ],
+        child: RadioGroup<String>(
+          groupValue: _selected,
+          onChanged: (v) => setState(() => _selected = v!),
+          child: Column(
+            children: [
+              RadioListTile<String>(
+                title: const Text('English'),
+                value: 'English',
+                activeColor: AppColors.navy,
+              ),
+              RadioListTile<String>(
+                title: const Text('हिन्दी (Hindi)'),
+                subtitle: Text('Coming soon', style: TextStyle(color: AppColors.textMuted)),
+                value: 'Hindi',
+                enabled: false,
+                activeColor: AppColors.navy,
+              ),
+            ],
+          ),
         ),
       ),
     );

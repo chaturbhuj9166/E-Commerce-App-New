@@ -1,9 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../models/product.dart';
 import '../../providers/shop_provider.dart';
+import '../../widgets/app_network_image.dart';
 import '../../widgets/price_tag.dart';
 import '../products/product_details_screen.dart';
 
@@ -82,15 +82,25 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
           }
         }
       }
+      if (!mounted) return;
       setState(() => _messages.add(results.isEmpty
           ? _ChatMessage.bot(text: 'I couldn\'t find anything matching that. Try describing it differently, or browse categories from Home.')
           : _ChatMessage.bot(products: results.take(8).toList())));
     } catch (e) {
-      setState(() => _messages.add(_ChatMessage.bot(text: 'Something went wrong while searching. Please try again.')));
+      if (mounted) setState(() => _messages.add(_ChatMessage.bot(text: 'Something went wrong while searching. Please try again.')));
     } finally {
-      setState(() => _loading = false);
-      _scrollToEnd();
+      if (mounted) {
+        setState(() => _loading = false);
+        _scrollToEnd();
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scroll.dispose();
+    super.dispose();
   }
 
   @override
@@ -210,7 +220,7 @@ class _AssistantProductCard extends StatelessWidget {
                 child: SizedBox.expand(
                   child: product.image.isEmpty
                       ? Container(color: AppColors.background, child: Icon(Icons.image_outlined, color: AppColors.textMuted))
-                      : CachedNetworkImage(imageUrl: product.image, fit: BoxFit.cover, errorWidget: (context, url, error) => const Icon(Icons.image_outlined)),
+                      : AppNetworkImage(product.image, fit: BoxFit.cover),
                 ),
               ),
             ),

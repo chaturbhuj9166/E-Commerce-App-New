@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
 import '../../providers/vendor_provider.dart';
 import '../../widgets/price_tag.dart';
@@ -20,6 +21,12 @@ class WholesaleCheckoutScreen extends StatefulWidget {
 
 enum _VendorPayment { cod, demo }
 
+// Mirrors Backend/src/lib/validation.js addressSchema.
+final _phonePattern = RegExp(r'^\+?[0-9]{10,15}$');
+final _postalPattern = RegExp(r'^[0-9]{6}$');
+String _stripPhone(String v) => v.replaceAll(RegExp(r'[\s-]'), '');
+String? _required(String? v) => v!.trim().isEmpty ? 'Required' : null;
+
 class _WholesaleCheckoutScreenState extends State<WholesaleCheckoutScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
@@ -29,8 +36,26 @@ class _WholesaleCheckoutScreenState extends State<WholesaleCheckoutScreen> {
   final _state = TextEditingController();
   final _postalCode = TextEditingController();
   _VendorPayment _method = _VendorPayment.cod;
+  // "Pay Online" posts a DEMO payment, which the backend only accepts in DEMO_MODE.
+  bool _demoPayments = false;
   bool _placing = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    ApiClient.instance.demoMode().then((demo) {
+      if (mounted) setState(() => _demoPayments = demo);
+    });
+  }
+
+  @override
+  void dispose() {
+    for (final c in [_name, _phone, _line1, _city, _state, _postalCode]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
 
   Future<void> _placeOrder() async {
     if (!_formKey.currentState!.validate()) return;
@@ -42,27 +67,30 @@ class _WholesaleCheckoutScreenState extends State<WholesaleCheckoutScreen> {
       final orderId = await context.read<VendorProvider>().checkout(
         address: {
           'name': _name.text.trim(),
-          'phone': _phone.text.trim(),
+          'phone': _stripPhone(_phone.text),
           'line1': _line1.text.trim(),
           'city': _city.text.trim(),
           'state': _state.text.trim(),
           'postalCode': _postalCode.text.trim(),
         },
-        paymentMethod: _method == _VendorPayment.cod ? 'COD' : 'DEMO',
+        paymentMethod: _demoPayments && _method == _VendorPayment.demo ? 'DEMO' : 'COD',
       );
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
+      // This screen is disposed once the route below replaces the stack, so
+      // the continue button must not use its context.
+      final nav = Navigator.of(context);
+      nav.pushAndRemoveUntil(
         MaterialPageRoute(
           builder: (_) => OrderPlacedScreen(
             orderId: orderId,
             continueLabel: 'Back to Wholesale Catalog',
-            onContinue: () => Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const WholesaleHomeScreen()), (route) => false),
+            onContinue: () => nav.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const WholesaleHomeScreen()), (route) => false),
           ),
         ),
         (route) => false,
       );
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _placing = false);
     }
@@ -81,32 +109,38 @@ class _WholesaleCheckoutScreenState extends State<WholesaleCheckoutScreen> {
             children: [
               const Text('Delivery Address', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
               const SizedBox(height: 10),
-              TextFormField(controller: _name, decoration: const InputDecoration(labelText: 'Business / contact name'), validator: (v) => v!.isEmpty ? 'Required' : null),
+              TextFormField(controller: _name, maxLength: 200, decoration: const InputDecoration(labelText: 'Business / contact name', counterText: ''), validator: _required),
               const SizedBox(height: 10),
-              TextFormField(controller: _phone, decoration: const InputDecoration(labelText: 'Phone number'), keyboardType: TextInputType.phone, validator: (v) => v!.isEmpty ? 'Required' : null),
+              TextFormField(
+                controller: _phone,
+                decoration: const InputDecoration(labelText: 'Phone number'),
+                keyboardType: TextInputType.phone,
+                validator: (v) => _phonePattern.hasMatch(_stripPhone(v!)) ? null : 'Enter a valid phone number (10-15 digits)',
+              ),
               const SizedBox(height: 10),
-              TextFormField(controller: _line1, decoration: const InputDecoration(labelText: 'Address'), validator: (v) => v!.isEmpty ? 'Required' : null),
+              TextFormField(controller: _line1, maxLength: 200, decoration: const InputDecoration(labelText: 'Address', counterText: ''), validator: _required),
               const SizedBox(height: 10),
-              TextFormField(controller: _city, decoration: const InputDecoration(labelText: 'City'), validator: (v) => v!.isEmpty ? 'Required' : null),
+              TextFormField(controller: _city, maxLength: 200, decoration: const InputDecoration(labelText: 'City', counterText: ''), validator: _required),
               const SizedBox(height: 10),
-              TextFormField(controller: _state, decoration: const InputDecoration(labelText: 'State'), validator: (v) => v!.isEmpty ? 'Required' : null),
+              TextFormField(controller: _state, maxLength: 200, decoration: const InputDecoration(labelText: 'State', counterText: ''), validator: _required),
               const SizedBox(height: 10),
-              TextFormField(controller: _postalCode, decoration: const InputDecoration(labelText: 'Postal code'), keyboardType: TextInputType.number, validator: (v) => v!.isEmpty ? 'Required' : null),
+              TextFormField(
+                controller: _postalCode,
+                decoration: const InputDecoration(labelText: 'Postal code'),
+                keyboardType: TextInputType.number,
+                validator: (v) => _postalPattern.hasMatch(v!.trim()) ? null : 'Enter a 6-digit postal code',
+              ),
               const SizedBox(height: 20),
               const Text('Payment Method', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-              RadioListTile<_VendorPayment>(
-                value: _VendorPayment.cod,
-                groupValue: _method,
-                title: const Text('Cash on Delivery'),
-                activeColor: AppColors.navy,
+              RadioGroup<_VendorPayment>(
+                groupValue: _demoPayments ? _method : _VendorPayment.cod,
                 onChanged: (v) => setState(() => _method = v!),
-              ),
-              RadioListTile<_VendorPayment>(
-                value: _VendorPayment.demo,
-                groupValue: _method,
-                title: const Text('Pay Online'),
-                activeColor: AppColors.navy,
-                onChanged: (v) => setState(() => _method = v!),
+                child: Column(
+                  children: [
+                    RadioListTile<_VendorPayment>(value: _VendorPayment.cod, title: const Text('Cash on Delivery'), activeColor: AppColors.navy),
+                    if (_demoPayments) RadioListTile<_VendorPayment>(value: _VendorPayment.demo, title: const Text('Pay Online'), activeColor: AppColors.navy),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               Container(
@@ -120,9 +154,10 @@ class _WholesaleCheckoutScreenState extends State<WholesaleCheckoutScreen> {
                   ],
                 ),
               ),
+              if (vendor.limitsMissing) const Padding(padding: EdgeInsets.only(top: 12), child: Text(VendorProvider.noLimitsMessage, style: TextStyle(color: AppColors.danger))),
               if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: const TextStyle(color: AppColors.danger))),
               const SizedBox(height: 20),
-              PrimaryButton(label: 'Place Order', loading: _placing, onPressed: _placeOrder),
+              PrimaryButton(label: 'Place Order', loading: _placing, onPressed: vendor.limitsMissing || vendor.cart.isEmpty ? null : _placeOrder),
             ],
           ),
         ),

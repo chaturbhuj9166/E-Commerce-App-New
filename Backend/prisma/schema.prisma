@@ -135,11 +135,15 @@ model Product {
   stock Int
   categoryId String
   images String[]
-  // Informational variant options an admin can set per product (e.g. ["S",
-  // "M", "L"] / ["Black", "White"]). Selecting one doesn't change price or
-  // stock -- there's no per-variant inventory, just like the reference
-  // layout's chips.
+  // Variant options a shopper must pick from when present, e.g. shoe sizes
+  // ["6", "7", "8"] or phone storage ["128GB", "256GB"]. sizeLabel names the
+  // choice ("Size", "Storage", ...). Stock is shared across options.
   sizes String[]
+  sizeLabel String @default("Size")
+  // Optional per-option price override, e.g.
+  // {"256GB": {"pricePaise": 1499900, "wholesalePaise": 1199900, "mrpPaise": 1799900}};
+  // an option without an entry uses the product's own prices.
+  sizePrices Json?
   // Optional {"Black": "https://...", "White": "https://..."} -- when a color
   // has a matching photo, the app shows that photo when the color is picked
   // instead of always showing the generic gallery.
@@ -207,6 +211,9 @@ model OrderItem {
   name String
   quantity Int
   unitPaise Int
+  // The variant the shopper picked, so the right size/color gets packed.
+  size String?
+  color String?
   refundWindowHours Int
   refundExpiresAt DateTime?
   refundEligible Boolean @default(false)
@@ -268,9 +275,13 @@ model Wishlist {
 model CartItem {
   userId String
   productId String
+  // "" when the product has no such option; part of the key so two sizes of
+  // the same shoe are separate cart lines.
+  size String @default("")
+  color String @default("")
   quantity Int
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
-  @@id([userId, productId])
+  @@id([userId, productId, size, color])
   @@map("cart_items")
 }

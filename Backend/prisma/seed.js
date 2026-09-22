@@ -64,8 +64,10 @@ const samples = [
     colorImages: { Black: imageUrl('photo-1511499271651-073325718d90'), Blue: imageUrl('photo-1692351014024-97edd83a7b5a'), Red: imageUrl('photo-1564975472884-a6e9fd24e967') },
   },
   {
-    name: 'Budget Smartphone 128GB', category: 'Mobiles', pricePaise: 1299900, wholesalePaise: 999900, mrpPaise: 1599900, refundWindowHours: 24, deal: false,
-    colors: ['Black', 'Blue', 'Silver'], sizes: ['128GB', '256GB'],
+    name: 'Budget Smartphone', category: 'Mobiles', pricePaise: 1299900, wholesalePaise: 999900, mrpPaise: 1599900, refundWindowHours: 24, deal: false,
+    colors: ['Black', 'Blue', 'Silver'], sizes: ['128GB', '256GB'], sizeLabel: 'Storage',
+    // The larger storage option costs more; 128GB uses the base prices above.
+    sizePrices: { '256GB': { pricePaise: 1499900, wholesalePaise: 1149900, mrpPaise: 1799900 } },
     colorImages: { Black: imageUrl('photo-1563452619267-bc16ef6cecec'), Blue: imageUrl('photo-1575571538207-ca427b39def5'), Silver: imageUrl('photo-1565967249821-083c4775e5bc') },
   },
   {
@@ -124,7 +126,7 @@ try {
     const fields = {
       name: s.name, description: 'Thoughtfully selected for your everyday. Quality you can count on, at a price you will love.',
       categoryId: c.id, pricePaise: s.pricePaise, wholesalePaise: s.wholesalePaise, mrpPaise: s.mrpPaise, refundWindowHours: s.refundWindowHours,
-      images, colors: s.colors, sizes: s.sizes, colorImages: s.colorImages ?? null, deal: s.deal,
+      images, colors: s.colors, sizes: s.sizes, sizeLabel: s.sizeLabel ?? 'Size', sizePrices: s.sizePrices ?? null, colorImages: s.colorImages ?? null, deal: s.deal,
     };
     await db.product.upsert({ where: { id }, update: fields, create: { id, stock: 100, ...fields } });
     productIds.push({ id, images });

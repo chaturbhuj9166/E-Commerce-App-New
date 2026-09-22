@@ -1,9 +1,10 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/app_network_image.dart';
 import '../../widgets/primary_button.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -14,8 +15,9 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  late final _name = TextEditingController(text: context.read<AuthProvider>().user?.name);
-  String? _localPhotoPath;
+  late final _name = TextEditingController(text: context.read<AuthProvider>().user?.rawName);
+  XFile? _photo;
+  Uint8List? _photoBytes; // for the preview; works on web too, unlike File
   String? _error;
 
   Future<void> _pickPhoto() async {
@@ -28,13 +30,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ]),
       ),
     );
-    if (picked != null) setState(() => _localPhotoPath = picked.path);
+    if (picked == null || !mounted) return;
+    final bytes = await picked.readAsBytes();
+    if (!mounted) return;
+    setState(() {
+      _photo = picked;
+      _photoBytes = bytes;
+    });
   }
 
   Future<void> _save() async {
     setState(() => _error = null);
     final auth = context.read<AuthProvider>();
-    final ok = await auth.updateProfile(name: _name.text, photoPath: _localPhotoPath);
+    final ok = await auth.updateProfile(name: _name.text, photo: _photo);
     if (!mounted) return;
     if (ok) {
       Navigator.of(context).pop();
@@ -61,10 +69,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     CircleAvatar(
                       radius: 48,
                       backgroundColor: AppColors.navy,
-                      backgroundImage: _localPhotoPath != null
-                          ? FileImage(File(_localPhotoPath!))
-                          : (user?.photoUrl != null ? NetworkImage(user!.photoUrl!) : null) as ImageProvider?,
-                      child: _localPhotoPath == null && user?.photoUrl == null ? const Icon(Icons.person, color: Colors.white, size: 44) : null,
+                      backgroundImage: _photoBytes != null
+                          ? MemoryImage(_photoBytes!)
+                          : (user?.photoUrl != null ? appImageProvider(user!.photoUrl!) : null),
+                      onBackgroundImageError: _photoBytes != null || user?.photoUrl != null ? (_, _) {} : null,
+                      child: _photoBytes == null && user?.photoUrl == null ? const Icon(Icons.person, color: Colors.white, size: 44) : null,
                     ),
                     Positioned(
                       right: 0,
@@ -80,7 +89,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
             ),
             const SizedBox(height: 28),
-            TextField(controller: _name, decoration: const InputDecoration(labelText: 'Full name')),
+            TextField(controller: _name, maxLength: 100, decoration: const InputDecoration(labelText: 'Full name', counterText: '')),
             if (user?.email != null) ...[
               const SizedBox(height: 14),
               TextField(enabled: false, controller: TextEditingController(text: user!.email), decoration: const InputDecoration(labelText: 'Email')),

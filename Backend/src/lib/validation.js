@@ -11,17 +11,26 @@ export const addressSchema = z.object({ name: text, phone: z.string().regex(/^\+
 export const imageUrlSchema = z.string().url().refine(v => v.startsWith('https://') || (config.DEMO_MODE && v.startsWith('http://')), 'Image URL must use HTTPS');
 const optionList = z.array(z.string().trim().min(1).max(30)).max(10).default([]);
 export const productSchema = z.object({ name: text, description: z.string().trim().min(1).max(5000), pricePaise: money, wholesalePaise: money,
-  mrpPaise: money.optional(), stock: z.number().int().min(0).max(1000000), categoryId: text,
+  // Optional fields also accept null so an edit can clear them (undefined
+  // would leave the stored value unchanged).
+  mrpPaise: money.nullable().optional(), stock: z.number().int().min(0).max(1000000), categoryId: text,
   images: z.array(imageUrlSchema).max(5),
   sizes: optionList, colors: optionList,
+  // What the size-like option is called in the app, e.g. "Size", "Storage".
+  sizeLabel: z.string().trim().min(1).max(30).default('Size'),
+  // Optional per-option prices, e.g. { "256GB": { pricePaise, wholesalePaise, mrpPaise } }.
+  sizePrices: z.record(z.string(), z.object({ pricePaise: money, wholesalePaise: money, mrpPaise: money.nullable().optional() })).nullable().optional(),
   // Optional per-color photo, e.g. { "Black": "https://...", "White": "https://..." }.
-  colorImages: z.record(z.string(), imageUrlSchema).optional(),
+  colorImages: z.record(z.string(), imageUrlSchema).nullable().optional(),
   // Free-form extra specs, e.g. [{ label: "Capacity", value: "20L" }] -- for
   // anything that doesn't fit a fixed field.
   attributes: z.array(z.object({ label: z.string().trim().min(1).max(50), value: z.string().trim().min(1).max(200) })).max(20).default([]),
   refundWindowHours: z.number().int().min(0).max(720), deal: z.boolean().default(false),
 }).refine(v => v.wholesalePaise <= v.pricePaise, 'Wholesale price cannot exceed retail price')
-  .refine(v => !v.mrpPaise || v.mrpPaise >= v.pricePaise, 'MRP cannot be lower than the selling price');
+  .refine(v => !v.mrpPaise || v.mrpPaise >= v.pricePaise, 'MRP cannot be lower than the selling price')
+  .refine(v => Object.keys(v.sizePrices ?? {}).every(k => v.sizes.includes(k)), 'Option prices must match one of the listed options')
+  .refine(v => Object.values(v.sizePrices ?? {}).every(o => o.wholesalePaise <= o.pricePaise), 'An option\'s wholesale price cannot exceed its retail price')
+  .refine(v => Object.values(v.sizePrices ?? {}).every(o => !o.mrpPaise || o.mrpPaise >= o.pricePaise), 'An option\'s MRP cannot be lower than its selling price');
 export const reviewSchema = z.object({
   rating: z.number().int().min(1).max(5),
   comment: z.string().trim().min(1).max(1000),
@@ -32,10 +41,10 @@ export const limitSchema = z.object({ minPaise: money, maxPaise: money }).refine
 // in when onboarding a vendor (not self-service). Fields are optional so an
 // admin can add them later, but each is validated when provided.
 const vendorContact = {
-  email: z.string().trim().toLowerCase().email().max(200).optional(),
-  phone: z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
-  aadharNumber: z.string().regex(/^[0-9]{12}$/, 'Aadhaar number must be exactly 12 digits').optional(),
-  panNumber: z.string().trim().toUpperCase().regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, 'Enter a valid PAN (e.g. ABCDE1234F)').optional(),
+  email: z.string().trim().toLowerCase().email().max(200).nullable().optional(),
+  phone: z.string().regex(/^\+?[0-9]{10,15}$/).nullable().optional(),
+  aadharNumber: z.string().regex(/^[0-9]{12}$/, 'Aadhaar number must be exactly 12 digits').nullable().optional(),
+  panNumber: z.string().trim().toUpperCase().regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, 'Enter a valid PAN (e.g. ABCDE1234F)').nullable().optional(),
 };
 export const vendorCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -56,9 +65,9 @@ export const vendorMessageSchema = z.object({ body: z.string().trim().min(1).max
 // The Home screen's top banner/slider, fully admin-managed.
 export const bannerSchema = z.object({
   title: z.string().trim().min(1).max(100),
-  subtitle: z.string().trim().max(200).optional(),
-  imageUrl: imageUrlSchema.optional(),
-  backgroundColor: z.string().trim().regex(/^#[0-9A-Fa-f]{6}$/, 'Use a hex color like #13224A').optional(),
+  subtitle: z.string().trim().max(200).nullable().optional(),
+  imageUrl: imageUrlSchema.nullable().optional(),
+  backgroundColor: z.string().trim().regex(/^#[0-9A-Fa-f]{6}$/, 'Use a hex color like #13224A').nullable().optional(),
   buttonText: z.string().trim().min(1).max(30).default('Shop Now'),
   active: z.boolean().default(true),
   sortOrder: z.number().int().min(0).max(1000).default(0),
@@ -71,14 +80,14 @@ export const couponSchema = z.object({
   discountType: z.enum(['PERCENT', 'FLAT']),
   value: z.number().int().min(1),
   minOrderPaise: money.optional().default(1),
-  maxDiscountPaise: money.optional(),
-  usageLimit: z.number().int().min(1).optional(),
+  maxDiscountPaise: money.nullable().optional(),
+  usageLimit: z.number().int().min(1).nullable().optional(),
   expiresAt: z.string().datetime().optional(),
   active: z.boolean().default(true),
 }).refine(v => v.discountType !== 'PERCENT' || v.value <= 100, 'A percent discount cannot exceed 100');
 export const checkoutSchema = z.object({
-  items: z.array(z.object({ productId: text, quantity: z.number().int().min(1).max(10000) })).min(1).max(100)
-    .refine(items => new Set(items.map(i => i.productId)).size === items.length, 'Duplicate products are not allowed'),
+  items: z.array(z.object({ productId: text, quantity: z.number().int().min(1).max(10000), size: z.string().trim().max(30).optional(), color: z.string().trim().max(30).optional() })).min(1).max(100)
+    .refine(items => new Set(items.map(i => `${i.productId}|${i.size ?? ''}|${i.color ?? ''}`)).size === items.length, 'Duplicate products are not allowed'),
   addressId: text.optional(), address: addressSchema.optional(),
   paymentMethod: z.enum(['COD', 'WALLET', 'RAZORPAY', 'DEMO']),
   couponCode: couponCode.optional(),

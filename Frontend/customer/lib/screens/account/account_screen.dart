@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/cart_provider.dart';
+import '../../providers/wishlist_provider.dart';
+import '../../widgets/app_network_image.dart';
 import '../auth/login_screen.dart';
 import '../orders/my_orders_screen.dart';
 import '../addresses/addresses_screen.dart';
@@ -34,7 +37,8 @@ class AccountScreen extends StatelessWidget {
                   CircleAvatar(
                     radius: 28,
                     backgroundColor: Colors.white24,
-                    backgroundImage: user?.photoUrl != null ? NetworkImage(user!.photoUrl!) : null,
+                    backgroundImage: user?.photoUrl != null ? appImageProvider(user!.photoUrl!) : null,
+                    onBackgroundImageError: user?.photoUrl != null ? (_, _) {} : null,
                     child: user?.photoUrl == null ? const Icon(Icons.person, color: Colors.white, size: 28) : null,
                   ),
                   const SizedBox(width: 14),
@@ -81,6 +85,8 @@ class AccountScreen extends StatelessWidget {
               label: 'Logout',
               danger: true,
               onTap: () async {
+                context.read<CartProvider>().clear();
+                context.read<WishlistProvider>().clear();
                 await context.read<AuthProvider>().signOut();
                 if (context.mounted) Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
               },
