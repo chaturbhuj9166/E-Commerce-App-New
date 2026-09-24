@@ -37,6 +37,16 @@ class ProductCard extends StatelessWidget {
                           : AppNetworkImage(product.image, fit: BoxFit.cover),
                     ),
                   ),
+                  if (!product.isNewStock)
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(color: AppColors.orange, borderRadius: BorderRadius.circular(6)),
+                        child: Text(product.conditionLabel, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
                   Positioned(
                     top: 6,
                     right: 6,

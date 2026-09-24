@@ -113,6 +113,7 @@ try {
     ['Electronics', 'electronics'], ['Fashion', 'fashion'], ['Grocery', 'grocery'], ['Beauty', 'beauty'],
     ['Home & Kitchen', 'home_kitchen'], ['Mobiles', 'mobiles'], ['Appliances', 'appliances'], ['Furniture', 'furniture'],
     ['Toys & Games', 'toys'], ['Sports', 'sports'], ['Books', 'books'], ['Health', 'health'],
+    ['Lawn & Garden', 'lawn_garden'],
   ];
   for (const [name, icon] of categories) await db.category.upsert({ where: { name }, update: {}, create: { name, icon } });
 

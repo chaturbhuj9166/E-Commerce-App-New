@@ -183,6 +183,27 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(p.name, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
+                              // Refurbished / open-box stock is called out before the price.
+                              if (!p.isNewStock) ...[
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                                  decoration: BoxDecoration(color: AppColors.orange.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(Icons.info_outline_rounded, size: 16, color: AppColors.orange),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          p.conditionNote?.isNotEmpty == true ? '${p.conditionLabel} · ${p.conditionNote}' : '${p.conditionLabel} item — not brand-new stock',
+                                          style: const TextStyle(fontSize: 12.5, color: AppColors.orange, fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 6),
                               RatingStars(rating: rating, reviewCount: reviewCount, size: 14),
                               const SizedBox(height: 10),

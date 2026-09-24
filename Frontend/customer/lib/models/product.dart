@@ -10,6 +10,8 @@ class Product {
     required this.stock,
     required this.images,
     required this.deal,
+    this.condition = 'NEW',
+    this.conditionNote,
     this.mrpPaise,
     this.wholesalePaise,
     this.colors = const [],
@@ -52,6 +54,9 @@ class Product {
   /// "Specifications" list on the product page.
   final List<(String label, String value)> attributes;
   final bool deal;
+  /// NEW / REFURBISHED / OPEN_BOX / USED, with an optional line of detail.
+  final String condition;
+  final String? conditionNote;
   final ShopCategory? category;
   final double? rating;
   final int reviewCount;
@@ -62,6 +67,13 @@ class Product {
   double get price => pricePaise / 100;
   String get image => images.isNotEmpty ? images.first : '';
   bool get hasVariants => sizes.isNotEmpty || colors.isNotEmpty;
+  bool get isNewStock => condition == 'NEW';
+  /// Short label for the badge on listings, e.g. "Refurbished".
+  String get conditionLabel => const {
+        'REFURBISHED': 'Refurbished',
+        'OPEN_BOX': 'Open box',
+        'USED': 'Used',
+      }[condition] ?? 'New';
 
   /// Price / MRP for a picked option (the base price when none is picked yet).
   int priceFor(String? size) => sizePrices[size]?.price ?? pricePaise;
@@ -87,6 +99,8 @@ class Product {
                 .toList() ??
             const [],
         deal: json['deal'] as bool? ?? false,
+        condition: (json['condition'] as String?) ?? 'NEW',
+        conditionNote: json['conditionNote'] as String?,
         category: json['category'] != null ? ShopCategory.fromJson(json['category']) : null,
         rating: (json['rating'] as num?)?.toDouble(),
         reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,

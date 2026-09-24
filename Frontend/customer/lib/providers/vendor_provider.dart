@@ -1,6 +1,9 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../core/api_client.dart';
+import '../core/image_upload.dart';
 import '../models/product.dart';
 
 class VendorLimits {
@@ -14,11 +17,13 @@ class VendorLimits {
 
 /// One message in the wholesale portal's "Message Admin" thread.
 class VendorMessage {
-  VendorMessage({required this.id, required this.sender, required this.body, required this.createdAt});
+  VendorMessage({required this.id, required this.sender, required this.body, required this.createdAt, this.attachments = const []});
   final String id;
   final String sender; // 'VENDOR' | 'ADMIN'
   final String body;
   final DateTime createdAt;
+  /// Photos and short clips sent with the message.
+  final List<String> attachments;
 
   bool get fromAdmin => sender == 'ADMIN';
 
@@ -27,6 +32,7 @@ class VendorMessage {
         sender: json['sender'] as String,
         body: json['body'] as String,
         createdAt: DateTime.parse(json['createdAt'] as String),
+        attachments: ((json['attachments'] as List?) ?? const []).cast<String>(),
       );
 }
 
@@ -188,8 +194,15 @@ class VendorProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> sendMessage(String body) async {
-    final data = await ApiClient.instance.post('/vendor/messages', data: {'body': body}) as Map<String, dynamic>;
+  /// Uploads one photo or clip for the admin thread and returns its URL.
+  Future<String> uploadAttachment(XFile file) async {
+    final form = FormData.fromMap({'file': await mediaPart(file)});
+    final data = await ApiClient.instance.post('/vendor/attachments', data: form) as Map<String, dynamic>;
+    return data['url'] as String;
+  }
+
+  Future<void> sendMessage(String body, {List<String> attachments = const []}) async {
+    final data = await ApiClient.instance.post('/vendor/messages', data: {'body': body, 'attachments': attachments}) as Map<String, dynamic>;
     messages = [...messages, VendorMessage.fromJson(data)];
     notifyListeners();
   }

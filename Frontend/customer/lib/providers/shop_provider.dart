@@ -17,6 +17,36 @@ class ShopProvider extends ChangeNotifier {
   bool categoriesLoaded = false;
   String? couponsError;
   bool couponsLoading = false;
+  /// Admin-set delivery slabs: "below X, charge Y". Empty means free delivery.
+  List<({int belowPaise, int chargePaise})> deliveryRules = [];
+
+  /// Never throws; the cart just shows free delivery if this fails.
+  Future<void> loadDeliveryRules() async {
+    try {
+      final data = await ApiClient.instance.get('/delivery-rules') as List;
+      deliveryRules = data
+          .map((e) => (belowPaise: ((e as Map)['belowPaise'] as num).toInt(), chargePaise: (e['chargePaise'] as num).toInt()))
+          .toList();
+      notifyListeners();
+    } catch (_) {
+      // Leave whatever was loaded before.
+    }
+  }
+
+  /// The tightest slab the order falls under (a ₹80 order pays the "below
+  /// ₹100" rate); nothing matching means free delivery.
+  int deliveryChargeFor(int goodsPaise) {
+    final matching = deliveryRules.where((r) => r.belowPaise > goodsPaise).toList()
+      ..sort((a, b) => a.belowPaise.compareTo(b.belowPaise));
+    return matching.isEmpty ? 0 : matching.first.chargePaise;
+  }
+
+  /// Spend this much to get free delivery, or null when it's already free.
+  int? freeDeliveryAt() {
+    if (deliveryRules.isEmpty) return null;
+    final top = deliveryRules.map((r) => r.belowPaise).reduce((a, b) => a > b ? a : b);
+    return top;
+  }
 
   Future<void> loadHome() async {
     loading = true;
@@ -29,6 +59,7 @@ class ShopProvider extends ChangeNotifier {
         ApiClient.instance.get('/products'),
         ApiClient.instance.get('/banners'),
       ]);
+      loadDeliveryRules();
       categories = (results[0] as List).map((e) => ShopCategory.fromJson(e as Map<String, dynamic>)).toList();
       categoriesLoaded = true;
       deals = (results[1] as List).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();

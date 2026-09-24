@@ -116,8 +116,10 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<CartProvider>();
-    const deliveryFeePaise = 0;
     final discountPaise = _estimatedDiscount(cart.subtotalPaise);
+    // Delivery follows the admin's slabs, charged on the post-coupon amount
+    // exactly like the Backend does when the order is placed.
+    final deliveryFeePaise = context.watch<ShopProvider>().deliveryChargeFor(cart.subtotalPaise - discountPaise);
     final totalPaise = cart.subtotalPaise + deliveryFeePaise - discountPaise;
     return Scaffold(
       appBar: AppBar(title: const Text('Checkout')),
@@ -190,7 +192,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                   const Text('Price Details', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                   const SizedBox(height: 10),
                   _PriceRow(label: 'Items Total', value: formatPaise(cart.subtotalPaise)),
-                  const _PriceRow(label: 'Delivery Fee', value: 'FREE', valueColor: AppColors.success),
+                  _PriceRow(label: 'Delivery Fee', value: deliveryFeePaise == 0 ? 'FREE' : formatPaise(deliveryFeePaise), valueColor: deliveryFeePaise == 0 ? AppColors.success : null),
                   if (discountPaise > 0) _PriceRow(label: 'Coupon Discount', value: '-${formatPaise(discountPaise)}', valueColor: AppColors.success),
                   const Divider(height: 24),
                   _PriceRow(label: 'Total Amount', value: formatPaise(totalPaise), bold: true),

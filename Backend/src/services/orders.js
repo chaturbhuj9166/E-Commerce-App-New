@@ -17,6 +17,13 @@ export async function ownedOrder(actor, id, client = db) {
   const order = await client.order.findFirst({ where: { id, ...ownerWhere(actor) }, include: orderInclude });
   requireThat(order, 404, 'Order not found'); return order;
 }
+/// What delivery costs for a given goods total: the tightest slab the order
+/// falls under (so a 80-rupee order pays the "below 100" rate, not the
+/// "below 500" one). Above every slab, delivery is free.
+export async function deliveryChargeFor(goodsPaise, client = db) {
+  const rules = await client.deliveryRule.findMany({ where: { belowPaise: { gt: goodsPaise } }, orderBy: { belowPaise: 'asc' }, take: 1 });
+  return rules[0]?.chargePaise ?? 0;
+}
 export async function checkout(actor, input) {
   const data = checkoutSchema.parse(input);
   requireThat(data.paymentMethod !== 'DEMO' || config.DEMO_MODE, 400, 'Demo payments are disabled');
@@ -33,6 +40,8 @@ export async function checkout(actor, input) {
       requireThat(address, 400, 'Select one of your delivery addresses');
     }
     requireThat(address, 400, 'A delivery address is required');
+    // Areas blocked for repeated fraud can't be ordered to at all.
+    requireThat(!await tx.blockedPincode.findUnique({ where: { pincode: address.postalCode } }), 400, `We are not delivering to PIN code ${address.postalCode} right now`);
     const products = await tx.product.findMany({ where: { id: { in: data.items.map(i => i.productId) }, active: true } });
     const items = data.items.map(i => {
       const p = products.find(p => p.id === i.productId);
@@ -63,14 +72,17 @@ export async function checkout(actor, input) {
       const claimed = await tx.coupon.updateMany({ where: { id: coupon.id, usageLimit: coupon.usageLimit === null ? undefined : { gt: coupon.usedCount } }, data: { usedCount: { increment: 1 } } });
       requireThat(claimed.count === 1, 409, 'This coupon was just redeemed by someone else; please retry');
     }
-    const totalPaise = subtotalPaise - discountPaise;
+    // Delivery is charged on what the buyer actually pays for the goods.
+    const goodsPaise = subtotalPaise - discountPaise;
+    const deliveryPaise = await deliveryChargeFor(goodsPaise, tx);
+    const totalPaise = goodsPaise + deliveryPaise;
     for (const item of items) {
       const changed = await tx.product.updateMany({ where: { id: item.productId, active: true, stock: { gte: item.quantity } }, data: { stock: { decrement: item.quantity } } });
       requireThat(changed.count === 1, 409, 'Stock changed; please try again');
     }
     const order = await tx.order.create({ data: {
       ...ownerWhere(actor), address: JSON.parse(JSON.stringify(address)), checkoutKey: data.checkoutKey,
-      paymentMethod: data.paymentMethod, totalPaise, discountPaise, couponCode: discountPaise > 0 ? data.couponCode : null,
+      paymentMethod: data.paymentMethod, totalPaise, deliveryPaise, discountPaise, couponCode: discountPaise > 0 ? data.couponCode : null,
       status: data.paymentMethod === 'RAZORPAY' ? 'PENDING_PAYMENT' : 'PLACED',
       items: { create: items },
     }, include: orderInclude });
@@ -85,6 +97,38 @@ export async function checkout(actor, input) {
     }
     return publicOrder(order);
   });
+}
+// Cancelling puts everything back: stock, the coupon's redemption and, for a
+// wallet order, the money. A buyer may cancel until it has been packed; the
+// admin can still cancel a packed or shipped order that comes back.
+export const CANCELLABLE_BY_BUYER = ['PENDING_PAYMENT', 'PLACED'];
+export async function cancelOrder(actor, id, reason) {
+  const order = await atomic(async tx => {
+    const current = actor.role === 'ADMIN'
+      ? await tx.order.findUnique({ where: { id }, include: orderInclude })
+      : await ownedOrder(actor, id, tx);
+    requireThat(current, 404, 'Order not found');
+    requireThat(current.status !== 'CANCELLED', 409, 'This order is already cancelled');
+    requireThat(current.status !== 'DELIVERED', 400, 'A delivered order cannot be cancelled; ask for a refund instead');
+    requireThat(actor.role === 'ADMIN' || CANCELLABLE_BY_BUYER.includes(current.status), 400, 'This order is already being packed; please contact support');
+    for (const item of current.items) await tx.product.update({ where: { id: item.productId }, data: { stock: { increment: item.quantity } } });
+    if (current.couponCode) await tx.coupon.updateMany({ where: { code: current.couponCode, usedCount: { gt: 0 } }, data: { usedCount: { decrement: 1 } } });
+    // A wallet order was paid the moment it was placed, so give it back.
+    if (current.paymentMethod === 'WALLET' && current.userId) {
+      const wallet = await tx.wallet.findUnique({ where: { userId: current.userId } });
+      if (wallet) {
+        await tx.wallet.update({ where: { id: wallet.id }, data: { balancePaise: { increment: current.totalPaise } } });
+        await tx.walletTransaction.create({ data: { walletId: wallet.id, amountPaise: current.totalPaise, kind: 'REFUND', reference: `cancel:${current.id}` } });
+      }
+    }
+    return tx.order.update({
+      where: { id: current.id },
+      data: { status: 'CANCELLED', cancelledAt: new Date(), cancelledBy: actor.role, cancelReason: reason || null, refundEligible: false },
+      include: orderInclude,
+    });
+  });
+  await notifyOrder(order.userId && await db.user.findUnique({ where: { id: order.userId } }), order);
+  return publicOrder(order);
 }
 export async function changeStatus(id, status) {
   const order = await atomic(async tx => {
@@ -163,7 +207,10 @@ export async function expireJobs(now = new Date()) {
     const stale = await tx.order.findMany({ where: { status: 'PENDING_PAYMENT', createdAt: { lt: new Date(now.getTime() - 30 * 60000) } }, include: { items: true } });
     for (const order of stale) {
       for (const item of order.items) await tx.product.update({ where: { id: item.productId }, data: { stock: { increment: item.quantity } } });
-      await tx.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
+      // Give the coupon's redemption back too, or a limited coupon slowly
+      // burns through on orders that were never paid for.
+      if (order.couponCode) await tx.coupon.updateMany({ where: { code: order.couponCode, usedCount: { gt: 0 } }, data: { usedCount: { decrement: 1 } } });
+      await tx.order.update({ where: { id: order.id }, data: { status: 'CANCELLED', cancelledAt: now, cancelledBy: 'SYSTEM', cancelReason: 'Payment was not completed in time' } });
     }
   });
 }

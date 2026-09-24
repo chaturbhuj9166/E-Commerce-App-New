@@ -11,6 +11,7 @@ import '../../widgets/price_tag.dart';
 import '../account/about_screen.dart';
 import '../account/legal_text_screen.dart';
 import '../auth/login_screen.dart';
+import '../orders/my_orders_screen.dart';
 import 'wholesale_messages_screen.dart';
 
 class WholesaleSettingsScreen extends StatelessWidget {
@@ -65,6 +66,13 @@ class WholesaleSettingsScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
+            // GET /orders returns a vendor's own orders, so the retail screen
+            // works here as-is: track, get the delivery OTP, cancel.
+            _Tile(
+              icon: Icons.receipt_long_rounded,
+              label: 'My Orders',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyOrdersScreen())),
+            ),
             _Tile(
               icon: Icons.chat_bubble_outline_rounded,
               label: 'Message Admin',

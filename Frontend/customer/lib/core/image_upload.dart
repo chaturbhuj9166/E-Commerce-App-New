@@ -14,3 +14,28 @@ Future<MultipartFile> imagePart(XFile file) async {
     contentType: mime != null ? DioMediaType.parse(mime) : null,
   );
 }
+
+/// Same idea for a chat attachment, which may also be a short video. On
+/// Android a picked video usually has no mimeType, so it is worked out from
+/// the file name -- the backend only accepts a known list of types.
+Future<MultipartFile> mediaPart(XFile file) async {
+  const byExtension = {
+    'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'webp': 'image/webp',
+    'mp4': 'video/mp4', 'webm': 'video/webm', 'mov': 'video/quicktime',
+  };
+  final extension = file.name.split('.').last.toLowerCase();
+  final mime = file.mimeType ?? byExtension[extension];
+  return MultipartFile.fromBytes(
+    await file.readAsBytes(),
+    filename: file.name,
+    contentType: mime != null ? DioMediaType.parse(mime) : null,
+  );
+}
+
+/// True for a URL that points at a video rather than a photo -- Cloudinary
+/// serves clips from /video/upload/, and our dev stand-in keeps the
+/// extension.
+bool isVideoUrl(String url) {
+  final path = Uri.tryParse(url)?.path.toLowerCase() ?? url.toLowerCase();
+  return path.endsWith('.mp4') || path.endsWith('.webm') || path.endsWith('.mov') || path.contains('/video/upload/');
+}

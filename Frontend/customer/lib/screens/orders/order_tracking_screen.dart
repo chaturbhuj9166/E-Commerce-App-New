@@ -18,6 +18,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   Order? _order;
   String? _error;
   bool _otpBusy = false;
+  bool _cancelling = false;
   final Set<String> _refunding = {};
 
   static const _stepLabels = {
@@ -29,6 +30,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   };
 
   static const _refundLabels = {'REQUESTED': 'Refund requested', 'APPROVED': 'Refund approved', 'REJECTED': 'Refund rejected'};
+
+  /// The Backend allows a buyer to cancel only before the order is packed.
+  static bool _canCancel(Order order) => order.status == 'PLACED' || order.status == 'PENDING_PAYMENT';
 
   @override
   void initState() {
@@ -75,6 +79,22 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
       _snack(e.toString());
     } finally {
       if (mounted) setState(() => _otpBusy = false);
+    }
+  }
+
+  /// A buyer may call the order off until the shop starts packing it.
+  Future<void> _cancelOrder() async {
+    final reason = await showDialog<String>(context: context, builder: (_) => const _CancelDialog());
+    if (reason == null || !mounted) return;
+    setState(() => _cancelling = true);
+    try {
+      await ApiClient.instance.post('/orders/${widget.orderId}/cancel', data: {if (reason.isNotEmpty) 'reason': reason});
+      _snack('Order cancelled');
+      await _load();
+    } catch (e) {
+      _snack(e.toString());
+    } finally {
+      if (mounted) setState(() => _cancelling = false);
     }
   }
 
@@ -136,6 +156,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                           const Divider(height: 24),
                           if (order.discountPaise > 0)
                             _row('Coupon${order.couponCode != null ? ' (${order.couponCode})' : ''}', '-${formatPaise(order.discountPaise)}', color: AppColors.success),
+                          if (order.deliveryPaise > 0) _row('Delivery', formatPaise(order.deliveryPaise)),
                           _row('Total', formatPaise(order.totalPaise), bold: true),
                         ],
                       ),
@@ -145,6 +166,21 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
                       child: PrimaryButton(label: 'Get delivery OTP', orange: true, loading: _otpBusy, onPressed: _getDeliveryOtp),
+                    ),
+                  if (_canCancel(order))
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _cancelling ? null : _cancelOrder,
+                          icon: _cancelling
+                              ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.close_rounded, size: 18),
+                          label: const Text('Cancel order'),
+                          style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger, side: const BorderSide(color: AppColors.danger), padding: const EdgeInsets.symmetric(vertical: 13)),
+                        ),
+                      ),
                     ),
                 ],
               ),
@@ -258,6 +294,53 @@ class _StatusBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Confirms a cancellation; the reason is optional for a buyer.
+class _CancelDialog extends StatefulWidget {
+  const _CancelDialog();
+
+  @override
+  State<_CancelDialog> createState() => _CancelDialogState();
+}
+
+class _CancelDialogState extends State<_CancelDialog> {
+  final _reason = TextEditingController();
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Cancel this order?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('The items go back on sale and any coupon you used is returned to you.', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _reason,
+            autofocus: true,
+            maxLength: 300,
+            decoration: const InputDecoration(labelText: 'Reason (optional)', hintText: 'e.g. Ordered by mistake', counterText: ''),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Keep order')),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(_reason.text.trim()),
+          style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+          child: const Text('Cancel order'),
+        ),
+      ],
     );
   }
 }

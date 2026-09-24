@@ -62,8 +62,11 @@ class WholesaleProductGrid extends StatelessWidget {
                   children: [
                     Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5)),
                     const SizedBox(height: 4),
-                    PriceTag(pricePaise: p.wholesaleFor(null), mrpPaise: p.pricePaise, size: 14),
+                    // Wholesale price against the market price (MRP), so the
+                    // buyer sees the full margin, not just the retail cut.
+                    PriceTag(pricePaise: p.wholesaleFor(null), mrpPaise: p.mrpFor(null) ?? p.pricePaise, size: 14),
                     Text('Customer price ${formatPaise(p.pricePaise)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                    Text('You save ${formatPaise((p.mrpFor(null) ?? p.pricePaise) - p.wholesaleFor(null))} per unit', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10.5, color: AppColors.success, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 6),
                     p.hasVariants
                         ? SizedBox(

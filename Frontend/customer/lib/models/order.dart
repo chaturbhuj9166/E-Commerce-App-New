@@ -32,6 +32,7 @@ class Order {
     required this.items,
     required this.createdAt,
     this.discountPaise = 0,
+    this.deliveryPaise = 0,
     this.couponCode,
     this.paymentMethod,
     this.deliveredAt,
@@ -44,6 +45,7 @@ class Order {
   final List<OrderItem> items;
   final DateTime createdAt;
   final int discountPaise;
+  final int deliveryPaise;
   final String? couponCode;
   final String? paymentMethod;
   final DateTime? deliveredAt;
@@ -58,6 +60,7 @@ class Order {
         items: (json['items'] as List? ?? []).map((e) => OrderItem.fromJson(e as Map<String, dynamic>)).toList(),
         createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
         discountPaise: (json['discountPaise'] as num?)?.toInt() ?? 0,
+        deliveryPaise: (json['deliveryPaise'] as num?)?.toInt() ?? 0,
         couponCode: json['couponCode'] as String?,
         paymentMethod: json['paymentMethod'] as String?,
         deliveredAt: DateTime.tryParse(json['deliveredAt']?.toString() ?? ''),

@@ -32,6 +32,7 @@ class _CartScreenState extends State<CartScreen> {
       // Recommendations come from the Home feed; load it if nothing has yet.
       final shop = context.read<ShopProvider>();
       if (shop.latest.isEmpty && !shop.loading) shop.loadHome();
+      shop.loadDeliveryRules();
     });
   }
 
@@ -215,6 +216,10 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   Widget _priceDetails(CartProvider cart) {
+    final shop = context.watch<ShopProvider>();
+    // The coupon is applied at checkout, so the cart shows the plain slab.
+    final delivery = shop.deliveryChargeFor(cart.subtotalPaise);
+    final freeAt = shop.freeDeliveryAt();
     final available = cart.items.where((i) => i.available);
     final mrpTotal = available.fold<int>(0, (s, i) => s + (i.mrpPaise != null && i.mrpPaise! > i.unitPaise ? i.mrpPaise! : i.unitPaise) * i.quantity);
     final savings = mrpTotal - cart.subtotalPaise;
@@ -229,9 +234,14 @@ class _CartScreenState extends State<CartScreen> {
           const SizedBox(height: 12),
           _row('Price ($units item${units == 1 ? '' : 's'})', formatPaise(mrpTotal)),
           if (savings > 0) _row('Discount', '-${formatPaise(savings)}', color: AppColors.success),
-          _row('Delivery', 'FREE', color: AppColors.success),
+          _row('Delivery', delivery == 0 ? 'FREE' : formatPaise(delivery), color: delivery == 0 ? AppColors.success : null),
           const Divider(height: 20),
-          _row('Total Amount', formatPaise(cart.subtotalPaise), bold: true),
+          _row('Total Amount', formatPaise(cart.subtotalPaise + delivery), bold: true),
+          if (delivery > 0 && freeAt != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('Add ${formatPaise(freeAt - cart.subtotalPaise)} more to get free delivery', style: const TextStyle(fontSize: 12, color: AppColors.orange, fontWeight: FontWeight.w600)),
+            ),
           if (savings > 0) ...[
             const SizedBox(height: 10),
             Container(
@@ -296,7 +306,10 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
-  Widget _checkoutBar(CartProvider cart) => SafeArea(
+  Widget _checkoutBar(CartProvider cart) {
+    // Keep this in step with the Price Details card above.
+    final delivery = context.watch<ShopProvider>().deliveryChargeFor(cart.subtotalPaise);
+    return SafeArea(
         top: false,
         child: Container(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -315,8 +328,8 @@ class _CartScreenState extends State<CartScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(formatPaise(cart.subtotalPaise), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                      Text('Total Amount', style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
+                      Text(formatPaise(cart.subtotalPaise + delivery), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                      Text(delivery > 0 ? 'Total (incl. delivery)' : 'Total Amount', style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
                     ],
                   ),
                   const SizedBox(width: 14),
@@ -334,6 +347,7 @@ class _CartScreenState extends State<CartScreen> {
           ),
         ),
       );
+  }
 }
 
 class _StepperButton extends StatelessWidget {

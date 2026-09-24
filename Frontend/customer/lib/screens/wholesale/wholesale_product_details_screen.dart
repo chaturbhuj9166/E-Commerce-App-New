@@ -99,11 +99,13 @@ class _WholesaleProductDetailsScreenState extends State<WholesaleProductDetailsS
                   const SizedBox(height: 4),
                   Text(product.name, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 10),
+                  PriceTag(pricePaise: product.wholesaleFor(_size), mrpPaise: product.mrpFor(_size) ?? product.priceFor(_size), size: 22),
+                  const SizedBox(height: 4),
                   Row(
                     children: [
-                      PriceTag(pricePaise: product.wholesaleFor(_size), size: 22),
+                      Text('Customer price ${formatPaise(product.priceFor(_size))}', style: TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
                       const SizedBox(width: 10),
-                      Flexible(child: Text('Customer price ${formatPaise(product.priceFor(_size))}', style: TextStyle(fontSize: 12.5, color: AppColors.textMuted))),
+                      Flexible(child: Text('You save ${formatPaise((product.mrpFor(_size) ?? product.priceFor(_size)) - product.wholesaleFor(_size))} per unit', style: const TextStyle(fontSize: 12.5, color: AppColors.success, fontWeight: FontWeight.w600))),
                     ],
                   ),
                   if (product.sizePrices.isNotEmpty && _size == null)

@@ -25,6 +25,9 @@ export const productSchema = z.object({ name: text, description: z.string().trim
   // Free-form extra specs, e.g. [{ label: "Capacity", value: "20L" }] -- for
   // anything that doesn't fit a fixed field.
   attributes: z.array(z.object({ label: z.string().trim().min(1).max(50), value: z.string().trim().min(1).max(200) })).max(20).default([]),
+  // Refurbished / open-box stock is flagged here; NEW products say nothing.
+  condition: z.enum(['NEW', 'REFURBISHED', 'OPEN_BOX', 'USED']).default('NEW'),
+  conditionNote: z.string().trim().max(200).nullable().optional(),
   refundWindowHours: z.number().int().min(0).max(720), deal: z.boolean().default(false),
 }).refine(v => v.wholesalePaise <= v.pricePaise, 'Wholesale price cannot exceed retail price')
   .refine(v => !v.mrpPaise || v.mrpPaise >= v.pricePaise, 'MRP cannot be lower than the selling price')
@@ -45,6 +48,10 @@ const vendorContact = {
   phone: z.string().regex(/^\+?[0-9]{10,15}$/).nullable().optional(),
   aadharNumber: z.string().regex(/^[0-9]{12}$/, 'Aadhaar number must be exactly 12 digits').nullable().optional(),
   panNumber: z.string().trim().toUpperCase().regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, 'Enter a valid PAN (e.g. ABCDE1234F)').nullable().optional(),
+  gstNumber: z.string().trim().toUpperCase().regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/, 'Enter a valid 15-character GST number').nullable().optional(),
+  // Ticked by the admin once the documents have been checked by hand.
+  gstVerified: z.boolean().optional(),
+  aadharVerified: z.boolean().optional(),
 };
 export const vendorCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -61,7 +68,53 @@ export const vendorUpdateSchema = z.object({
   limits: limitSchema.optional(),
 });
 export const vendorPasswordSchema = z.object({ password: z.string().min(8).max(100) });
-export const vendorMessageSchema = z.object({ body: z.string().trim().min(1).max(1000) });
+// Admin-panel staff: the packing team and the sales team.
+export const deliveryRuleSchema = z.object({
+  belowPaise: money,
+  // 0 is allowed: "free below this amount".
+  chargePaise: z.number().int().min(0).max(MAX_MONEY),
+});
+export const blockedPincodeSchema = z.object({
+  pincode: z.string().trim().regex(/^[0-9]{6}$/, 'Enter a 6-digit PIN code'),
+  reason: z.string().trim().max(200).nullable().optional(),
+});
+export const staffRole = z.enum(['ADMIN', 'PACKING', 'SALES']);
+export const staffCreateSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  email: z.string().trim().toLowerCase().email().max(200),
+  password: z.string().min(8).max(100),
+  role: staffRole,
+});
+export const staffUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(100).optional(),
+  role: staffRole.optional(),
+  enabled: z.boolean().optional(),
+});
+// A shopkeeper the sales team signs up; the admin checks the details and
+// hands out seller panel credentials.
+export const sellerApplicationSchema = z.object({
+  shopName: z.string().trim().min(1).max(150),
+  ownerName: z.string().trim().min(1).max(100),
+  phone: z.string().regex(/^\+?[0-9]{10,15}$/),
+  email: z.string().trim().toLowerCase().email().max(200).nullable().optional(),
+  address: z.string().trim().min(1).max(500),
+  gstNumber: z.string().trim().toUpperCase().regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/, 'Enter a valid 15-character GST number').nullable().optional(),
+  aadharNumber: z.string().regex(/^[0-9]{12}$/, 'Aadhaar number must be exactly 12 digits').nullable().optional(),
+  documents: z.array(imageUrlSchema).max(6).default([]),
+});
+export const sellerApproveSchema = z.object({
+  username: z.string().trim().min(3).max(50).regex(/^[a-zA-Z0-9_.-]+$/, 'Only letters, numbers, dots, hyphens and underscores'),
+  password: z.string().min(8).max(100),
+  gstVerified: z.boolean().default(false),
+  aadharVerified: z.boolean().default(false),
+});
+// A chat message carries text, attachments, or both -- a wholesaler can send
+// a photo of damaged stock with nothing typed.
+export const mediaUrlSchema = z.string().url().refine(v => v.startsWith('https://') || (config.DEMO_MODE && v.startsWith('http://')), 'Attachment URL must use HTTPS');
+export const vendorMessageSchema = z.object({
+  body: z.string().trim().max(1000).default(''),
+  attachments: z.array(mediaUrlSchema).max(4).default([]),
+}).refine(v => v.body.length > 0 || v.attachments.length > 0, 'Write a message or attach a photo');
 // The Home screen's top banner/slider, fully admin-managed.
 export const bannerSchema = z.object({
   title: z.string().trim().min(1).max(100),

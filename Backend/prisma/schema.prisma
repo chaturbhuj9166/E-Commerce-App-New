@@ -40,12 +40,96 @@ model User {
   cart CartItem[]
   @@map("users")
 }
+// Everyone who signs into the admin panel. `role` decides which pages they
+// get: ADMIN sees all of them, PACKING and SALES see only their own few.
 model Admin {
   id String @id @default(cuid())
+  name String @default("")
   email String @unique
   passwordHash String
+  role String @default("ADMIN") // ADMIN | PACKING | SALES
+  enabled Boolean @default(true)
   sessionVersion Int @default(0)
+  createdAt DateTime @default(now())
+  applications SellerApplication[]
   @@map("admins")
+}
+// A shopkeeper the sales team signed up, waiting for the admin to check the
+// GST/Aadhaar details and hand out seller panel credentials.
+model SellerApplication {
+  id String @id @default(cuid())
+  shopName String
+  ownerName String
+  phone String
+  email String?
+  address String
+  gstNumber String?
+  aadharNumber String?
+  // Photos of the GST certificate, Aadhaar, shop front... (Cloudinary URLs).
+  documents String[]
+  status String @default("PENDING") // PENDING | APPROVED | REJECTED
+  note String?
+  submittedById String
+  createdAt DateTime @default(now())
+  reviewedAt DateTime?
+  submittedBy Admin @relation(fields: [submittedById], references: [id])
+  seller Seller?
+  @@index([status, createdAt])
+  @@map("seller_applications")
+}
+// A shop selling through NTSA, with its own panel on a separate site.
+model Seller {
+  id String @id @default(cuid())
+  shopName String
+  ownerName String
+  username String @unique
+  passwordHash String
+  email String?
+  phone String
+  gstNumber String?
+  aadharNumber String?
+  gstVerified Boolean @default(false)
+  aadharVerified Boolean @default(false)
+  enabled Boolean @default(true)
+  deleted Boolean @default(false)
+  sessionVersion Int @default(0)
+  createdAt DateTime @default(now())
+  application SellerApplication? @relation(fields: [applicationId], references: [id])
+  applicationId String? @unique
+  @@map("sellers")
+}
+// Delivery charge slabs the admin sets, e.g. "under ₹500 costs ₹30". The
+// cheapest matching slab wins; an order above every slab ships free.
+model DeliveryRule {
+  id String @id @default(cuid())
+  // Applies when the items total is below this amount.
+  belowPaise Int
+  chargePaise Int
+  createdAt DateTime @default(now())
+  @@map("delivery_rules")
+}
+// PIN codes the shop refuses to deliver to, e.g. an area with repeated
+// fake returns. Blocked at the address and at checkout, not just in the app.
+model BlockedPincode {
+  pincode String @id
+  reason String?
+  createdAt DateTime @default(now())
+  @@map("blocked_pincodes")
+}
+// In-panel bell notifications (push to phones needs Firebase, which the
+// client hasn't provided yet).
+model Notification {
+  id String @id @default(cuid())
+  // Which panel role should see it: ADMIN, PACKING or SALES.
+  audience String
+  type String // ORDER_PACKED | SELLER_APPLICATION | SELLER_APPROVED ...
+  title String
+  body String
+  entityId String?
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([audience, createdAt])
+  @@map("notifications")
 }
 model Vendor {
   id String @id @default(cuid())
@@ -60,6 +144,10 @@ model Vendor {
   // entities -- flagged for the business to review, not enforced here.
   aadharNumber String?
   panNumber String?
+  gstNumber String?
+  // The admin ticks these off after checking the documents.
+  gstVerified Boolean @default(false)
+  aadharVerified Boolean @default(false)
   enabled Boolean @default(true)
   deleted Boolean @default(false)
   sessionVersion Int @default(0)
@@ -76,6 +164,9 @@ model VendorMessage {
   vendorId String
   sender String // "VENDOR" | "ADMIN"
   body String
+  // Photos or short clips sent with the message (Cloudinary URLs); a message
+  // may be attachments only, with an empty body.
+  attachments String[]
   createdAt DateTime @default(now())
   vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   @@index([vendorId, createdAt])
@@ -154,6 +245,10 @@ model Product {
   // for details that don't fit any fixed field (a bag's capacity, a phone's
   // RAM, etc). Shown as a "Specifications" list on the product page.
   attributes Json?
+  // Most products are plain new stock; refurbished or open-box items say so
+  // on the listing and the product page, with an optional line of detail.
+  condition String @default("NEW") // NEW | REFURBISHED | OPEN_BOX | USED
+  conditionNote String?
   refundWindowHours Int @default(24)
   deal Boolean @default(false)
   active Boolean @default(true)
@@ -184,6 +279,8 @@ model Order {
   vendorId String?
   status OrderStatus @default(PENDING_PAYMENT)
   totalPaise Int
+  // What the delivery slab charged when the order was placed.
+  deliveryPaise Int @default(0)
   couponCode String?
   discountPaise Int @default(0)
   address Json
@@ -192,6 +289,10 @@ model Order {
   razorpayOrderId String? @unique
   checkoutKey String @unique
   deliveredAt DateTime?
+  cancelledAt DateTime?
+  // Who called it off and why, shown to the admin and on the packing slip.
+  cancelledBy String? // CUSTOMER | VENDOR | ADMIN | SYSTEM
+  cancelReason String?
   refundEligible Boolean @default(false)
   deliveryOtpHash String?
   deliveryOtpExpiresAt DateTime?

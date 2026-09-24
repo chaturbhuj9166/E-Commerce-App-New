@@ -37,6 +37,9 @@ IconData iconForCategory(String key) {
       return Icons.favorite_rounded;
     case 'shoes':
       return Icons.hiking_rounded;
+    case 'lawn_garden':
+    case 'garden':
+      return Icons.yard_rounded;
     default:
       return Icons.shopping_bag_rounded;
   }
@@ -57,6 +60,8 @@ const Map<String, Color> _categoryColors = {
   'books': Color(0xFFEAB308),
   'health': Color(0xFFEF4444),
   'shoes': Color(0xFF0EA5E9),
+  'lawn_garden': Color(0xFF16A34A),
+  'garden': Color(0xFF16A34A),
 };
 
 Color colorForCategory(String key) => _categoryColors[key] ?? AppColors.iconAccent;
