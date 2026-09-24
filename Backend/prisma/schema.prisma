@@ -219,6 +219,10 @@ model Category {
   // How long a delivered product from this category can be returned for.
   // Set once per category by the admin; every product in it inherits it.
   refundWindowHours Int @default(24)
+  // Whether refurbished / open-box stock makes sense here at all. A phone
+  // or a sofa can be open-box; a bag of atta cannot, so the option only
+  // appears on the categories the admin ticks.
+  allowsUsedStock Boolean @default(false)
   products Product[]
   @@map("categories")
 }

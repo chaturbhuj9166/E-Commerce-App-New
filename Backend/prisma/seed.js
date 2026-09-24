@@ -160,17 +160,19 @@ try {
   // Matches the 12-category grid on the Home screen (REAL-NTSA-1.png) --
   // names must stay in sync with iconForCategory() in the Flutter app
   // (Frontend/customer/lib/widgets/category_icon.dart).
-  // The third value is the return window in hours: perishables get a couple
-  // of hours, furniture a week. The admin can change any of them later, and
-  // every product in a category inherits its category's window.
+  // Third value is the return window in hours: perishables get a couple of
+  // hours, furniture a week. Fourth says whether refurbished / open-box
+  // stock belongs here -- a phone or a sofa can be open-box, atta cannot.
+  // The admin can change both later; every product inherits its category's
+  // window.
   const categories = [
-    ['Electronics', 'electronics', 48], ['Fashion', 'fashion', 24], ['Grocery', 'grocery', 2], ['Beauty', 'beauty', 2],
-    ['Home & Kitchen', 'home_kitchen', 24], ['Mobiles', 'mobiles', 24], ['Appliances', 'appliances', 48], ['Furniture', 'furniture', 168],
-    ['Toys & Games', 'toys', 24], ['Sports', 'sports', 48], ['Books', 'books', 24], ['Health', 'health', 24],
-    ['Lawn & Garden', 'lawn_garden', 48],
+    ['Electronics', 'electronics', 48, true], ['Fashion', 'fashion', 24, false], ['Grocery', 'grocery', 2, false], ['Beauty', 'beauty', 2, false],
+    ['Home & Kitchen', 'home_kitchen', 24, false], ['Mobiles', 'mobiles', 24, true], ['Appliances', 'appliances', 48, true], ['Furniture', 'furniture', 168, true],
+    ['Toys & Games', 'toys', 24, false], ['Sports', 'sports', 48, false], ['Books', 'books', 24, false], ['Health', 'health', 24, false],
+    ['Lawn & Garden', 'lawn_garden', 48, false],
   ];
-  for (const [name, icon, refundWindowHours] of categories) {
-    await db.category.upsert({ where: { name }, update: { refundWindowHours }, create: { name, icon, refundWindowHours } });
+  for (const [name, icon, refundWindowHours, allowsUsedStock] of categories) {
+    await db.category.upsert({ where: { name }, update: { refundWindowHours, allowsUsedStock }, create: { name, icon, refundWindowHours, allowsUsedStock } });
   }
 
   const productIds = [];

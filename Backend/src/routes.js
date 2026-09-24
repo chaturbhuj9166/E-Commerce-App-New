@@ -384,6 +384,7 @@ const productData = async body => {
   for (const key of ['colorImages', 'sizePrices', 'colorExtraPaise']) if (data[key] === null) data[key] = Prisma.DbNull;
   const category = await db.category.findUnique({ where: { id: data.categoryId } });
   requireThat(category, 400, 'Choose a category for this product');
+  requireThat(data.condition === 'NEW' || category.allowsUsedStock, 400, category.name + ' does not sell refurbished or open-box stock. Tick that on the category first.');
   return { ...data, refundWindowHours: category.refundWindowHours };
 };
 router.post('/admin/products', async (req, res) => res.status(201).json(await db.product.create({ data: await productData(req.body) })));
@@ -395,6 +396,8 @@ const categorySchema = z.object({
   name: z.string().trim().min(1).max(80),
   icon: z.string().max(50).default('shopping_bag'),
   refundWindowHours: z.number().int().min(0).max(720).default(24),
+  // Refurbished and open-box only make sense for some things.
+  allowsUsedStock: z.boolean().default(false),
 });
 router.post('/admin/categories', async (req, res) => res.status(201).json(await db.category.create({ data: categorySchema.parse(req.body) })));
 router.put('/admin/categories/:id', async (req, res) => {
