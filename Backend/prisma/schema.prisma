@@ -96,6 +96,8 @@ model Seller {
   createdAt DateTime @default(now())
   application SellerApplication? @relation(fields: [applicationId], references: [id])
   applicationId String? @unique
+  products Product[]
+  items OrderItem[]
   @@map("sellers")
 }
 // Delivery charge slabs the admin sets, e.g. "under ₹500 costs ₹30". The
@@ -235,6 +237,9 @@ model Product {
   mrpPaise Int?
   stock Int
   categoryId String
+  // Whose stock this is. NTSA's own products have no seller; a shop that
+  // sells through NTSA owns the ones it adds from the seller panel.
+  sellerId String?
   images String[]
   // Variant options a shopper must pick from when present, e.g. shoe sizes
   // ["6", "7", "8"] or phone storage ["128GB", "256GB"]. sizeLabel names the
@@ -274,11 +279,13 @@ model Product {
   active Boolean @default(true)
   createdAt DateTime @default(now())
   category Category @relation(fields: [categoryId], references: [id])
+  seller Seller? @relation(fields: [sellerId], references: [id])
   orderItems OrderItem[]
   reviews Review[]
   wishlist Wishlist[]
   cart CartItem[]
   @@index([categoryId, active])
+  @@index([sellerId, active])
   @@map("products")
 }
 model Address {
@@ -335,13 +342,18 @@ model OrderItem {
   // The variant the shopper picked, so the right size/color gets packed.
   size String?
   color String?
+  // Copied from the product when the order is placed, so a seller's sales
+  // stay theirs even if the product is edited or removed later.
+  sellerId String?
   refundWindowHours Int
   refundExpiresAt DateTime?
   refundEligible Boolean @default(false)
   order Order @relation(fields: [orderId], references: [id])
   product Product @relation(fields: [productId], references: [id])
+  seller Seller? @relation(fields: [sellerId], references: [id])
   refund Refund?
   @@index([refundEligible, refundExpiresAt])
+  @@index([sellerId])
   @@map("order_items")
 }
 model Refund {

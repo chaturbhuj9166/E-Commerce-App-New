@@ -27,15 +27,21 @@ async function customerSession(firebase) {
   const user = await db.user.upsert({ where: { firebaseUid: firebase.uid }, update: {}, create: { firebaseUid: firebase.uid, name: firebase.name || '', email: firebase.email, phone: firebase.phone_number, wallet: { create: {} } } });
   return { token: tokenFor('CUSTOMER', user), role: 'CUSTOMER', user };
 }
+// One login endpoint for every panel. Sellers and wholesale partners are
+// looked up by the username the admin gave them; panel staff by e-mail.
 router.post('/auth/login', loginLimiter, async (req, res) => {
-  const data = z.object({ username: z.string().min(1).max(200), password: z.string().min(1).max(200), role: z.enum(['ADMIN', 'VENDOR']) }).parse(req.body);
-  const account = data.role === 'ADMIN' ? await db.admin.findUnique({ where: { email: data.username.toLowerCase() } }) : await db.vendor.findUnique({ where: { username: data.username } });
+  const data = z.object({ username: z.string().min(1).max(200), password: z.string().min(1).max(200), role: z.enum(['ADMIN', 'VENDOR', 'SELLER']) }).parse(req.body);
+  const account = data.role === 'ADMIN' ? await db.admin.findUnique({ where: { email: data.username.toLowerCase() } })
+    : data.role === 'SELLER' ? await db.seller.findUnique({ where: { username: data.username } })
+    : await db.vendor.findUnique({ where: { username: data.username } });
   const valid = await bcrypt.compare(data.password, account?.passwordHash || '$2b$10$QqMrTyHMrtVX.UHX.oHJ9OvU5c3ALhIzWiZiOKLjckSLKtNuizHcK');
-  requireThat(account && valid && (data.role !== 'VENDOR' || (account.enabled && !account.deleted)) && (data.role !== 'ADMIN' || account.enabled), 401, 'Invalid credentials');
+  // A disabled or removed seller/partner is turned away like a wrong password.
+  const usable = data.role === 'ADMIN' ? account?.enabled : account?.enabled && !account?.deleted;
+  requireThat(account && valid && usable, 401, 'Invalid credentials');
   // Panel staff sign in on the same page; the token carries their own role so
   // packing/sales only ever reach their own endpoints.
   const role = data.role === 'ADMIN' ? account.role : data.role;
-  res.json({ token: tokenFor(role, account), role, name: account.name || undefined });
+  res.json({ token: tokenFor(role, account), role, name: account.name || account.shopName || undefined });
 });
 router.post('/auth/firebase', loginLimiter, async (req, res) => {
   const { idToken } = z.object({ idToken: z.string().min(1).max(10000) }).parse(req.body);
@@ -374,7 +380,7 @@ router.get('/admin/products', async (req, res) => {
   // dealer-only one; without the filter the panel gets everything.
   const { audience } = z.object({ audience: z.enum(['RETAIL', 'WHOLESALE', 'BOTH']).optional() }).parse(req.query);
   const where = { active: true, ...(audience === 'RETAIL' ? { audience: { in: ['RETAIL', 'BOTH'] } } : audience === 'WHOLESALE' ? { audience: { in: ['WHOLESALE', 'BOTH'] } } : {}) };
-  res.json(await db.product.findMany({ where, include: { category: true }, orderBy: { createdAt: 'desc' } }));
+  res.json(await db.product.findMany({ where, include: { category: true, seller: { select: { shopName: true } } }, orderBy: { createdAt: 'desc' } }));
 });
 // Prisma won't take a bare null for a Json column; DbNull clears it. The
 // return window is not asked for here: it is whatever the chosen category
@@ -486,8 +492,84 @@ router.post('/admin/orders/:id/deliver', loginLimiter, async (req, res) => {
   const { otp } = z.object({ otp: z.string().regex(/^\d{6}$/) }).parse(req.body);
   res.json(await deliver(req.params.id, otp));
 });
+// Sellers the admin has approved: their logins are handed out here, so
+// they are enabled, disabled and reset here too.
+router.get('/admin/sellers', async (req, res) => {
+  const sellers = await db.seller.findMany({
+    where: { deleted: false },
+    include: { _count: { select: { products: { where: { active: true } }, items: true } }, application: { select: { address: true } } },
+    orderBy: { createdAt: 'desc' },
+  });
+  res.json(sellers.map(({ passwordHash, sessionVersion, ...safe }) => safe));
+});
+router.patch('/admin/sellers/:id', async (req, res) => {
+  const { enabled } = z.object({ enabled: z.boolean() }).parse(req.body);
+  // Turning a seller off ends their session as well as their next login.
+  const seller = await db.seller.update({ where: { id: req.params.id }, data: { enabled, sessionVersion: { increment: 1 } } });
+  const { passwordHash, sessionVersion, ...safe } = seller;
+  res.json(safe);
+});
+router.post('/admin/sellers/:id/password', async (req, res) => {
+  const { password } = vendorPasswordSchema.parse(req.body);
+  await db.seller.update({ where: { id: req.params.id }, data: { passwordHash: await bcrypt.hash(password, 12), sessionVersion: { increment: 1 } } });
+  res.status(204).end();
+});
 router.get('/admin/refunds', async (req, res) => res.json(await db.refund.findMany({ include: { orderItem: { include: { order: true } } }, orderBy: { createdAt: 'desc' }, take: 200 })));
 router.patch('/admin/refunds/:id', async (req, res) => {
   const { status } = z.object({ status: z.enum(['APPROVED', 'REJECTED']) }).parse(req.body);
   res.json(await reviewRefund(req.params.id, status));
 });
+
+// ---- The seller panel (its own site; see Frontend/seller) ----
+// A shop that sells through NTSA. It only ever sees its own stock and the
+// order lines that belong to it -- never another seller's, and never the
+// wholesale side.
+const seller = roles('SELLER');
+const sellerProductData = async (body, sellerId) => ({ ...await productData(body), sellerId });
+router.get('/seller/products', seller, async (req, res) => res.json(await db.product.findMany({
+  where: { sellerId: req.actor.id, active: true }, include: { category: true }, orderBy: { createdAt: 'desc' },
+})));
+router.post('/seller/products', seller, async (req, res) => res.status(201).json(await db.product.create({ data: await sellerProductData(req.body, req.actor.id) })));
+router.put('/seller/products/:id', seller, async (req, res) => {
+  // updateMany scopes the write to this seller, so guessing another shop's
+  // product id changes nothing.
+  const changed = await db.product.updateMany({ where: { id: req.params.id, sellerId: req.actor.id }, data: await sellerProductData(req.body, req.actor.id) });
+  requireThat(changed.count === 1, 404, 'Product not found');
+  res.json(await db.product.findUnique({ where: { id: req.params.id }, include: { category: true } }));
+});
+router.delete('/seller/products/:id', seller, async (req, res) => {
+  const changed = await db.product.updateMany({ where: { id: req.params.id, sellerId: req.actor.id }, data: { active: false } });
+  requireThat(changed.count === 1, 404, 'Product not found');
+  res.status(204).end();
+});
+// The seller's sales: one row per order line of theirs, with just enough of
+// the order to fulfil it. Another seller's lines in the same order are not
+// included, and neither is the buyer's full address until it is theirs to
+// pack -- the packing team handles delivery.
+router.get('/seller/orders', seller, async (req, res) => {
+  const items = await db.orderItem.findMany({
+    where: { sellerId: req.actor.id },
+    include: { order: { select: { id: true, status: true, createdAt: true, paymentMethod: true, vendorId: true } }, product: { select: { images: true } } },
+    orderBy: { id: 'desc' }, take: 200,
+  });
+  res.json(items.map(({ order, product, ...item }) => ({ ...item, image: product.images[0] ?? null, orderId: order.id, status: order.status, placedAt: order.createdAt, buyer: order.vendorId ? 'Wholesale' : 'Customer' })));
+});
+// What the shop has earned: cancelled orders don't count, and money is only
+// counted as earned once the order is delivered.
+router.get('/seller/summary', seller, async (req, res) => {
+  const items = await db.orderItem.findMany({ where: { sellerId: req.actor.id }, include: { order: { select: { status: true } } } });
+  const live = items.filter(i => i.order.status !== 'CANCELLED');
+  const value = rows => rows.reduce((sum, i) => sum + i.unitPaise * i.quantity, 0);
+  res.json({
+    products: await db.product.count({ where: { sellerId: req.actor.id, active: true } }),
+    outOfStock: await db.product.count({ where: { sellerId: req.actor.id, active: true, stock: 0 } }),
+    orders: new Set(live.map(i => i.orderId)).size,
+    piecesSold: live.reduce((sum, i) => sum + i.quantity, 0),
+    salesPaise: value(live),
+    earnedPaise: value(live.filter(i => i.order.status === 'DELIVERED')),
+    awaitingPaise: value(live.filter(i => i.order.status !== 'DELIVERED')),
+    cancelledPaise: value(items.filter(i => i.order.status === 'CANCELLED')),
+  });
+});
+// Photos for the seller's own products, watermarked like every other one.
+router.post('/seller/images', seller, multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => res.status(201).json(await uploadImage(req.file, { watermark: true })));

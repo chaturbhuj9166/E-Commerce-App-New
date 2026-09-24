@@ -52,7 +52,9 @@ export async function checkout(actor, input) {
       // Customers and wholesale buyers alike must pick every option.
       const { size, color } = variantFor(p, i.size, i.color);
       const price = priceFor(p, size, color);
-      return { productId: p.id, quantity: i.quantity, name: p.name, size: size || null, color: color || null, unitPaise: actor.role === 'VENDOR' ? price.wholesalePaise : price.pricePaise, refundWindowHours: p.refundWindowHours };
+      // sellerId is copied on so the sale stays with that shop even if the
+      // product is edited or taken down later.
+      return { productId: p.id, sellerId: p.sellerId, quantity: i.quantity, name: p.name, size: size || null, color: color || null, unitPaise: actor.role === 'VENDOR' ? price.wholesalePaise : price.pricePaise, refundWindowHours: p.refundWindowHours };
     });
     const subtotalPaise = totalFor(items);
     if (actor.role === 'VENDOR') {
