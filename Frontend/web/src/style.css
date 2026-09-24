@@ -21,7 +21,7 @@
 .doc-row img{width:76px;height:76px;object-fit:cover;border-radius:8px;border:1px solid #dbe3e8}
 .doc-row .icon-button{position:absolute;top:-6px;right:-6px;background:#fbeeee;color:#b15d5d;border-radius:50%}
 .line-item small.variant{color:#a56a28;font-weight:600}
-.option-price-row{display:grid;grid-template-columns:70px repeat(3,minmax(0,1fr));gap:8px;align-items:center}
+.option-price-row{display:grid;grid-template-columns:64px 88px repeat(3,minmax(0,1fr));gap:7px;align-items:center}.option-price-row:has(input:only-of-type){grid-template-columns:64px 120px}
 .option-price-row input{border:1px solid #dbe3e8;border-radius:7px;padding:10px;background:#fff;color:#173b4b;min-width:0}
 @media(max-width:480px){.option-price-row{grid-template-columns:1fr 1fr}.option-price-row strong{grid-column:1/-1}}
 .attribute-row .icon-button{background:#fbeeee;color:#b15d5d}

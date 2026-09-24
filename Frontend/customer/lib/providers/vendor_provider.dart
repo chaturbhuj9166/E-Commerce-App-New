@@ -91,7 +91,7 @@ class VendorProvider extends ChangeNotifier {
 
   int get subtotalPaise => cart.entries.fold(0, (sum, e) {
         final product = productById(e.key.productId);
-        return product == null ? sum : sum + product.wholesaleFor(e.key.size) * e.value;
+        return product == null ? sum : sum + product.wholesaleFor(e.key.size, e.key.color) * e.value;
       });
 
   Future<bool> login(String username, String password) async {

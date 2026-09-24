@@ -19,6 +19,7 @@ class Product {
     this.sizeLabel = 'Size',
     this.sizePrices = const {},
     this.colorImages = const {},
+    this.colorExtraPaise = const {},
     this.attributes = const [],
     this.category,
     this.rating,
@@ -50,6 +51,9 @@ class Product {
   /// e.g. {"Black": "https://...", "White": "https://..."} -- when set for a
   /// color, picking that color chip shows this photo instead of the default.
   final Map<String, String> colorImages;
+  /// What a colour adds to the price, e.g. {"Red": 5000} for 50 rupees more.
+  /// A colour that costs the same as the rest is simply absent.
+  final Map<String, int> colorExtraPaise;
   /// Extra admin-defined specs, e.g. [("Capacity", "20L")] -- shown as a
   /// "Specifications" list on the product page.
   final List<(String label, String value)> attributes;
@@ -75,10 +79,16 @@ class Product {
         'USED': 'Used',
       }[condition] ?? 'New';
 
-  /// Price / MRP for a picked option (the base price when none is picked yet).
-  int priceFor(String? size) => sizePrices[size]?.price ?? pricePaise;
-  int? mrpFor(String? size) => sizePrices.containsKey(size) ? sizePrices[size]!.mrp : mrpPaise;
-  int wholesaleFor(String? size) => sizePrices[size]?.wholesale ?? wholesalePaise ?? priceFor(size);
+  /// Price / MRP for a picked variant (the base price when nothing is picked
+  /// yet). The option sets the price and the colour adds its extra on top.
+  int extraFor(String? color) => colorExtraPaise[color] ?? 0;
+  int priceFor(String? size, [String? color]) => (sizePrices[size]?.price ?? pricePaise) + extraFor(color);
+  int? mrpFor(String? size, [String? color]) {
+    final base = sizePrices.containsKey(size) ? sizePrices[size]!.mrp : mrpPaise;
+    return base == null ? null : base + extraFor(color);
+  }
+  int wholesaleFor(String? size, [String? color]) =>
+      (sizePrices[size]?.wholesale ?? wholesalePaise ?? (sizePrices[size]?.price ?? pricePaise)) + extraFor(color);
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
         id: json['id'] as String,
@@ -94,6 +104,7 @@ class Product {
         sizeLabel: (json['sizeLabel'] as String?) ?? 'Size',
         sizePrices: (json['sizePrices'] as Map?)?.map((k, v) => MapEntry(k.toString(), (price: ((v as Map)['pricePaise'] as num).toInt(), mrp: (v['mrpPaise'] as num?)?.toInt(), wholesale: (v['wholesalePaise'] as num?)?.toInt()))) ?? const {},
         colorImages: (json['colorImages'] as Map?)?.map((k, v) => MapEntry(k.toString(), v.toString())) ?? const {},
+        colorExtraPaise: (json['colorExtraPaise'] as Map?)?.map((k, v) => MapEntry(k.toString(), (v as num).toInt())) ?? const {},
         attributes: (json['attributes'] as List?)
                 ?.map((e) => ((e as Map<String, dynamic>)['label'].toString(), e['value'].toString()))
                 .toList() ??

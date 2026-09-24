@@ -66,8 +66,14 @@ const samples = [
   {
     name: 'Budget Smartphone', category: 'Mobiles', pricePaise: 1299900, wholesalePaise: 999900, mrpPaise: 1599900, deal: false,
     colors: ['Black', 'Blue', 'Silver'], sizes: ['128GB', '256GB'], sizeLabel: 'Storage',
-    // The larger storage option costs more; 128GB uses the base prices above.
-    sizePrices: { '256GB': { pricePaise: 1499900, wholesalePaise: 1149900, mrpPaise: 1799900 } },
+    // Every option carries its own price, so the bigger storage is dearer
+    // and nothing is left sitting at the base price by accident.
+    sizePrices: {
+      '128GB': { pricePaise: 1299900, wholesalePaise: 999900, mrpPaise: 1599900 },
+      '256GB': { pricePaise: 1499900, wholesalePaise: 1149900, mrpPaise: 1799900 },
+    },
+    // A colour can cost a little more too.
+    colorExtraPaise: { Silver: 20000 },
     colorImages: { Black: imageUrl('photo-1563452619267-bc16ef6cecec'), Blue: imageUrl('photo-1575571538207-ca427b39def5'), Silver: imageUrl('photo-1565967249821-083c4775e5bc') },
   },
   {
@@ -179,7 +185,8 @@ try {
       categoryId: c.id, pricePaise: s.pricePaise, wholesalePaise: s.wholesalePaise, mrpPaise: s.mrpPaise,
       // Returns are a property of the category now, not of each product.
       refundWindowHours: c.refundWindowHours,
-      images, colors: s.colors, sizes: s.sizes, sizeLabel: s.sizeLabel ?? 'Size', sizePrices: s.sizePrices ?? null, colorImages: s.colorImages ?? null, deal: s.deal,
+      images, colors: s.colors, sizes: s.sizes, sizeLabel: s.sizeLabel ?? 'Size', sizePrices: s.sizePrices ?? null,
+      colorImages: s.colorImages ?? null, colorExtraPaise: s.colorExtraPaise ?? null, deal: s.deal,
       // Shop stock; the dealer-only lots are seeded separately below.
       audience: 'RETAIL',
     };

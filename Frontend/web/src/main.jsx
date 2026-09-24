@@ -337,16 +337,36 @@ function Editor({ type, data, categories, busy, onSubmit }) {
   const [sizePrices, setSizePrices] = useState(() => Object.fromEntries(Object.entries(data?.sizePrices || {}).map(([k, v]) => [k, { retail: v.pricePaise / 100, wholesale: v.wholesalePaise / 100, mrp: v.mrpPaise ? v.mrpPaise / 100 : '' }])));
   const sizeList = sizes.split(',').map(x => x.trim()).filter(Boolean);
   const setSizePrice = (size, key, value) => setSizePrices(p => ({ ...p, [size]: { ...p[size], [key]: value } }));
+  // Colours and what each one adds to the price, in rupees while editing.
+  const [colors, setColors] = useState(data?.colors?.join(', ') || '');
+  const colorList = colors.split(',').map(x => x.trim()).filter(Boolean);
+  const [colorExtras, setColorExtras] = useState(() => Object.fromEntries(Object.entries(data?.colorExtraPaise || {}).map(([k, v]) => [k, v / 100])));
+  const setColorExtra = (color, value) => setColorExtras(p => ({ ...p, [color]: value }));
+  // Typing "+300" on an option fills its three prices from the ones above, so
+  // the admin sets one number instead of three and no option is left at the
+  // base price by accident.
+  const applyExtra = (form, size, extra) => {
+    const add = Number(extra);
+    if (!Number.isFinite(add)) return;
+    const base = { retail: Number(form.retail?.value), wholesale: Number(form.wholesale?.value), mrp: Number(form.mrp?.value) };
+    if (!Number.isFinite(base.retail) || !Number.isFinite(base.wholesale)) { setError('Fill in the retail and wholesale price above first'); return; }
+    setSizePrices(p => ({ ...p, [size]: {
+      retail: (base.retail + add).toFixed(2),
+      wholesale: (base.wholesale + add).toFixed(2),
+      mrp: base.mrp > 0 ? (base.mrp + add).toFixed(2) : '',
+    } }));
+  };
   return <form className="editor" onSubmit={e => { e.preventDefault(); setError(''); const f = Object.fromEntries(new FormData(e.target)); try {
     if (type === 'Products' || type === 'Wholesale products') {
       const colorImageMap = Object.fromEntries(colorImages.split('\n').map(line => line.split('=').map(x => x.trim())).filter(([c, u]) => c && u));
       const cleanAttributes = attributes.map(a => ({ label: a.label.trim(), value: a.value.trim() })).filter(a => a.label && a.value);
+      const colorExtraPaise = Object.fromEntries(colorList.filter(c => Number(colorExtras[c]) > 0).map(c => [c, paise(colorExtras[c])]));
       const optionPrices = Object.fromEntries(sizeList.filter(s => String(sizePrices[s]?.retail ?? '').trim()).map(s => {
         const o = sizePrices[s];
         if (!String(o.wholesale ?? '').trim()) throw new Error(`Enter a wholesale price for ${s}, or clear its retail price`);
         return [s, { pricePaise: paise(o.retail), wholesalePaise: paise(o.wholesale), mrpPaise: String(o.mrp ?? '').trim() ? paise(o.mrp) : null }];
       }));
-      onSubmit({ name: f.name, description: f.description, pricePaise: paise(f.retail), wholesalePaise: paise(f.wholesale), mrpPaise: f.mrp ? paise(f.mrp) : null, stock: Number(f.stock), categoryId: f.categoryId, images: images.split('\n').map(x => x.trim()).filter(Boolean), colors: f.colors.split(',').map(x => x.trim()).filter(Boolean), sizes: sizeList, sizeLabel: f.sizeLabel?.trim() || 'Size', sizePrices: Object.keys(optionPrices).length ? optionPrices : null, colorImages: Object.keys(colorImageMap).length ? colorImageMap : null, attributes: cleanAttributes, deal: f.deal === 'on', condition: f.condition || 'NEW', conditionNote: f.conditionNote?.trim() || null, audience: f.audience });
+      onSubmit({ name: f.name, description: f.description, pricePaise: paise(f.retail), wholesalePaise: paise(f.wholesale), mrpPaise: f.mrp ? paise(f.mrp) : null, stock: Number(f.stock), categoryId: f.categoryId, images: images.split('\n').map(x => x.trim()).filter(Boolean), colors: f.colors.split(',').map(x => x.trim()).filter(Boolean), sizes: sizeList, sizeLabel: f.sizeLabel?.trim() || 'Size', sizePrices: Object.keys(optionPrices).length ? optionPrices : null, colorImages: Object.keys(colorImageMap).length ? colorImageMap : null, colorExtraPaise: Object.keys(colorExtraPaise).length ? colorExtraPaise : null, attributes: cleanAttributes, deal: f.deal === 'on', condition: f.condition || 'NEW', conditionNote: f.conditionNote?.trim() || null, audience: f.audience });
     }
     else if (type === 'Categories') onSubmit({ name: f.name, icon: data?.icon || 'shopping_bag', refundWindowHours: Number(f.refundWindowHours) });
     // Cleared optional fields are sent as null so an edit actually removes them.
@@ -369,18 +389,32 @@ function Editor({ type, data, categories, busy, onSubmit }) {
       <Field label="Return window (hours) — how long a customer has to return anything in this category" name="refundWindowHours" type="number" min="0" max="720" step="1" defaultValue={data?.refundWindowHours ?? 24} required/>
       <p className="muted">0 means no returns. Saving this updates every product in the category; orders already placed keep the window they were bought under.</p>
     </>}
-    {['Products', 'Wholesale products'].includes(type) && <><Field label="Description"><textarea name="description" defaultValue={data?.description} required maxLength={5000}/></Field><div className="form-grid"><Field label="Retail price (₹)" name="retail" type="number" min="0.01" step="0.01" defaultValue={data ? data.pricePaise / 100 : ''} required/><Field label="Wholesale price (₹)" name="wholesale" type="number" min="0.01" step="0.01" defaultValue={data ? data.wholesalePaise / 100 : ''} required/><Field label="MRP (₹) — optional, shows a strikethrough discount" name="mrp" type="number" min="0.01" step="0.01" defaultValue={data?.mrpPaise ? data.mrpPaise / 100 : ''}/><Field label="Stock quantity" name="stock" type="number" min="0" step="1" defaultValue={data?.stock ?? 0} required/><p className="muted">Returns are allowed for as long as the chosen category says. Change that on the Categories page.</p></div><Field label="Category"><select name="categoryId" defaultValue={data?.categoryId || ''} required><option value="" disabled>Select a category</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field><div className="form-grid"><Field label="Colors — comma separated, optional" name="colors" defaultValue={data?.colors?.join(', ') || ''} placeholder="Black, White, Blue"/><Field label="Options (sizes, storage…) — comma separated, optional" value={sizes} onChange={e => setSizes(e.target.value)} placeholder="6, 7, 8  or  128GB, 256GB"/></div>
+    {['Products', 'Wholesale products'].includes(type) && <><Field label="Description"><textarea name="description" defaultValue={data?.description} required maxLength={5000}/></Field><div className="form-grid"><Field label="Retail price (₹)" name="retail" type="number" min="0.01" step="0.01" defaultValue={data ? data.pricePaise / 100 : ''} required/><Field label="Wholesale price (₹)" name="wholesale" type="number" min="0.01" step="0.01" defaultValue={data ? data.wholesalePaise / 100 : ''} required/><Field label="MRP (₹) — optional, shows a strikethrough discount" name="mrp" type="number" min="0.01" step="0.01" defaultValue={data?.mrpPaise ? data.mrpPaise / 100 : ''}/><Field label="Stock quantity" name="stock" type="number" min="0" step="1" defaultValue={data?.stock ?? 0} required/><p className="muted">Returns are allowed for as long as the chosen category says. Change that on the Categories page.</p></div><Field label="Category"><select name="categoryId" defaultValue={data?.categoryId || ''} required><option value="" disabled>Select a category</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field><div className="form-grid"><Field label="Colors — comma separated, optional" name="colors" value={colors} onChange={e => setColors(e.target.value)} placeholder="Black, White, Blue"/><Field label="Options (sizes, storage…) — comma separated, optional" name="sizes" value={sizes} onChange={e => setSizes(e.target.value)} placeholder="6, 7, 8  or  128GB, 256GB"/></div>
+      {colorList.length > 0 && <Field label="Colour price difference — optional. What a colour costs on top of the price above; leave blank when it costs the same.">
+        <div className="attribute-rows">
+          {colorList.map(c => <div className="option-price-row" key={c}>
+            <strong>{c}</strong>
+            <input type="number" min="0" step="0.01" placeholder="+ Extra ₹" aria-label={`${c} extra over the base price`} value={colorExtras[c] ?? ''} onChange={e => setColorExtra(c, e.target.value)}/>
+          </div>)}
+        </div>
+      </Field>}
       {sizeList.length > 0 && <>
         <Field label="Option name shown to shoppers" name="sizeLabel" defaultValue={data?.sizeLabel || 'Size'} maxLength={30} placeholder="Size, Storage, RAM…" required/>
-        <Field label="Price per option — optional. Leave blank to use the prices above; fill in for options that cost more (e.g. 256GB).">
+        <Field label="Price per option — a bigger option should cost more. Type what it costs extra and the prices fill in, or write them yourself.">
           <div className="attribute-rows">
             {sizeList.map(s => <div className="option-price-row" key={s}>
               <strong>{s}</strong>
+              <input type="number" step="0.01" placeholder="+ Extra ₹" aria-label={`${s} extra over the base price`} onChange={e => applyExtra(e.target.form, s, e.target.value)}/>
               <input type="number" min="0.01" step="0.01" placeholder="Retail ₹" aria-label={`${s} retail price`} value={sizePrices[s]?.retail ?? ''} onChange={e => setSizePrice(s, 'retail', e.target.value)}/>
               <input type="number" min="0.01" step="0.01" placeholder="Wholesale ₹" aria-label={`${s} wholesale price`} value={sizePrices[s]?.wholesale ?? ''} onChange={e => setSizePrice(s, 'wholesale', e.target.value)}/>
               <input type="number" min="0.01" step="0.01" placeholder="MRP ₹ (optional)" aria-label={`${s} MRP`} value={sizePrices[s]?.mrp ?? ''} onChange={e => setSizePrice(s, 'mrp', e.target.value)}/>
             </div>)}
           </div>
+          {sizeList.some(s => String(sizePrices[s]?.retail ?? '').trim()) && sizeList.some(s => !String(sizePrices[s]?.retail ?? '').trim())
+            ? <small className="danger-text">Price every option, or clear them all — a half-filled list is refused.</small>
+            : sizeList.every(s => !String(sizePrices[s]?.retail ?? '').trim())
+              ? <small>Every option costs the same right now. Is 10kg really the same price as 5kg?</small>
+              : null}
         </Field>
       </>}<Field label="Color photos — optional, one per line as &quot;Color = image URL&quot;. Shown when the shopper picks that color."><textarea value={colorImages} onChange={e => setColorImages(e.target.value)} placeholder={'Black = https://…\nWhite = https://…'} rows={3}/></Field><Field label="Image URLs — one per line, up to 5"><textarea value={images} onChange={e => setImages(e.target.value)} placeholder="https://…"/></Field><Field label={uploading ? 'Uploading…' : 'Or upload a photo (max 5 MB) — the NTSA logo is stamped on automatically'} type="file" accept="image/png,image/jpeg,image/webp" disabled={uploading} onChange={async e => { if (!e.target.files[0]) return; setUploading(true); try { if (images.split('\n').filter(Boolean).length >= 5) throw new Error('Maximum five images'); const form = new FormData(); form.append('image', e.target.files[0]); const r = await api('/admin/images', { method: 'POST', body: form }); setImages(v => [v, r.url].filter(Boolean).join('\n')); } catch (err) { setError(err.message); } finally { setUploading(false); } }}/>
       <Field label="Additional details — anything that doesn't fit a field above, e.g. a bag's capacity">

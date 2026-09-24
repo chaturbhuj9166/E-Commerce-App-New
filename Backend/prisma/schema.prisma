@@ -245,6 +245,10 @@ model Product {
   // has a matching photo, the app shows that photo when the color is picked
   // instead of always showing the generic gallery.
   colorImages Json?
+  // What a colour adds to the price, e.g. {"Red": 5000} for +50 rupees on
+  // the retail, wholesale and MRP of whichever option is picked. Colours
+  // that cost the same as the rest say nothing here.
+  colorExtraPaise Json?
   colors String[]
   // Free-form extra specs an admin can add per product, e.g.
   // [{"label": "Capacity", "value": "20L"}, {"label": "Material", "value": "Nylon"}] --

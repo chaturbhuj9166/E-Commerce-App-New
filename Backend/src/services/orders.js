@@ -51,7 +51,7 @@ export async function checkout(actor, input) {
       requireThat(p && p.stock >= i.quantity, 409, 'A product is unavailable or has insufficient stock');
       // Customers and wholesale buyers alike must pick every option.
       const { size, color } = variantFor(p, i.size, i.color);
-      const price = priceFor(p, size);
+      const price = priceFor(p, size, color);
       return { productId: p.id, quantity: i.quantity, name: p.name, size: size || null, color: color || null, unitPaise: actor.role === 'VENDOR' ? price.wholesalePaise : price.pricePaise, refundWindowHours: p.refundWindowHours };
     });
     const subtotalPaise = totalFor(items);

@@ -99,13 +99,13 @@ class _WholesaleProductDetailsScreenState extends State<WholesaleProductDetailsS
                   const SizedBox(height: 4),
                   Text(product.name, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 10),
-                  PriceTag(pricePaise: product.wholesaleFor(_size), mrpPaise: product.mrpFor(_size) ?? product.priceFor(_size), size: 22),
+                  PriceTag(pricePaise: product.wholesaleFor(_size, _color), mrpPaise: product.mrpFor(_size, _color) ?? product.priceFor(_size, _color), size: 22),
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Text('Customer price ${formatPaise(product.priceFor(_size))}', style: TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+                      Text('Customer price ${formatPaise(product.priceFor(_size, _color))}', style: TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
                       const SizedBox(width: 10),
-                      Flexible(child: Text('You save ${formatPaise((product.mrpFor(_size) ?? product.priceFor(_size)) - product.wholesaleFor(_size))} per unit', style: const TextStyle(fontSize: 12.5, color: AppColors.success, fontWeight: FontWeight.w600))),
+                      Flexible(child: Text('You save ${formatPaise((product.mrpFor(_size, _color) ?? product.priceFor(_size, _color)) - product.wholesaleFor(_size, _color))} per unit', style: const TextStyle(fontSize: 12.5, color: AppColors.success, fontWeight: FontWeight.w600))),
                     ],
                   ),
                   if (product.sizePrices.isNotEmpty && _size == null)
@@ -116,7 +116,11 @@ class _WholesaleProductDetailsScreenState extends State<WholesaleProductDetailsS
                   const SizedBox(height: 6),
                   Text('${product.stock} units in stock', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
                   const SizedBox(height: 18),
-                  if (product.colors.isNotEmpty) _chips('Color', product.colors, _color, (c) => _color = c),
+                  if (product.colors.isNotEmpty)
+                    _chips('Color', product.colors, _color, (c) => _color = c, label: (c) {
+                      final extra = product.extraFor(c);
+                      return extra > 0 ? '$c  (+${formatPaise(extra)})' : c;
+                    }),
                   if (product.sizes.isNotEmpty)
                     _chips(product.sizeLabel, product.sizes, _size, (s) => _size = s, label: (s) {
                       final extra = product.sizePrices[s] != null ? product.wholesaleFor(s) - product.wholesaleFor(null) : 0;

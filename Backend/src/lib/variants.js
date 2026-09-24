@@ -14,11 +14,22 @@ export function variantFor(product, size, color, { required = true } = {}) {
   return { size: s, color: c };
 }
 
-// Prices for one option; options without an override use the product's own.
-export function priceFor(product, size) {
+// What one variant costs. The option (10kg, 256GB, ...) sets the price, and
+// the color adds its extra on top -- so 10kg costs more than 5kg, and the red
+// one can cost a little more again. An option or color with nothing of its
+// own simply uses the product's price.
+export function priceFor(product, size, color) {
   const o = size ? product.sizePrices?.[size] : null;
-  if (!o) return { pricePaise: product.pricePaise, wholesalePaise: product.wholesalePaise, mrpPaise: product.mrpPaise };
-  return { pricePaise: o.pricePaise, wholesalePaise: o.wholesalePaise, mrpPaise: o.mrpPaise ?? null };
+  const extra = (color && product.colorExtraPaise?.[color]) || 0;
+  const base = o
+    ? { pricePaise: o.pricePaise, wholesalePaise: o.wholesalePaise, mrpPaise: o.mrpPaise ?? null }
+    : { pricePaise: product.pricePaise, wholesalePaise: product.wholesalePaise, mrpPaise: product.mrpPaise ?? null };
+  if (!extra) return base;
+  return {
+    pricePaise: base.pricePaise + extra,
+    wholesalePaise: base.wholesalePaise + extra,
+    mrpPaise: base.mrpPaise === null ? null : base.mrpPaise + extra,
+  };
 }
 
 // sizePrices as shoppers may see it: wholesale prices stripped.

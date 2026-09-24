@@ -207,7 +207,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               const SizedBox(height: 6),
                               RatingStars(rating: rating, reviewCount: reviewCount, size: 14),
                               const SizedBox(height: 10),
-                              PriceTag(pricePaise: p.priceFor(_selectedSize), mrpPaise: p.mrpFor(_selectedSize), size: 22),
+                              PriceTag(pricePaise: p.priceFor(_selectedSize, _selectedColor), mrpPaise: p.mrpFor(_selectedSize, _selectedColor), size: 22),
                               if (p.sizePrices.isNotEmpty && _selectedSize == null)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 2),
@@ -227,7 +227,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 Wrap(
                                   spacing: 8,
                                   children: p.colors.map((c) => ChoiceChip(
-                                        label: Text(c),
+                                        label: Text(p.extraFor(c) > 0 ? '$c  (+${formatPaise(p.extraFor(c))})' : c),
                                         selected: _selectedColor == c,
                                         onSelected: (_) => setState(() {
                                           _selectedColor = c;

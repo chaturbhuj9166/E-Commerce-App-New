@@ -127,9 +127,9 @@ router.get('/wallet', customer, async (req, res) => res.json(await db.wallet.fin
 // Each cart line is one product + size + color; unitPaise/mrpPaise are that
 // option's price so the app doesn't have to work it out.
 router.get('/cart', customer, async (req, res) => {
-  const items = await db.cartItem.findMany({ where: { userId: req.actor.id }, include: { product: { select: { id: true, name: true, pricePaise: true, wholesalePaise: true, mrpPaise: true, stock: true, active: true, images: true, sizes: true, colors: true, sizeLabel: true, sizePrices: true, category: true } } } });
+  const items = await db.cartItem.findMany({ where: { userId: req.actor.id }, include: { product: { select: { id: true, name: true, pricePaise: true, wholesalePaise: true, mrpPaise: true, stock: true, active: true, images: true, sizes: true, colors: true, sizeLabel: true, sizePrices: true, colorExtraPaise: true, category: true } } } });
   res.json(items.map(({ product: { wholesalePaise, sizePrices, ...product }, ...item }) => {
-    const { pricePaise, mrpPaise } = priceFor({ ...product, wholesalePaise, sizePrices }, item.size);
+    const { pricePaise, mrpPaise } = priceFor({ ...product, wholesalePaise, sizePrices }, item.size, item.color);
     return { ...item, unitPaise: pricePaise, mrpPaise, product: { ...product, sizePrices: publicSizePrices(sizePrices) } };
   }));
 });
@@ -381,7 +381,7 @@ router.get('/admin/products', async (req, res) => {
 // allows, copied on so orders and the app keep reading it off the product.
 const productData = async body => {
   const data = productSchema.parse(body);
-  for (const key of ['colorImages', 'sizePrices']) if (data[key] === null) data[key] = Prisma.DbNull;
+  for (const key of ['colorImages', 'sizePrices', 'colorExtraPaise']) if (data[key] === null) data[key] = Prisma.DbNull;
   const category = await db.category.findUnique({ where: { id: data.categoryId } });
   requireThat(category, 400, 'Choose a category for this product');
   return { ...data, refundWindowHours: category.refundWindowHours };

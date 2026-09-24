@@ -119,7 +119,7 @@ class WholesaleCartScreen extends StatelessWidget {
                                     Text(product.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
                                     if (variant.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(variant, style: TextStyle(fontSize: 12, color: AppColors.textSecondary))),
                                     const SizedBox(height: 4),
-                                    PriceTag(pricePaise: product.wholesaleFor(line.size), mrpPaise: product.mrpFor(line.size) ?? product.priceFor(line.size), size: 14),
+                                    PriceTag(pricePaise: product.wholesaleFor(line.size, line.color), mrpPaise: product.mrpFor(line.size, line.color) ?? product.priceFor(line.size, line.color), size: 14),
                                   ],
                                 ),
                               ),

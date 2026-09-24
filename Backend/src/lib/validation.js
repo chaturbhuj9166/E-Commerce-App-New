@@ -22,6 +22,8 @@ export const productSchema = z.object({ name: text, description: z.string().trim
   sizePrices: z.record(z.string(), z.object({ pricePaise: money, wholesalePaise: money, mrpPaise: money.nullable().optional() })).nullable().optional(),
   // Optional per-color photo, e.g. { "Black": "https://...", "White": "https://..." }.
   colorImages: z.record(z.string(), imageUrlSchema).nullable().optional(),
+  // What a color adds to the price, e.g. { "Red": 5000 } for 50 rupees more.
+  colorExtraPaise: z.record(z.string(), z.number().int().min(0).max(MAX_MONEY)).nullable().optional(),
   // Free-form extra specs, e.g. [{ label: "Capacity", value: "20L" }] -- for
   // anything that doesn't fit a fixed field.
   attributes: z.array(z.object({ label: z.string().trim().min(1).max(50), value: z.string().trim().min(1).max(200) })).max(20).default([]),
@@ -37,6 +39,14 @@ export const productSchema = z.object({ name: text, description: z.string().trim
 }).refine(v => v.wholesalePaise <= v.pricePaise, 'Wholesale price cannot exceed retail price')
   .refine(v => !v.mrpPaise || v.mrpPaise >= v.pricePaise, 'MRP cannot be lower than the selling price')
   .refine(v => Object.keys(v.sizePrices ?? {}).every(k => v.sizes.includes(k)), 'Option prices must match one of the listed options')
+  .refine(v => Object.keys(v.colorExtraPaise ?? {}).every(k => v.colors.includes(k)), 'A color price difference must match one of the listed colors')
+  // A bag of 10kg atta priced like the 5kg one is almost always a slip, so
+  // an option either has its own price or is deliberately marked as costing
+  // the same -- it cannot be left half-filled.
+  .refine(v => {
+    const priced = Object.keys(v.sizePrices ?? {}).length;
+    return priced === 0 || priced === v.sizes.length;
+  }, 'Give every option its own price, or leave them all blank to charge the same for each')
   .refine(v => Object.values(v.sizePrices ?? {}).every(o => o.wholesalePaise <= o.pricePaise), 'An option\'s wholesale price cannot exceed its retail price')
   .refine(v => Object.values(v.sizePrices ?? {}).every(o => !o.mrpPaise || o.mrpPaise >= o.pricePaise), 'An option\'s MRP cannot be lower than its selling price');
 export const reviewSchema = z.object({
