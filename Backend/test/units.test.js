@@ -2,21 +2,36 @@
 // against a seeded test database.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { watermarkTransformation } from '../src/services/storage.js';
+import sharp from 'sharp';
+import { stampLogo } from '../src/services/watermark.js';
 import { variantFor, priceFor, publicSizePrices } from '../src/lib/variants.js';
 
-test('no watermark until a logo is configured', () => {
-  assert.equal(watermarkTransformation(undefined), undefined);
-  assert.equal(watermarkTransformation(''), undefined);
+const photo = (width, height) => sharp({ create: { width, height, channels: 3, background: '#dddddd' } }).jpeg().toBuffer();
+
+test('the logo is stamped into the bottom-right corner', async () => {
+  const before = await photo(800, 600);
+  const after = await stampLogo(before, { format: 'png' });
+  const { width, height } = await sharp(after).metadata();
+  assert.equal(width, 800);
+  assert.equal(height, 600);
+  // The plain grey corner should no longer be plain grey.
+  // stats() reads the source image, so each region has to be cut out first.
+  const region = async box => (await sharp(await sharp(after).extract(box).toBuffer()).stats()).channels;
+  const corner = await region({ left: 660, top: 480, width: 120, height: 100 });
+  assert.ok(corner.some(c => c.stdev > 5), 'expected the logo to show in the corner');
+  // ...while the opposite corner keeps the flat colour it started with.
+  const far = await region({ left: 0, top: 0, width: 120, height: 100 });
+  assert.ok(far.every(c => c.stdev < 5), 'the rest of the photo must be left alone');
 });
 
-test('watermark sits bottom-right and scales with the photo', () => {
-  const [t] = watermarkTransformation('ntsa/brand/logo');
-  assert.equal(t.overlay, 'ntsa:brand:logo'); // Cloudinary folder separator
-  assert.equal(t.gravity, 'south_east');
-  assert.equal(t.flags, 'relative');
-  assert.equal(t.width, '0.18');
-  assert.ok(t.opacity > 0 && t.opacity <= 100);
+test('a thumbnail too small to mark is left as it is', async () => {
+  const tiny = await photo(80, 80);
+  assert.equal(await stampLogo(tiny), tiny);
+});
+
+test('an unreadable upload is passed through rather than failing', async () => {
+  const notAnImage = Buffer.from('hello');
+  assert.equal(await stampLogo(notAnImage), notAnImage);
 });
 
 const shoes = { name: 'Shoes', sizes: ['7', '8'], colors: ['Black'], sizeLabel: 'Size', pricePaise: 299900, wholesalePaise: 199900, mrpPaise: 499900, sizePrices: null };

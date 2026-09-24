@@ -42,7 +42,10 @@ export async function checkout(actor, input) {
     requireThat(address, 400, 'A delivery address is required');
     // Areas blocked for repeated fraud can't be ordered to at all.
     requireThat(!await tx.blockedPincode.findUnique({ where: { pincode: address.postalCode } }), 400, `We are not delivering to PIN code ${address.postalCode} right now`);
-    const products = await tx.product.findMany({ where: { id: { in: data.items.map(i => i.productId) }, active: true } });
+    // Wholesale-only stock stays out of the shopping app, and retail-only
+    // stock out of the wholesale portal, at checkout as well as in the lists.
+    const forSale = actor.role === 'VENDOR' ? ['WHOLESALE', 'BOTH'] : ['RETAIL', 'BOTH'];
+    const products = await tx.product.findMany({ where: { id: { in: data.items.map(i => i.productId) }, active: true, audience: { in: forSale } } });
     const items = data.items.map(i => {
       const p = products.find(p => p.id === i.productId);
       requireThat(p && p.stock >= i.quantity, 409, 'A product is unavailable or has insufficient stock');

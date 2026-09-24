@@ -80,11 +80,11 @@ router.get('/products', async (req, res) => {
   // The search box (and the AI assistant's free-text queries) match against
   // both the name and description, since a shopper describing what they want
   // ("something to carry my laptop") rarely types the exact product name.
-  const products = await db.product.findMany({ where: { active: true, categoryId: q.categoryId, deal: q.deal ? q.deal === 'true' : undefined, ...(q.search ? { OR: [{ name: { contains: q.search, mode: 'insensitive' } }, { description: { contains: q.search, mode: 'insensitive' } }] } : {}) }, include: { category: true, reviews: { select: { rating: true } } }, orderBy: { createdAt: 'desc' }, take: 200 });
+  const products = await db.product.findMany({ where: { active: true, audience: { in: ['RETAIL', 'BOTH'] }, categoryId: q.categoryId, deal: q.deal ? q.deal === 'true' : undefined, ...(q.search ? { OR: [{ name: { contains: q.search, mode: 'insensitive' } }, { description: { contains: q.search, mode: 'insensitive' } }] } : {}) }, include: { category: true, reviews: { select: { rating: true } } }, orderBy: { createdAt: 'desc' }, take: 200 });
   res.json(products.map(({ wholesalePaise, reviews, ...p }) => ({ ...p, sizePrices: publicSizePrices(p.sizePrices), rating: reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : null, reviewCount: reviews.length })));
 });
 router.get('/products/:id', async (req, res) => {
-  const p = await db.product.findFirst({ where: { id: req.params.id, active: true }, include: { category: true, reviews: { select: { rating: true, comment: true, images: true, createdAt: true, user: { select: { name: true } } }, take: 100, orderBy: { createdAt: 'desc' } } } });
+  const p = await db.product.findFirst({ where: { id: req.params.id, active: true, audience: { in: ['RETAIL', 'BOTH'] } }, include: { category: true, reviews: { select: { rating: true, comment: true, images: true, createdAt: true, user: { select: { name: true } } }, take: 100, orderBy: { createdAt: 'desc' } } } });
   requireThat(p, 404, 'Product not found'); const { wholesalePaise, ...safe } = p; res.json({ ...safe, sizePrices: publicSizePrices(safe.sizePrices) });
 });
 router.get('/coupons', async (req, res) => res.json(await db.coupon.findMany({ where: { active: true, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }, orderBy: { createdAt: 'desc' } })));
@@ -260,7 +260,7 @@ router.get('/sales/applications', sales, async (req, res) => res.json(await db.s
   include: { seller: { select: { username: true } } }, orderBy: { createdAt: 'desc' }, take: 200,
 })));
 
-router.get('/vendor/products', roles('VENDOR'), async (req, res) => res.json(await db.product.findMany({ where: { active: true }, include: { category: true }, orderBy: { name: 'asc' }, take: 200 })));
+router.get('/vendor/products', roles('VENDOR'), async (req, res) => res.json(await db.product.findMany({ where: { active: true, audience: { in: ['WHOLESALE', 'BOTH'] } }, include: { category: true }, orderBy: { name: 'asc' }, take: 200 })));
 // The wholesale portal's "message admin" thread -- a vendor only ever sees
 // their own messages; the admin side (below) can see and reply to any vendor's.
 router.get('/vendor/messages', roles('VENDOR'), async (req, res) => res.json(await db.vendorMessage.findMany({ where: { vendorId: req.actor.id }, orderBy: { createdAt: 'asc' } })));
@@ -369,7 +369,13 @@ router.post('/admin/seller-applications/:id/reject', async (req, res) => {
   await notify('SALES', 'SELLER_REJECTED', 'Seller rejected', `${application.shopName} was rejected: ${note}`, application.id);
   res.json(updated);
 });
-router.get('/admin/products', async (req, res) => res.json(await db.product.findMany({ where: { active: true }, include: { category: true }, orderBy: { createdAt: 'desc' } })));
+router.get('/admin/products', async (req, res) => {
+  // 'Products' asks for the shop's own list, 'Wholesale products' for the
+  // dealer-only one; without the filter the panel gets everything.
+  const { audience } = z.object({ audience: z.enum(['RETAIL', 'WHOLESALE', 'BOTH']).optional() }).parse(req.query);
+  const where = { active: true, ...(audience === 'RETAIL' ? { audience: { in: ['RETAIL', 'BOTH'] } } : audience === 'WHOLESALE' ? { audience: { in: ['WHOLESALE', 'BOTH'] } } : {}) };
+  res.json(await db.product.findMany({ where, include: { category: true }, orderBy: { createdAt: 'desc' } }));
+});
 // Prisma won't take a bare null for a Json column; DbNull clears it.
 const productData = body => {
   const data = productSchema.parse(body);
@@ -394,7 +400,9 @@ router.delete('/admin/categories/:id', async (req, res) => {
   requireThat(!total, 409, 'This category is linked to removed products kept for order history, so it cannot be deleted. Rename it instead.');
   await db.category.delete({ where: { id: req.params.id } }); res.status(204).end();
 });
-router.post('/admin/images', multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => res.status(201).json(await uploadImage(req.file)));
+// Product photos are stamped with the NTSA logo on the way in; a banner is
+// the shop's own artwork, so the panel sends watermark=false for those.
+router.post('/admin/images', multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => res.status(201).json(await uploadImage(req.file, { watermark: req.body?.watermark !== 'false' })));
 router.get('/admin/banners', async (req, res) => res.json(await db.banner.findMany({ orderBy: { sortOrder: 'asc' } })));
 router.post('/admin/banners', async (req, res) => res.status(201).json(await db.banner.create({ data: bannerSchema.parse(req.body) })));
 router.put('/admin/banners/:id', async (req, res) => res.json(await db.banner.update({ where: { id: req.params.id }, data: bannerSchema.parse(req.body) })));

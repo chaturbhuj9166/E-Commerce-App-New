@@ -27,6 +27,9 @@ export const productSchema = z.object({ name: text, description: z.string().trim
   attributes: z.array(z.object({ label: z.string().trim().min(1).max(50), value: z.string().trim().min(1).max(200) })).max(20).default([]),
   // Refurbished / open-box stock is flagged here; NEW products say nothing.
   condition: z.enum(['NEW', 'REFURBISHED', 'OPEN_BOX', 'USED']).default('NEW'),
+  // Wholesale-only stock is added from its own page in the panel and is
+  // never shown in the shopping app.
+  audience: z.enum(['RETAIL', 'WHOLESALE', 'BOTH']).default('BOTH'),
   conditionNote: z.string().trim().max(200).nullable().optional(),
   refundWindowHours: z.number().int().min(0).max(720), deal: z.boolean().default(false),
 }).refine(v => v.wholesalePaise <= v.pricePaise, 'Wholesale price cannot exceed retail price')

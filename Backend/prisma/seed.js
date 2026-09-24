@@ -100,6 +100,51 @@ const samples = [
   },
 ];
 
+// The dealer-only catalogue: bulk packs of the same stock, sold by the case
+// rather than the piece. These only ever show in the wholesale portal, and
+// the photo of each one is the photo of the item inside it.
+const wholesaleSamples = [
+  {
+    name: 'Wireless Headphones — Carton of 20', category: 'Electronics', pricePaise: 7999900, wholesalePaise: 5999900, mrpPaise: 15998000, refundWindowHours: 72,
+    description: 'Sealed carton of 20 Everyday Wireless Headphones, mixed colours on request. Dealer rate per carton.',
+    images: [imageUrl('photo-1567928513899-997d98489fbd'), imageUrl('photo-1612116454817-2b0841e30eaf')],
+  },
+  {
+    name: 'Canvas Backpack — Bundle of 25', category: 'Fashion', pricePaise: 3299900, wholesalePaise: 2249900, mrpPaise: 6247500, refundWindowHours: 72,
+    description: 'Bundle of 25 Everyday Canvas Backpacks. Pick one colour per bundle.',
+    colors: ['Black', 'Grey', 'Navy'],
+    colorImages: { Black: imageUrl('photo-1594299447935-e5b840f54b9b'), Grey: imageUrl('photo-1550916867-c55efa8f29a0'), Navy: imageUrl('photo-1625013964767-0e4b3c041607') },
+  },
+  {
+    name: 'Ceramic Mugs — Case of 48', category: 'Home & Kitchen', pricePaise: 1999900, wholesalePaise: 1299900, mrpPaise: 4315200, refundWindowHours: 48,
+    description: 'Case of 48 Minimal Ceramic Mugs, packed with dividers. Dealer rate per case.',
+    colors: ['White', 'Black', 'Red'],
+    colorImages: { White: imageUrl('photo-1546864558-fb3778ab5521'), Black: imageUrl('photo-1573298846509-eda41bf00803'), Red: imageUrl('photo-1628968434441-d9c1c66dcde7') },
+  },
+  {
+    name: 'Running Shoes — Case of 12', category: 'Sports', pricePaise: 2699900, wholesalePaise: 1799900, mrpPaise: 5998800, refundWindowHours: 72,
+    description: 'Case of 12 pairs of Classic Running Shoes in one size. Choose the size when ordering.',
+    colors: ['Black', 'White', 'Red'], sizes: ['6', '7', '8', '9', '10'], sizeLabel: 'Size',
+    colorImages: { Black: imageUrl('photo-1653868248894-fd2882c61524'), White: imageUrl('photo-1562687769-3bc08bfc093f'), Red: imageUrl('photo-1542291026-7eec264c27ff') },
+  },
+  {
+    name: 'Bluetooth Speakers — Carton of 15', category: 'Electronics', pricePaise: 2499900, wholesalePaise: 1799900, mrpPaise: 5248500, refundWindowHours: 72,
+    description: 'Carton of 15 Portable Bluetooth Speakers. Dealer rate per carton.',
+    colors: ['Black', 'Blue', 'Red'],
+    colorImages: { Black: imageUrl('photo-1511499271651-073325718d90'), Blue: imageUrl('photo-1692351014024-97edd83a7b5a'), Red: imageUrl('photo-1564975472884-a6e9fd24e967') },
+  },
+  {
+    name: 'Kitchen Weighing Scales — Box of 30', category: 'Health', pricePaise: 1499900, wholesalePaise: 999900, mrpPaise: 2997000, refundWindowHours: 48,
+    description: 'Box of 30 Digital Kitchen Weighing Scales, individually boxed.',
+    images: [imageUrl('photo-1576678927484-cc907957088c')],
+  },
+  {
+    name: 'Grocery Combo — Pallet of 50', category: 'Grocery', pricePaise: 2299900, wholesalePaise: 1699900, mrpPaise: 3995000, refundWindowHours: 0,
+    description: 'Pallet of 50 Fresh Grocery Combo Packs. Same-week dispatch only.',
+    images: [imageUrl('photo-1542838132-92c53300491e')],
+  },
+];
+
 try {
   const email = process.env.SEED_ADMIN_EMAIL?.toLowerCase();
   const password = process.env.SEED_ADMIN_PASSWORD;
@@ -128,9 +173,31 @@ try {
       name: s.name, description: 'Thoughtfully selected for your everyday. Quality you can count on, at a price you will love.',
       categoryId: c.id, pricePaise: s.pricePaise, wholesalePaise: s.wholesalePaise, mrpPaise: s.mrpPaise, refundWindowHours: s.refundWindowHours,
       images, colors: s.colors, sizes: s.sizes, sizeLabel: s.sizeLabel ?? 'Size', sizePrices: s.sizePrices ?? null, colorImages: s.colorImages ?? null, deal: s.deal,
+      // Shop stock; the dealer-only lots are seeded separately below.
+      audience: 'RETAIL',
     };
     await db.product.upsert({ where: { id }, update: fields, create: { id, stock: 100, ...fields } });
     productIds.push({ id, images });
+  }
+
+  // Products created before the shop and wholesale catalogues were split
+  // showed on both sides. Move them to the shop, once, so the wholesale
+  // portal starts from the dealer lots below and nothing else.
+  if (await db.product.count({ where: { audience: 'WHOLESALE' } }) === 0) {
+    await db.product.updateMany({ where: { audience: 'BOTH' }, data: { audience: 'RETAIL' } });
+  }
+
+  for (const [index, s] of wholesaleSamples.entries()) {
+    const c = await db.category.findUnique({ where: { name: s.category } });
+    const images = s.colorImages ? Object.values(s.colorImages) : s.images;
+    const fields = {
+      name: s.name, description: s.description, categoryId: c.id,
+      pricePaise: s.pricePaise, wholesalePaise: s.wholesalePaise, mrpPaise: s.mrpPaise, refundWindowHours: s.refundWindowHours,
+      images, colors: s.colors ?? [], sizes: s.sizes ?? [], sizeLabel: s.sizeLabel ?? 'Size',
+      sizePrices: null, colorImages: s.colorImages ?? null, deal: false, audience: 'WHOLESALE',
+    };
+    const id = `wholesale-${index + 1}`;
+    await db.product.upsert({ where: { id }, update: fields, create: { id, stock: 40, ...fields } });
   }
 
   if (await db.banner.count() === 0) {

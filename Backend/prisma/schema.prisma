@@ -249,6 +249,10 @@ model Product {
   // on the listing and the product page, with an optional line of detail.
   condition String @default("NEW") // NEW | REFURBISHED | OPEN_BOX | USED
   conditionNote String?
+  // Who the product is listed for. Wholesale-only stock (bulk packs, dealer
+  // lots) never shows in the shopping app, and retail-only stock never shows
+  // in the wholesale portal.
+  audience String @default("BOTH") // RETAIL | WHOLESALE | BOTH
   refundWindowHours Int @default(24)
   deal Boolean @default(false)
   active Boolean @default(true)
