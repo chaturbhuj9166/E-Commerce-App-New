@@ -376,18 +376,37 @@ router.get('/admin/products', async (req, res) => {
   const where = { active: true, ...(audience === 'RETAIL' ? { audience: { in: ['RETAIL', 'BOTH'] } } : audience === 'WHOLESALE' ? { audience: { in: ['WHOLESALE', 'BOTH'] } } : {}) };
   res.json(await db.product.findMany({ where, include: { category: true }, orderBy: { createdAt: 'desc' } }));
 });
-// Prisma won't take a bare null for a Json column; DbNull clears it.
-const productData = body => {
+// Prisma won't take a bare null for a Json column; DbNull clears it. The
+// return window is not asked for here: it is whatever the chosen category
+// allows, copied on so orders and the app keep reading it off the product.
+const productData = async body => {
   const data = productSchema.parse(body);
   for (const key of ['colorImages', 'sizePrices']) if (data[key] === null) data[key] = Prisma.DbNull;
-  return data;
+  const category = await db.category.findUnique({ where: { id: data.categoryId } });
+  requireThat(category, 400, 'Choose a category for this product');
+  return { ...data, refundWindowHours: category.refundWindowHours };
 };
-router.post('/admin/products', async (req, res) => res.status(201).json(await db.product.create({ data: productData(req.body) })));
-router.put('/admin/products/:id', async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: productData(req.body) })));
+router.post('/admin/products', async (req, res) => res.status(201).json(await db.product.create({ data: await productData(req.body) })));
+router.put('/admin/products/:id', async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: await productData(req.body) })));
 router.delete('/admin/products/:id', async (req, res) => { await db.product.update({ where: { id: req.params.id }, data: { active: false } }); res.status(204).end(); });
-const categorySchema = z.object({ name: z.string().trim().min(1).max(80), icon: z.string().max(50).default('shopping_bag') });
+// The return window is set here, once per category: "anything in Grocery
+// can be returned for 2 hours".
+const categorySchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  icon: z.string().max(50).default('shopping_bag'),
+  refundWindowHours: z.number().int().min(0).max(720).default(24),
+});
 router.post('/admin/categories', async (req, res) => res.status(201).json(await db.category.create({ data: categorySchema.parse(req.body) })));
-router.put('/admin/categories/:id', async (req, res) => res.json(await db.category.update({ where: { id: req.params.id }, data: categorySchema.parse(req.body) })));
+router.put('/admin/categories/:id', async (req, res) => {
+  const data = categorySchema.parse(req.body);
+  // Changing it here changes it for everything in the category; orders
+  // already placed keep the window they were bought under.
+  const [category] = await db.$transaction([
+    db.category.update({ where: { id: req.params.id }, data }),
+    db.product.updateMany({ where: { categoryId: req.params.id }, data: { refundWindowHours: data.refundWindowHours } }),
+  ]);
+  res.json(category);
+});
 router.delete('/admin/categories/:id', async (req, res) => {
   // Removed products are only deactivated (kept for order history), so they
   // still reference the category; Postgres would reject the delete with a raw

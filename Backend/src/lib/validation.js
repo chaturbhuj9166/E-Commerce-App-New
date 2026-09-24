@@ -31,7 +31,9 @@ export const productSchema = z.object({ name: text, description: z.string().trim
   // never shown in the shopping app.
   audience: z.enum(['RETAIL', 'WHOLESALE', 'BOTH']).default('BOTH'),
   conditionNote: z.string().trim().max(200).nullable().optional(),
-  refundWindowHours: z.number().int().min(0).max(720), deal: z.boolean().default(false),
+  deal: z.boolean().default(false),
+  // Note: no refundWindowHours. The return window is set once per category
+  // and copied onto the product whenever it is saved.
 }).refine(v => v.wholesalePaise <= v.pricePaise, 'Wholesale price cannot exceed retail price')
   .refine(v => !v.mrpPaise || v.mrpPaise >= v.pricePaise, 'MRP cannot be lower than the selling price')
   .refine(v => Object.keys(v.sizePrices ?? {}).every(k => v.sizes.includes(k)), 'Option prices must match one of the listed options')
@@ -123,6 +125,8 @@ export const bannerSchema = z.object({
   title: z.string().trim().min(1).max(100),
   subtitle: z.string().trim().max(200).nullable().optional(),
   imageUrl: imageUrlSchema.nullable().optional(),
+  // A banner may be a short clip instead of a still.
+  videoUrl: mediaUrlSchema.nullable().optional(),
   backgroundColor: z.string().trim().regex(/^#[0-9A-Fa-f]{6}$/, 'Use a hex color like #13224A').nullable().optional(),
   buttonText: z.string().trim().min(1).max(30).default('Shop Now'),
   active: z.boolean().default(true),

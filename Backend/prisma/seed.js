@@ -35,36 +35,36 @@ const REVIEW_COMMENTS = [
 // built only from photos that are genuinely of this product.
 const samples = [
   {
-    name: 'Everyday Wireless Headphones', category: 'Electronics', pricePaise: 499900, wholesalePaise: 349900, mrpPaise: 799900, refundWindowHours: 48, deal: true,
+    name: 'Everyday Wireless Headphones', category: 'Electronics', pricePaise: 499900, wholesalePaise: 349900, mrpPaise: 799900, deal: true,
     colors: ['Black', 'White', 'Blue'], sizes: [],
     colorImages: { Black: imageUrl('photo-1567928513899-997d98489fbd'), White: imageUrl('photo-1612116454817-2b0841e30eaf'), Blue: imageUrl('photo-1612858250434-b5358e2b3625') },
   },
   {
-    name: 'Everyday Canvas Backpack', category: 'Fashion', pricePaise: 149900, wholesalePaise: 99900, mrpPaise: 249900, refundWindowHours: 24, deal: true,
+    name: 'Everyday Canvas Backpack', category: 'Fashion', pricePaise: 149900, wholesalePaise: 99900, mrpPaise: 249900, deal: true,
     colors: ['Black', 'Grey', 'Navy'], sizes: [],
     colorImages: { Black: imageUrl('photo-1594299447935-e5b840f54b9b'), Grey: imageUrl('photo-1550916867-c55efa8f29a0'), Navy: imageUrl('photo-1625013964767-0e4b3c041607') },
   },
   {
-    name: 'Minimal Ceramic Mug', category: 'Home & Kitchen', pricePaise: 49900, wholesalePaise: 29900, mrpPaise: 89900, refundWindowHours: 2, deal: true,
+    name: 'Minimal Ceramic Mug', category: 'Home & Kitchen', pricePaise: 49900, wholesalePaise: 29900, mrpPaise: 89900, deal: true,
     colors: ['White', 'Black', 'Red'], sizes: [],
     colorImages: { White: imageUrl('photo-1546864558-fb3778ab5521'), Black: imageUrl('photo-1573298846509-eda41bf00803'), Red: imageUrl('photo-1628968434441-d9c1c66dcde7') },
   },
   {
-    name: 'Daily Care Essentials', category: 'Beauty', pricePaise: 89900, wholesalePaise: 59900, mrpPaise: 149900, refundWindowHours: 2, deal: false,
+    name: 'Daily Care Essentials', category: 'Beauty', pricePaise: 89900, wholesalePaise: 59900, mrpPaise: 149900, deal: false,
     colors: [], sizes: [], images: [imageUrl('photo-1556229010-6c3f2c9ca5f8')],
   },
   {
-    name: 'Classic Running Shoes', category: 'Sports', pricePaise: 299900, wholesalePaise: 199900, mrpPaise: 499900, refundWindowHours: 48, deal: false,
+    name: 'Classic Running Shoes', category: 'Sports', pricePaise: 299900, wholesalePaise: 199900, mrpPaise: 499900, deal: false,
     colors: ['Black', 'White', 'Red'], sizes: ['6', '7', '8', '9', '10'],
     colorImages: { Black: imageUrl('photo-1653868248894-fd2882c61524'), White: imageUrl('photo-1562687769-3bc08bfc093f'), Red: imageUrl('photo-1542291026-7eec264c27ff') },
   },
   {
-    name: 'Portable Bluetooth Speaker', category: 'Electronics', pricePaise: 199900, wholesalePaise: 139900, mrpPaise: 349900, refundWindowHours: 24, deal: false,
+    name: 'Portable Bluetooth Speaker', category: 'Electronics', pricePaise: 199900, wholesalePaise: 139900, mrpPaise: 349900, deal: false,
     colors: ['Black', 'Blue', 'Red'], sizes: [],
     colorImages: { Black: imageUrl('photo-1511499271651-073325718d90'), Blue: imageUrl('photo-1692351014024-97edd83a7b5a'), Red: imageUrl('photo-1564975472884-a6e9fd24e967') },
   },
   {
-    name: 'Budget Smartphone', category: 'Mobiles', pricePaise: 1299900, wholesalePaise: 999900, mrpPaise: 1599900, refundWindowHours: 24, deal: false,
+    name: 'Budget Smartphone', category: 'Mobiles', pricePaise: 1299900, wholesalePaise: 999900, mrpPaise: 1599900, deal: false,
     colors: ['Black', 'Blue', 'Silver'], sizes: ['128GB', '256GB'], sizeLabel: 'Storage',
     // The larger storage option costs more; 128GB uses the base prices above.
     sizePrices: { '256GB': { pricePaise: 1499900, wholesalePaise: 1149900, mrpPaise: 1799900 } },
@@ -74,28 +74,28 @@ const samples = [
     // No verified free photo of an air fryer specifically in black/white was
     // found (only a paid Unsplash+ one) -- one genuine kitchen-appliance
     // photo is used instead of guessing; add real product photos when ready.
-    name: 'Compact Air Fryer 4L', category: 'Appliances', pricePaise: 349900, wholesalePaise: 249900, mrpPaise: 549900, refundWindowHours: 48, deal: false,
+    name: 'Compact Air Fryer 4L', category: 'Appliances', pricePaise: 349900, wholesalePaise: 249900, mrpPaise: 549900, deal: false,
     colors: ['Black', 'White'], sizes: [], images: [imageUrl('photo-1585659722983-3a675dabf23d')],
   },
   {
-    name: '3-Seater Fabric Sofa', category: 'Furniture', pricePaise: 2499900, wholesalePaise: 1899900, mrpPaise: 3499900, refundWindowHours: 168, deal: false,
+    name: '3-Seater Fabric Sofa', category: 'Furniture', pricePaise: 2499900, wholesalePaise: 1899900, mrpPaise: 3499900, deal: false,
     colors: ['Grey', 'Beige', 'Blue'], sizes: [],
     colorImages: { Grey: imageUrl('photo-1527772482340-7895c3f2b3f7'), Beige: imageUrl('photo-1523920020520-bc3e5db128b5'), Blue: imageUrl('photo-1613685301586-4f2b15f0ccd4') },
   },
   {
-    name: 'Wooden Building Blocks Set', category: 'Toys & Games', pricePaise: 79900, wholesalePaise: 49900, mrpPaise: 129900, refundWindowHours: 24, deal: false,
+    name: 'Wooden Building Blocks Set', category: 'Toys & Games', pricePaise: 79900, wholesalePaise: 49900, mrpPaise: 129900, deal: false,
     colors: [], sizes: [], images: [imageUrl('photo-1587654780291-39c9404d746b')],
   },
   {
-    name: 'Bestselling Fiction Novel', category: 'Books', pricePaise: 39900, wholesalePaise: 24900, mrpPaise: 59900, refundWindowHours: 24, deal: false,
+    name: 'Bestselling Fiction Novel', category: 'Books', pricePaise: 39900, wholesalePaise: 24900, mrpPaise: 59900, deal: false,
     colors: [], sizes: [], images: [imageUrl('photo-1544947950-fa07a98d237f')],
   },
   {
-    name: 'Digital Kitchen Weighing Scale', category: 'Health', pricePaise: 69900, wholesalePaise: 44900, mrpPaise: 99900, refundWindowHours: 24, deal: false,
+    name: 'Digital Kitchen Weighing Scale', category: 'Health', pricePaise: 69900, wholesalePaise: 44900, mrpPaise: 99900, deal: false,
     colors: [], sizes: [], images: [imageUrl('photo-1576678927484-cc907957088c')],
   },
   {
-    name: 'Fresh Grocery Combo Pack', category: 'Grocery', pricePaise: 59900, wholesalePaise: 39900, mrpPaise: 79900, refundWindowHours: 0, deal: false,
+    name: 'Fresh Grocery Combo Pack', category: 'Grocery', pricePaise: 59900, wholesalePaise: 39900, mrpPaise: 79900, deal: false,
     colors: [], sizes: [], images: [imageUrl('photo-1542838132-92c53300491e')],
   },
 ];
@@ -105,41 +105,41 @@ const samples = [
 // the photo of each one is the photo of the item inside it.
 const wholesaleSamples = [
   {
-    name: 'Wireless Headphones — Carton of 20', category: 'Electronics', pricePaise: 7999900, wholesalePaise: 5999900, mrpPaise: 15998000, refundWindowHours: 72,
+    name: 'Wireless Headphones — Carton of 20', category: 'Electronics', pricePaise: 7999900, wholesalePaise: 5999900, mrpPaise: 15998000,
     description: 'Sealed carton of 20 Everyday Wireless Headphones, mixed colours on request. Dealer rate per carton.',
     images: [imageUrl('photo-1567928513899-997d98489fbd'), imageUrl('photo-1612116454817-2b0841e30eaf')],
   },
   {
-    name: 'Canvas Backpack — Bundle of 25', category: 'Fashion', pricePaise: 3299900, wholesalePaise: 2249900, mrpPaise: 6247500, refundWindowHours: 72,
+    name: 'Canvas Backpack — Bundle of 25', category: 'Fashion', pricePaise: 3299900, wholesalePaise: 2249900, mrpPaise: 6247500,
     description: 'Bundle of 25 Everyday Canvas Backpacks. Pick one colour per bundle.',
     colors: ['Black', 'Grey', 'Navy'],
     colorImages: { Black: imageUrl('photo-1594299447935-e5b840f54b9b'), Grey: imageUrl('photo-1550916867-c55efa8f29a0'), Navy: imageUrl('photo-1625013964767-0e4b3c041607') },
   },
   {
-    name: 'Ceramic Mugs — Case of 48', category: 'Home & Kitchen', pricePaise: 1999900, wholesalePaise: 1299900, mrpPaise: 4315200, refundWindowHours: 48,
+    name: 'Ceramic Mugs — Case of 48', category: 'Home & Kitchen', pricePaise: 1999900, wholesalePaise: 1299900, mrpPaise: 4315200,
     description: 'Case of 48 Minimal Ceramic Mugs, packed with dividers. Dealer rate per case.',
     colors: ['White', 'Black', 'Red'],
     colorImages: { White: imageUrl('photo-1546864558-fb3778ab5521'), Black: imageUrl('photo-1573298846509-eda41bf00803'), Red: imageUrl('photo-1628968434441-d9c1c66dcde7') },
   },
   {
-    name: 'Running Shoes — Case of 12', category: 'Sports', pricePaise: 2699900, wholesalePaise: 1799900, mrpPaise: 5998800, refundWindowHours: 72,
+    name: 'Running Shoes — Case of 12', category: 'Sports', pricePaise: 2699900, wholesalePaise: 1799900, mrpPaise: 5998800,
     description: 'Case of 12 pairs of Classic Running Shoes in one size. Choose the size when ordering.',
     colors: ['Black', 'White', 'Red'], sizes: ['6', '7', '8', '9', '10'], sizeLabel: 'Size',
     colorImages: { Black: imageUrl('photo-1653868248894-fd2882c61524'), White: imageUrl('photo-1562687769-3bc08bfc093f'), Red: imageUrl('photo-1542291026-7eec264c27ff') },
   },
   {
-    name: 'Bluetooth Speakers — Carton of 15', category: 'Electronics', pricePaise: 2499900, wholesalePaise: 1799900, mrpPaise: 5248500, refundWindowHours: 72,
+    name: 'Bluetooth Speakers — Carton of 15', category: 'Electronics', pricePaise: 2499900, wholesalePaise: 1799900, mrpPaise: 5248500,
     description: 'Carton of 15 Portable Bluetooth Speakers. Dealer rate per carton.',
     colors: ['Black', 'Blue', 'Red'],
     colorImages: { Black: imageUrl('photo-1511499271651-073325718d90'), Blue: imageUrl('photo-1692351014024-97edd83a7b5a'), Red: imageUrl('photo-1564975472884-a6e9fd24e967') },
   },
   {
-    name: 'Kitchen Weighing Scales — Box of 30', category: 'Health', pricePaise: 1499900, wholesalePaise: 999900, mrpPaise: 2997000, refundWindowHours: 48,
+    name: 'Kitchen Weighing Scales — Box of 30', category: 'Health', pricePaise: 1499900, wholesalePaise: 999900, mrpPaise: 2997000,
     description: 'Box of 30 Digital Kitchen Weighing Scales, individually boxed.',
     images: [imageUrl('photo-1576678927484-cc907957088c')],
   },
   {
-    name: 'Grocery Combo — Pallet of 50', category: 'Grocery', pricePaise: 2299900, wholesalePaise: 1699900, mrpPaise: 3995000, refundWindowHours: 0,
+    name: 'Grocery Combo — Pallet of 50', category: 'Grocery', pricePaise: 2299900, wholesalePaise: 1699900, mrpPaise: 3995000,
     description: 'Pallet of 50 Fresh Grocery Combo Packs. Same-week dispatch only.',
     images: [imageUrl('photo-1542838132-92c53300491e')],
   },
@@ -154,13 +154,18 @@ try {
   // Matches the 12-category grid on the Home screen (REAL-NTSA-1.png) --
   // names must stay in sync with iconForCategory() in the Flutter app
   // (Frontend/customer/lib/widgets/category_icon.dart).
+  // The third value is the return window in hours: perishables get a couple
+  // of hours, furniture a week. The admin can change any of them later, and
+  // every product in a category inherits its category's window.
   const categories = [
-    ['Electronics', 'electronics'], ['Fashion', 'fashion'], ['Grocery', 'grocery'], ['Beauty', 'beauty'],
-    ['Home & Kitchen', 'home_kitchen'], ['Mobiles', 'mobiles'], ['Appliances', 'appliances'], ['Furniture', 'furniture'],
-    ['Toys & Games', 'toys'], ['Sports', 'sports'], ['Books', 'books'], ['Health', 'health'],
-    ['Lawn & Garden', 'lawn_garden'],
+    ['Electronics', 'electronics', 48], ['Fashion', 'fashion', 24], ['Grocery', 'grocery', 2], ['Beauty', 'beauty', 2],
+    ['Home & Kitchen', 'home_kitchen', 24], ['Mobiles', 'mobiles', 24], ['Appliances', 'appliances', 48], ['Furniture', 'furniture', 168],
+    ['Toys & Games', 'toys', 24], ['Sports', 'sports', 48], ['Books', 'books', 24], ['Health', 'health', 24],
+    ['Lawn & Garden', 'lawn_garden', 48],
   ];
-  for (const [name, icon] of categories) await db.category.upsert({ where: { name }, update: {}, create: { name, icon } });
+  for (const [name, icon, refundWindowHours] of categories) {
+    await db.category.upsert({ where: { name }, update: { refundWindowHours }, create: { name, icon, refundWindowHours } });
+  }
 
   const productIds = [];
   for (const [index, s] of samples.entries()) {
@@ -171,7 +176,9 @@ try {
     const images = s.colorImages ? Object.values(s.colorImages) : s.images;
     const fields = {
       name: s.name, description: 'Thoughtfully selected for your everyday. Quality you can count on, at a price you will love.',
-      categoryId: c.id, pricePaise: s.pricePaise, wholesalePaise: s.wholesalePaise, mrpPaise: s.mrpPaise, refundWindowHours: s.refundWindowHours,
+      categoryId: c.id, pricePaise: s.pricePaise, wholesalePaise: s.wholesalePaise, mrpPaise: s.mrpPaise,
+      // Returns are a property of the category now, not of each product.
+      refundWindowHours: c.refundWindowHours,
       images, colors: s.colors, sizes: s.sizes, sizeLabel: s.sizeLabel ?? 'Size', sizePrices: s.sizePrices ?? null, colorImages: s.colorImages ?? null, deal: s.deal,
       // Shop stock; the dealer-only lots are seeded separately below.
       audience: 'RETAIL',
@@ -192,7 +199,7 @@ try {
     const images = s.colorImages ? Object.values(s.colorImages) : s.images;
     const fields = {
       name: s.name, description: s.description, categoryId: c.id,
-      pricePaise: s.pricePaise, wholesalePaise: s.wholesalePaise, mrpPaise: s.mrpPaise, refundWindowHours: s.refundWindowHours,
+      pricePaise: s.pricePaise, wholesalePaise: s.wholesalePaise, mrpPaise: s.mrpPaise, refundWindowHours: c.refundWindowHours,
       images, colors: s.colors ?? [], sizes: s.sizes ?? [], sizeLabel: s.sizeLabel ?? 'Size',
       sizePrices: null, colorImages: s.colorImages ?? null, deal: false, audience: 'WHOLESALE',
     };

@@ -187,6 +187,9 @@ model Banner {
   title String
   subtitle String?
   imageUrl String?
+  // A short clip instead of a still. The image, when both are set, is the
+  // poster shown while the video loads.
+  videoUrl String?
   backgroundColor String? // hex, e.g. "#13224A"; falls back to the app's default brand color when unset
   buttonText String @default("Shop Now")
   active Boolean @default(true)
@@ -213,6 +216,9 @@ model Category {
   id String @id @default(cuid())
   name String @unique
   icon String @default("shopping_bag")
+  // How long a delivered product from this category can be returned for.
+  // Set once per category by the admin; every product in it inherits it.
+  refundWindowHours Int @default(24)
   products Product[]
   @@map("categories")
 }
@@ -253,6 +259,8 @@ model Product {
   // lots) never shows in the shopping app, and retail-only stock never shows
   // in the wholesale portal.
   audience String @default("BOTH") // RETAIL | WHOLESALE | BOTH
+  // Copied from the product's category whenever it is saved, so orders and
+  // the app keep reading it straight off the product.
   refundWindowHours Int @default(24)
   deal Boolean @default(false)
   active Boolean @default(true)

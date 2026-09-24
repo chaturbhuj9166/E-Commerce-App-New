@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 import '../core/app_colors.dart';
 import '../models/banner.dart';
 import 'app_network_image.dart';
@@ -54,6 +55,8 @@ class _BannerSliderState extends State<BannerSlider> {
   }
 
   void _measure(AppBanner banner) {
+    // A clip reports its own shape once it has loaded (see _BannerVideo).
+    if (banner.videoUrl != null) return;
     if (banner.imageUrl == null) {
       if (mounted) setState(() => _aspectRatio = 2.6);
       return;
@@ -89,7 +92,16 @@ class _BannerSliderState extends State<BannerSlider> {
             },
             itemBuilder: (context, i) => Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _BannerCard(banner: banners[i], onShopNow: widget.onShopNow),
+              child: _BannerCard(
+                banner: banners[i],
+                onShopNow: widget.onShopNow,
+                // Only the banner on screen plays; the neighbours PageView
+                // builds ahead stay paused.
+                playing: i == _page,
+                onRatio: (ratio) {
+                  if (mounted && i == _page) setState(() => _aspectRatio = ratio.clamp(1.4, 3.2));
+                },
+              ),
             ),
           ),
         ),
@@ -112,9 +124,11 @@ class _BannerSliderState extends State<BannerSlider> {
 }
 
 class _BannerCard extends StatelessWidget {
-  const _BannerCard({required this.banner, required this.onShopNow});
+  const _BannerCard({required this.banner, required this.onShopNow, this.playing = true, this.onRatio});
   final AppBanner banner;
   final VoidCallback onShopNow;
+  final bool playing;
+  final ValueChanged<double>? onRatio;
 
   @override
   Widget build(BuildContext context) {
@@ -131,9 +145,12 @@ class _BannerCard extends StatelessWidget {
             // The surrounding box is already sized to this image's exact
             // aspect ratio (see _BannerSliderState._measure), so cover fills
             // it edge to edge without cropping or leaving gaps.
-            if (banner.imageUrl != null) AppNetworkImage(banner.imageUrl!, fit: BoxFit.cover, error: const SizedBox.shrink()),
+            if (banner.videoUrl != null)
+              _BannerVideo(url: banner.videoUrl!, poster: banner.imageUrl, playing: playing, onRatio: onRatio)
+            else if (banner.imageUrl != null)
+              AppNetworkImage(banner.imageUrl!, fit: BoxFit.cover, error: const SizedBox.shrink()),
             // A scrim so the title/button stay readable over any photo.
-            if (banner.imageUrl != null) Container(color: Colors.black.withValues(alpha: 0.32)),
+            if (banner.imageUrl != null || banner.videoUrl != null) Container(color: Colors.black.withValues(alpha: 0.32)),
             Padding(
               padding: const EdgeInsets.all(18),
               child: Row(
@@ -175,12 +192,99 @@ class _BannerCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (banner.imageUrl == null) Icon(Icons.shopping_bag_rounded, color: Colors.white.withValues(alpha: 0.85), size: 56),
+                  if (banner.imageUrl == null && banner.videoUrl == null) Icon(Icons.shopping_bag_rounded, color: Colors.white.withValues(alpha: 0.85), size: 56),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+/// The clip behind a banner: muted, looping, and started only while its page
+/// is the one on screen. The poster image fills the card until the first
+/// frame is ready, and a clip that will not load simply leaves the poster.
+class _BannerVideo extends StatefulWidget {
+  const _BannerVideo({required this.url, this.poster, required this.playing, this.onRatio});
+
+  final String url;
+  final String? poster;
+  final bool playing;
+  final ValueChanged<double>? onRatio;
+
+  @override
+  State<_BannerVideo> createState() => _BannerVideoState();
+}
+
+class _BannerVideoState extends State<_BannerVideo> {
+  VideoPlayerController? _controller;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    _controller = controller;
+    try {
+      await controller.initialize();
+      await controller.setLooping(true);
+      // Autoplay with sound would be rude, and browsers block it outright.
+      await controller.setVolume(0);
+      if (!mounted) return;
+      setState(() => _ready = true);
+      final size = controller.value.size;
+      if (size.height > 0) widget.onRatio?.call(size.width / size.height);
+      if (widget.playing) await controller.play();
+    } catch (_) {
+      // A missing or unplayable clip leaves the poster image showing.
+      if (mounted) setState(() => _ready = false);
+    }
+  }
+
+  @override
+  void didUpdateWidget(_BannerVideo old) {
+    super.didUpdateWidget(old);
+    if (old.url != widget.url) {
+      _controller?.dispose();
+      _controller = null;
+      _ready = false;
+      _load();
+      return;
+    }
+    final controller = _controller;
+    if (!_ready || controller == null) return;
+    widget.playing ? controller.play() : controller.pause();
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    if (!_ready || controller == null) {
+      return widget.poster != null
+          ? AppNetworkImage(widget.poster!, fit: BoxFit.cover, error: const SizedBox.shrink())
+          : const SizedBox.shrink();
+    }
+    // The card is already sized to the clip's own shape, so cover fills it.
+    return FittedBox(
+      fit: BoxFit.cover,
+      clipBehavior: Clip.hardEdge,
+      child: SizedBox(
+        width: controller.value.size.width,
+        height: controller.value.size.height,
+        child: VideoPlayer(controller),
       ),
     );
   }
