@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LayoutDashboard, Package, Shapes, Users, ShoppingBag, RotateCcw, LogOut, Search, Plus, ArrowUpRight, ChevronRight, Check, Menu, X, Truck, ShieldCheck, Wallet, Store, Image, Tag, Eye, EyeOff, Bell, ClipboardList, UserPlus, BadgeCheck, UserCog, MapPin, Paperclip } from 'lucide-react';
-import { api, money, paise } from './api';
+import { LayoutDashboard, Package, Shapes, Users, ShoppingBag, RotateCcw, LogOut, Search, Plus, ArrowUpRight, ChevronRight, Check, Menu, X, Truck, ShieldCheck, Wallet, Store, Image, Tag, Eye, EyeOff, Bell, ClipboardList, UserPlus, BadgeCheck, UserCog, MapPin, Paperclip, Settings as SettingsIcon, FileText } from 'lucide-react';
+import { api, money, paise, openInvoice, suggestCategory } from './api';
 import { Button, Field, PasswordField, Badge, Empty, Modal, Stat, ProductImage, CONDITION_LABEL } from './ui';
 import { WholesaleProductsPage, AudienceField } from './pages/wholesale-products';
 import './style.css';
@@ -19,6 +19,8 @@ function App() {
   const [staff, setStaff] = useState([]), [applications, setApplications] = useState([]), [notifications, setNotifications] = useState([]);
   const [toPack, setToPack] = useState([]), [packed, setPacked] = useState([]), [bellOpen, setBellOpen] = useState(false);
   const [blockedPins, setBlockedPins] = useState([]), [pinStats, setPinStats] = useState([]), [deliveryRules, setDeliveryRules] = useState([]);
+  // The letterhead every invoice is printed with.
+  const [settings, setSettings] = useState(null);
   const role = me?.role ?? 'ADMIN';
   const isAdmin = role === 'ADMIN', isPacking = role === 'PACKING', isSales = role === 'SALES';
   const unread = notifications.filter(n => !n.readAt).length;
@@ -41,8 +43,8 @@ function App() {
       setProducts(p); setCategories(c); setOrders(o);
       if (account.role === 'ADMIN') setWholesaleProducts(await api('/admin/products?audience=WHOLESALE'));
       if (account.role === 'ADMIN') {
-        const [v, r, b, cp, st, apps, notes, queue, pins, stats, rules] = await Promise.all([api('/admin/vendors'), api('/admin/refunds'), api('/admin/banners'), api('/admin/coupons'), api('/admin/staff'), api('/admin/seller-applications'), api('/notifications'), api('/packing/orders'), api('/admin/blocked-pincodes'), api('/admin/pincode-stats'), api('/admin/delivery-rules')]);
-        setVendors(v); setRefunds(r); setBanners(b); setCoupons(cp); setStaff(st); setApplications(apps); setNotifications(notes); setToPack(queue); setBlockedPins(pins); setPinStats(stats); setDeliveryRules(rules);
+        const [v, r, b, cp, st, apps, notes, queue, pins, stats, rules, cfg] = await Promise.all([api('/admin/vendors'), api('/admin/refunds'), api('/admin/banners'), api('/admin/coupons'), api('/admin/staff'), api('/admin/seller-applications'), api('/notifications'), api('/packing/orders'), api('/admin/blocked-pincodes'), api('/admin/pincode-stats'), api('/admin/delivery-rules'), api('/admin/settings')]);
+        setVendors(v); setRefunds(r); setBanners(b); setCoupons(cp); setStaff(st); setApplications(apps); setNotifications(notes); setToPack(queue); setBlockedPins(pins); setPinStats(stats); setDeliveryRules(rules); setSettings(cfg);
       }
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   }
@@ -59,7 +61,7 @@ function App() {
   if (!session) return <Login onLogin={(token, loginRole) => { sessionStorage.setItem('ntsa-token', token); setPage(loginRole === 'PACKING' ? 'To pack' : loginRole === 'SALES' ? 'Add seller' : 'Overview'); setSession(token); }}/ >;
   const nav = isPacking ? [['To pack', ClipboardList], ['Packed', Check]]
     : isSales ? [['Add seller', UserPlus], ['My sellers', Store]]
-    : isAdmin ? [['Overview', LayoutDashboard], ['Products', Package], ['Wholesale products', Store], ['Categories', Shapes], ['Banners', Image], ['Coupons', Tag], ['Orders', ShoppingBag], ['To pack', ClipboardList], ['Sellers', BadgeCheck], ['Vendors', Users], ['Refunds', RotateCcw], ['Delivery areas', MapPin], ['Staff', UserCog]]
+    : isAdmin ? [['Overview', LayoutDashboard], ['Products', Package], ['Wholesale products', Store], ['Categories', Shapes], ['Banners', Image], ['Coupons', Tag], ['Orders', ShoppingBag], ['To pack', ClipboardList], ['Sellers', BadgeCheck], ['Vendors', Users], ['Refunds', RotateCcw], ['Delivery areas', MapPin], ['Staff', UserCog], ['Settings', SettingsIcon]]
     : [['Overview', LayoutDashboard], ['Wholesale catalog', Store], ['Orders', ShoppingBag]];
   const pendingApplications = applications.filter(a => a.status === 'PENDING').length;
   const shown = products.filter(p => `${p.name} ${p.category?.name}`.toLowerCase().includes(query.toLowerCase()));
@@ -82,7 +84,7 @@ function App() {
       </div>}
       <span className="online-dot"/><span>{isAdmin ? 'Super Admin' : me?.name || (isPacking ? 'Packing team' : isSales ? 'Sales team' : 'Vendor')}</span><div className="avatar">{isAdmin ? 'SA' : isPacking ? 'PK' : isSales ? 'SL' : 'WV'}</div></div></header>
       <main className="content">
-        <div className="page-heading"><div><div className="eyebrow">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div><h1>{page === 'Overview' ? 'A good day to grow.' : page}</h1><p>{({ Overview: 'Here’s what’s happening with your store today.', Products: 'A little care for every product on your shelf.', Categories: 'Make your collection easy to discover.', Banners: 'Control the Home screen banner without a code change.', Coupons: 'Create and manage discount codes.', Orders: 'From your shelf to their doorstep.', Vendors: 'Build stronger wholesale partnerships.', Refunds: 'Thoughtful resolutions. Happier customers.', 'Wholesale catalog': 'Stock up on quality. Save on every order.', 'To pack': 'Everything waiting to be packed and sent.', Packed: 'Packed today and on its way.', 'Add seller': 'Sign up a shop that wants to sell on NTSA.', 'My sellers': 'What you sent for verification.', Sellers: 'Check the details, then hand out their login.', Staff: 'Logins for your packing and sales teams.', 'Delivery areas': 'Delivery charges, and the areas you no longer deliver to.' })[page]}</p></div>
+        <div className="page-heading"><div><div className="eyebrow">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div><h1>{page === 'Overview' ? 'A good day to grow.' : page}</h1><p>{({ Overview: 'Here’s what’s happening with your store today.', Products: 'A little care for every product on your shelf.', Categories: 'Make your collection easy to discover.', Banners: 'Control the Home screen banner without a code change.', Coupons: 'Create and manage discount codes.', Orders: 'From your shelf to their doorstep.', Vendors: 'Build stronger wholesale partnerships.', Refunds: 'Thoughtful resolutions. Happier customers.', 'Wholesale catalog': 'Stock up on quality. Save on every order.', 'To pack': 'Everything waiting to be packed and sent.', Packed: 'Packed today and on its way.', 'Add seller': 'Sign up a shop that wants to sell on NTSA.', 'My sellers': 'What you sent for verification.', Sellers: 'Check the details, then hand out their login.', Staff: 'Logins for your packing and sales teams.', 'Delivery areas': 'Delivery charges, and the areas you no longer deliver to.', Settings: 'The letterhead every invoice is printed with.' })[page]}</p></div>
           {isAdmin && ['Products', 'Wholesale products', 'Categories', 'Vendors', 'Banners', 'Coupons'].includes(page) && <Button onClick={() => setModal({ type: page, data: null })}><Plus size={17}/>Add {{ Categories: 'category', Banners: 'banner', Coupons: 'coupon', 'Wholesale products': 'wholesale product' }[page] || page.slice(0, -1).toLowerCase()}</Button>}
           {isAdmin && page === 'Staff' && <Button onClick={() => setModal({ type: 'Staff', data: null })}><Plus size={17}/>Add staff login</Button>}
           {(isPacking || isAdmin) && page === 'To pack' && <Button secondary onClick={load}>Refresh</Button>}
@@ -201,6 +203,7 @@ function App() {
               </tr>)}
             </tbody></table></div>
             {!staff.length && <Empty text="Add your first packing or sales login"/>}</section>}
+          {page === 'Settings' && <SettingsPage settings={settings} busy={busy} action={action}/>}
         </>}
         <footer>NTSA <span>·</span> Shop smarter. Live better.<span className="footer-right">Your everyday commerce companion</span></footer>
       </main>
@@ -235,6 +238,11 @@ function OrderTable({ orders, onOpen }) { return orders.length ? <div className=
 // in the box. Cancelled orders say so in red so nothing gets packed by mistake.
 function PackSlip({ order, busy, onPacked }) {
   const a = order.address || {};
+  const [invoiceBusy, setInvoiceBusy] = useState(false), [invoiceError, setInvoiceError] = useState('');
+  async function viewBill() {
+    setInvoiceBusy(true); setInvoiceError('');
+    try { await openInvoice(order.id, '/packing/orders'); } catch (e) { setInvoiceError(e.message); } finally { setInvoiceBusy(false); }
+  }
   return <div className="order-detail">
     {order.status === 'CANCELLED' && <div className="alert" role="alert"><strong>CANCELLED — do not pack this order.</strong></div>}
     <div className="detail-summary"><strong>{order.vendorId ? 'Wholesale order' : 'Customer order'}</strong><Badge>{order.status}</Badge></div>
@@ -244,11 +252,50 @@ function PackSlip({ order, busy, onPacked }) {
     <h3>Deliver to</h3>
     <p><strong>{a.name}</strong> · {a.phone}<br/>{a.line1}, {a.city}, {a.state} {a.postalCode}</p>
     <p className="muted">Payment: {order.paymentMethod} · Order value {money(order.totalPaise)} · Placed {new Date(order.createdAt).toLocaleString('en-IN')}</p>
-    <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+    {invoiceError && <div className="alert" role="alert">{invoiceError}</div>}
+    <div style={{ display: 'flex', gap: 10, marginTop: 20, flexWrap: 'wrap' }}>
       <Button secondary onClick={() => window.print()}>Print slip</Button>
+      <Button secondary disabled={invoiceBusy} onClick={viewBill}><FileText size={16}/>{invoiceBusy ? 'Opening…' : 'View bill'}</Button>
       {order.status === 'PLACED' && <Button disabled={busy} onClick={onPacked}><Check size={16}/>Mark packed</Button>}
     </div>
   </div>;
+}
+// The company letterhead every invoice is printed with -- one row, filled
+// in once. Blank fields still produce a working invoice, just a plainer one.
+function SettingsPage({ settings, busy, action }) {
+  const [logoUrl, setLogoUrl] = useState(settings?.logoUrl || '');
+  const [uploading, setUploading] = useState(false), [error, setError] = useState('');
+  useEffect(() => { setLogoUrl(settings?.logoUrl || ''); }, [settings]);
+  if (!settings) return <section className="panel"><Empty text="Loading your settings…"/></section>;
+  return <section className="panel">
+    <div className="panel-heading"><div><h2>Company details</h2><p>Printed on every invoice — the customer's, the wholesale partner's, and the packing slip.</p></div></div>
+    <form className="editor" style={{ padding: '18px 22px' }} onSubmit={e => {
+      e.preventDefault(); setError('');
+      const f = Object.fromEntries(new FormData(e.target));
+      action(() => api('/admin/settings', { method: 'PUT', body: {
+        companyName: f.companyName, companyAddress: f.companyAddress || '',
+        companyGSTIN: f.companyGSTIN?.trim() || null, companyPhone: f.companyPhone?.trim() || null,
+        companyEmail: f.companyEmail?.trim() || null, logoUrl: logoUrl || null,
+      } }), 'Company details saved');
+    }}>
+      <Field label="Company name" name="companyName" defaultValue={settings.companyName} required maxLength={150}/>
+      <Field label="Address"><textarea name="companyAddress" defaultValue={settings.companyAddress || ''} maxLength={500} rows={2} placeholder="Shop / office address, printed on every invoice"/></Field>
+      <div className="form-grid">
+        <Field label="GSTIN (optional)" name="companyGSTIN" defaultValue={settings.companyGSTIN || ''} pattern="[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z][0-9A-Za-z][zZ][0-9A-Za-z]" title="15-character GST number, e.g. 08ABCDE1234F1Z5" placeholder="08ABCDE1234F1Z5"/>
+        <Field label="Phone (optional)" name="companyPhone" defaultValue={settings.companyPhone || ''} placeholder="+91 90000 00000"/>
+      </div>
+      <Field label="Email (optional)" name="companyEmail" type="email" defaultValue={settings.companyEmail || ''} placeholder="support@yourshop.com"/>
+      <Field label="Logo URL — shown top-right on every invoice" name="logoUrl" value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="https://…"/>
+      <Field label={uploading ? 'Uploading…' : 'Or upload a logo (max 5 MB)'} type="file" accept="image/png,image/jpeg,image/webp" disabled={uploading} onChange={async e => {
+        if (!e.target.files[0]) return; setUploading(true);
+        try { const form = new FormData(); form.append('image', e.target.files[0]); form.append('watermark', 'false'); const r = await api('/admin/images', { method: 'POST', body: form }); setLogoUrl(r.url); }
+        catch (err) { setError(err.message); } finally { setUploading(false); }
+      }}/>
+      {logoUrl && <img src={logoUrl} alt="Logo preview" style={{ height: 56, marginBottom: 14, borderRadius: 8, border: '1px solid #e5ebef' }} onError={e => { e.currentTarget.style.display = 'none'; }}/>}
+      {error && <div role="alert" className="alert">{error}</div>}
+      <Button disabled={busy || uploading}>Save company details</Button>
+    </form>
+  </section>;
 }
 function ApplicationDetails({ application: a }) {
   return <div className="order-detail">
@@ -342,6 +389,11 @@ function Editor({ type, data, categories, busy, onSubmit }) {
   // Refurbished / open box only belongs to some categories; an existing
   // second-hand product keeps the field so it can still be corrected.
   const allowsUsedStock = !!categories?.find(c => c.id === categoryId)?.allowsUsedStock;
+  // A free, offline nudge from the product's own name/description, so a
+  // phone doesn't end up filed under Books. Only ever a suggestion --
+  // shown while it disagrees with whatever category is actually picked.
+  const [suggestion, setSuggestion] = useState(null);
+  const checkSuggestion = form => setSuggestion(suggestCategory(`${form.name?.value || ''} ${form.description?.value || ''}`, categories || []));
   const [colors, setColors] = useState(data?.colors?.join(', ') || '');
   const colorList = colors.split(',').map(x => x.trim()).filter(Boolean);
   const [colorExtras, setColorExtras] = useState(() => Object.fromEntries(Object.entries(data?.colorExtraPaise || {}).map(([k, v]) => [k, v / 100])));
@@ -387,14 +439,15 @@ function Editor({ type, data, categories, busy, onSubmit }) {
       limits: { minPaise: paise(f.min), maxPaise: paise(f.max) },
     });
   } catch (err) { setError(err.message); } }}>
-    {['Products', 'Wholesale products', 'Categories', 'Vendors'].includes(type) && <Field label="Name" name="name" defaultValue={data?.name} required maxLength={100}/>}
+    {['Products', 'Wholesale products', 'Categories', 'Vendors'].includes(type) && <Field label="Name" name="name" defaultValue={data?.name} required maxLength={100} onChange={e => checkSuggestion(e.target.form)}/>}
     {['Products', 'Wholesale products'].includes(type) && <AudienceField value={data?.audience || (type === 'Wholesale products' ? 'WHOLESALE' : 'RETAIL')}/>}
     {type === 'Categories' && <>
       <Field label="Return window (hours) — how long a customer has to return anything in this category" name="refundWindowHours" type="number" min="0" max="720" step="1" defaultValue={data?.refundWindowHours ?? 24} required/>
       <label className="checkbox"><input type="checkbox" name="allowsUsedStock" defaultChecked={data?.allowsUsedStock}/>Allow refurbished / open-box stock here</label>
       <p className="muted">0 means no returns. Saving this updates every product in the category; orders already placed keep the window they were bought under.</p>
     </>}
-    {['Products', 'Wholesale products'].includes(type) && <><Field label="Description"><textarea name="description" defaultValue={data?.description} required maxLength={5000}/></Field><div className="form-grid"><Field label="Retail price (₹)" name="retail" type="number" min="0.01" step="0.01" defaultValue={data ? data.pricePaise / 100 : ''} required/><Field label="Wholesale price (₹)" name="wholesale" type="number" min="0.01" step="0.01" defaultValue={data ? data.wholesalePaise / 100 : ''} required/><Field label="MRP (₹) — optional, shows a strikethrough discount" name="mrp" type="number" min="0.01" step="0.01" defaultValue={data?.mrpPaise ? data.mrpPaise / 100 : ''}/><Field label="Stock quantity" name="stock" type="number" min="0" step="1" defaultValue={data?.stock ?? 0} required/><p className="muted">Returns are allowed for as long as the chosen category says. Change that on the Categories page.</p></div><Field label="Category"><select name="categoryId" value={categoryId} onChange={e => setCategoryId(e.target.value)} required><option value="" disabled>Select a category</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field><div className="form-grid"><Field label="Colors — comma separated, optional" name="colors" value={colors} onChange={e => setColors(e.target.value)} placeholder="Black, White, Blue"/><Field label="Options (sizes, storage…) — comma separated, optional" name="sizes" value={sizes} onChange={e => setSizes(e.target.value)} placeholder="6, 7, 8  or  128GB, 256GB"/></div>
+    {['Products', 'Wholesale products'].includes(type) && <><Field label="Description"><textarea name="description" defaultValue={data?.description} required maxLength={5000} onChange={e => checkSuggestion(e.target.form)}/></Field><div className="form-grid"><Field label="Retail price (₹)" name="retail" type="number" min="0.01" step="0.01" defaultValue={data ? data.pricePaise / 100 : ''} required/><Field label="Wholesale price (₹)" name="wholesale" type="number" min="0.01" step="0.01" defaultValue={data ? data.wholesalePaise / 100 : ''} required/><Field label="MRP (₹) — optional, shows a strikethrough discount" name="mrp" type="number" min="0.01" step="0.01" defaultValue={data?.mrpPaise ? data.mrpPaise / 100 : ''}/><Field label="Stock quantity" name="stock" type="number" min="0" step="1" defaultValue={data?.stock ?? 0} required/><p className="muted">Returns are allowed for as long as the chosen category says. Change that on the Categories page.</p></div><Field label="Category"><select name="categoryId" value={categoryId} onChange={e => setCategoryId(e.target.value)} required><option value="" disabled>Select a category</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+    {suggestion && suggestion.id !== categoryId && <p className="muted" style={{ marginTop: -10 }}>This sounds like it belongs in <strong>{suggestion.name}</strong>. <button type="button" className="text-button" style={{ display: 'inline', padding: 0 }} onClick={() => { setCategoryId(suggestion.id); setSuggestion(null); }}>Use this category</button></p>}<div className="form-grid"><Field label="Colors — comma separated, optional" name="colors" value={colors} onChange={e => setColors(e.target.value)} placeholder="Black, White, Blue"/><Field label="Options (sizes, storage…) — comma separated, optional" name="sizes" value={sizes} onChange={e => setSizes(e.target.value)} placeholder="6, 7, 8  or  128GB, 256GB"/></div>
       {colorList.length > 0 && <Field label="Colour price difference — optional. What a colour costs on top of the price above; leave blank when it costs the same.">
         <div className="attribute-rows">
           {colorList.map(c => <div className="option-price-row" key={c}>
@@ -542,9 +595,17 @@ function Attachment({ url }) {
 }
 function OrderDetails({ order, admin, busy, action, next, onCancel }) {
   const [otp, setOtp] = useState(''), [code, setCode] = useState(''), [cancelling, setCancelling] = useState(false);
+  const [invoiceBusy, setInvoiceBusy] = useState(false), [invoiceError, setInvoiceError] = useState('');
+  async function viewBill() {
+    setInvoiceBusy(true); setInvoiceError('');
+    try { await openInvoice(order.id); } catch (e) { setInvoiceError(e.message); } finally { setInvoiceBusy(false); }
+  }
   // An order can be called off until it is handed over as delivered.
   const cancellable = admin && onCancel && !['DELIVERED', 'CANCELLED'].includes(order.status);
-  return <div className="order-detail"><div className="detail-summary"><strong>#{order.id.slice(-8).toUpperCase()}</strong><Badge>{order.status}</Badge></div>{order.items.map(i => <div key={i.id} className="line-item"><div><strong>{i.name}</strong>{(i.size || i.color) && <small className="variant">{[i.size && `Size / option: ${i.size}`, i.color && `Color: ${i.color}`].filter(Boolean).join(' · ')}</small>}<small>{i.quantity} × {money(i.unitPaise)} · {i.refundWindowHours}h refund window</small></div><strong>{money(i.unitPaise * i.quantity)}</strong></div>)}<div className="line-item"><strong>Total · {order.paymentMethod}</strong><strong>{money(order.totalPaise)}</strong></div><h3>Delivery address</h3><p>{order.address.name} · {order.address.phone}<br/>{order.address.line1}, {order.address.city}, {order.address.state} {order.address.postalCode}</p>{order.deliveredAt && <p>Delivered: {new Date(order.deliveredAt).toLocaleString()}</p>}
+  return <div className="order-detail"><div className="detail-summary"><strong>#{order.id.slice(-8).toUpperCase()}</strong><Badge>{order.status}</Badge></div>
+    <div style={{ margin: '2px 0 16px' }}><Button secondary disabled={invoiceBusy} onClick={viewBill}><FileText size={15}/>{invoiceBusy ? 'Opening…' : 'View / download bill'}</Button></div>
+    {invoiceError && <div className="alert" role="alert">{invoiceError}</div>}
+    {order.items.map(i => <div key={i.id} className="line-item"><div><strong>{i.name}</strong>{(i.size || i.color) && <small className="variant">{[i.size && `Size / option: ${i.size}`, i.color && `Color: ${i.color}`].filter(Boolean).join(' · ')}</small>}<small>{i.quantity} × {money(i.unitPaise)} · {i.refundWindowHours}h refund window</small></div><strong>{money(i.unitPaise * i.quantity)}</strong></div>)}<div className="line-item"><strong>Total · {order.paymentMethod}</strong><strong>{money(order.totalPaise)}</strong></div><h3>Delivery address</h3><p>{order.address.name} · {order.address.phone}<br/>{order.address.line1}, {order.address.city}, {order.address.state} {order.address.postalCode}</p>{order.deliveredAt && <p>Delivered: {new Date(order.deliveredAt).toLocaleString()}</p>}
     {admin && next[order.status] && <Button disabled={busy} onClick={() => action(() => api(`/admin/orders/${order.id}/status`, { method: 'PATCH', body: { status: next[order.status] } }))}>Mark {next[order.status].toLowerCase().replaceAll('_', ' ')}</Button>}
     {admin && order.status === 'OUT_FOR_DELIVERY' && <form onSubmit={e => { e.preventDefault(); action(() => api(`/admin/orders/${order.id}/deliver`, { method: 'POST', body: { otp } })); }}><Field label="Recipient's delivery OTP" value={otp} onChange={e => setOtp(e.target.value)} pattern="[0-9]{6}" maxLength={6} required/><Button disabled={busy}>Verify and confirm delivery</Button></form>}
     {order.status === 'CANCELLED' && <p className="danger-text"><strong>Cancelled{order.cancelledBy ? ` by ${order.cancelledBy.toLowerCase()}` : ''}.</strong>{order.cancelReason ? ` ${order.cancelReason}` : ''} Stock has been put back.</p>}

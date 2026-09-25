@@ -28,8 +28,66 @@ export async function api(path, options = {}) {
   if (!response.ok) throw new Error(data?.error || 'Request failed');
   return data;
 }
+// Fetches the order's invoice PDF with the panel's own auth header (the
+// backend's query-token fallback is for the app; here a plain authenticated
+// fetch works and never puts the token in a URL) and opens it in a new tab
+// -- the browser's own PDF viewer handles printing and saving from there.
+// `base` lets the packing team hit its own /packing/orders/:id/invoice route.
+export async function openInvoice(orderId, base = '/orders') {
+  // The tab has to open synchronously inside the click handler, or the
+  // browser treats it as an unrequested pop-up and blocks it -- fetching
+  // first and calling window.open() afterwards gets silently swallowed.
+  // So an empty tab opens right away, and is pointed at the file once
+  // it has been fetched.
+  const popup = window.open('', '_blank');
+  try {
+    const token = sessionStorage.getItem('ntsa-token');
+    const response = await fetch(`${API_BASE}${base}/${orderId}/invoice`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!response.ok) {
+      let message = `Could not open the invoice (${response.status})`;
+      try { const data = JSON.parse(await response.text()); if (data?.error) message = data.error; } catch { /* not JSON, keep the generic message */ }
+      throw new Error(message);
+    }
+    const blobUrl = URL.createObjectURL(await response.blob());
+    if (popup) popup.location.href = blobUrl; else window.open(blobUrl, '_blank');
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch (e) {
+    popup?.close();
+    throw e;
+  }
+}
 export const money = amount => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format((amount || 0) / 100);
 export function paise(value) {
   if (!/^\d+(\.\d{1,2})?$/.test(String(value))) throw new Error('Enter a positive amount with at most two decimal places');
   const [whole, fraction = ''] = String(value).split('.'); return Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
+}
+// A free, offline nudge so a product doesn't land in the wrong category --
+// no AI call, just a keyword match against what each category usually
+// holds. It only ever suggests; the admin or seller still picks.
+const CATEGORY_KEYWORDS = {
+  'Electronics': ['speaker', 'headphone', 'earphone', 'earbud', 'camera', 'laptop', 'charger', 'cable', 'television', ' tv', 'bluetooth', 'router', 'power bank', 'smartwatch', 'projector', 'trimmer'],
+  'Fashion': ['shirt', 'kurta', 'saree', 'jeans', 'dress', 'jacket', 'shoe', 'sandal', 't-shirt', 'tshirt', 'handbag', 'wallet', 'belt', 'sunglasses', 'cap ', 'sock', 'kurti', 'lehenga'],
+  'Grocery': ['atta', 'rice', 'dal ', 'cooking oil', 'sugar', ' tea ', 'coffee', 'spice', 'masala', 'snack', 'biscuit', 'flour', 'pulses', 'grocery', 'pickle', 'ghee'],
+  'Beauty': ['cream', 'lotion', 'shampoo', 'soap', 'makeup', 'lipstick', 'perfume', 'face wash', 'moisturizer', 'serum', 'sunscreen', 'nail polish', 'kajal'],
+  'Home & Kitchen': ['mug', 'plate', 'bottle', 'cookware', 'frying pan', 'kettle', 'storage box', 'container', 'curtain', 'bedsheet', 'pillow', 'kitchen', 'utensil', 'dinner set'],
+  'Mobiles': ['smartphone', 'mobile phone', ' phone', 'sim card', 'screen guard', 'back cover', 'android', 'iphone'],
+  'Appliances': ['air fryer', 'mixer', 'grinder', 'refrigerator', 'fridge', 'washing machine', 'microwave', 'iron', 'ceiling fan', 'cooler', 'heater', 'geyser', ' ac ', 'air conditioner', 'vacuum cleaner'],
+  'Furniture': ['sofa', 'chair', 'dining table', 'wardrobe', 'cabinet', 'bookshelf', 'study desk', 'mattress', 'stool', 'bed frame'],
+  'Toys & Games': [' toy', 'board game', 'puzzle', 'doll', 'building block', 'lego', 'remote control car', 'action figure'],
+  'Sports': ['cricket bat', 'football', 'racket', 'bicycle', 'dumbbell', 'yoga mat', 'gym', 'fitness band', 'running shoe', 'sports shoe'],
+  'Books': ['novel', 'textbook', 'notebook', 'diary', 'magazine', 'storybook'],
+  'Health': ['weighing scale', 'thermometer', 'bp monitor', 'vitamin', 'supplement', 'face mask', 'sanitizer', 'first aid'],
+  'Lawn & Garden': ['plant pot', 'seeds', 'garden', 'lawn mower', 'garden hose', 'fertilizer', 'gardening', 'flower pot'],
+};
+export function suggestCategory(text, categories) {
+  const t = ` ${(text || '').toLowerCase()} `;
+  if (!t.trim()) return null;
+  let bestName = null, bestScore = 0;
+  for (const [name, words] of Object.entries(CATEGORY_KEYWORDS)) {
+    const score = words.filter(w => t.includes(w)).length;
+    if (score > bestScore) { bestScore = score; bestName = name; }
+  }
+  if (!bestName) return null;
+  const category = categories.find(c => c.name === bestName);
+  return category ? { id: category.id, name: category.name } : null;
 }

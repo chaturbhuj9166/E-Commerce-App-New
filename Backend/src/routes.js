@@ -6,7 +6,7 @@ import { randomInt } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { db, atomic } from './db.js';
 import { config } from './config.js';
-import { z, productSchema, addressSchema, vendorCreateSchema, vendorUpdateSchema, vendorPasswordSchema, vendorMessageSchema, bannerSchema, reviewSchema, couponSchema, staffCreateSchema, staffUpdateSchema, sellerApplicationSchema, sellerApproveSchema, blockedPincodeSchema, deliveryRuleSchema } from './lib/validation.js';
+import { z, productSchema, addressSchema, vendorCreateSchema, vendorUpdateSchema, vendorPasswordSchema, vendorMessageSchema, bannerSchema, reviewSchema, couponSchema, staffCreateSchema, staffUpdateSchema, sellerApplicationSchema, sellerApproveSchema, blockedPincodeSchema, deliveryRuleSchema, settingsSchema } from './lib/validation.js';
 import { requireThat } from './lib/rules.js';
 import { variantFor, priceFor, publicSizePrices } from './lib/variants.js';
 import { auth, roles, tokenFor } from './services/auth.js';
@@ -14,6 +14,7 @@ import { verifyCustomer } from './services/firebase.js';
 import { uploadImage, uploadAttachment } from './services/storage.js';
 import { gateway, validSignature } from './services/payments.js';
 import { checkout, ownedOrder, publicOrder, orderInclude, ownerWhere, changeStatus, cancelOrder, CANCELLABLE_BY_BUYER, deliveryCode, deliver, requestRefund, reviewRefund } from './services/orders.js';
+import { streamInvoice, invoiceNumberFor } from './services/invoice.js';
 export const router = Router();
 const admin = roles('ADMIN'), customer = roles('CUSTOMER'), buyer = roles('CUSTOMER', 'VENDOR');
 // Panel staff: packing sees the orders to pack, sales signs up new sellers.
@@ -176,6 +177,18 @@ router.post('/products/:id/reviews', customer, async (req, res) => {
 router.get('/orders', async (req, res) => res.json((await db.order.findMany({ where: ownerWhere(req.actor), include: orderInclude, orderBy: { createdAt: 'desc' }, take: 200 })).map(publicOrder)));
 router.post('/orders', buyer, async (req, res) => res.status(201).json(await checkout(req.actor, req.body)));
 router.get('/orders/:id', async (req, res) => res.json(publicOrder(await ownedOrder(req.actor, req.params.id))));
+// The row every invoice is printed with; a fresh install has none yet, and
+// streamInvoice() fills in sensible defaults until the admin sets it up.
+async function getSettings() { return db.settings.findUnique({ where: { id: 'singleton' } }); }
+// One invoice route for the customer, the wholesale partner and the admin --
+// ownedOrder() already scopes each of those correctly. Packing has its own
+// route just below, since it does not own orders the same way.
+router.get('/orders/:id/invoice', async (req, res) => {
+  const order = await ownedOrder(req.actor, req.params.id);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${invoiceNumberFor(order)}.pdf"`);
+  await streamInvoice(order, await getSettings(), res);
+});
 router.post('/orders/:id/delivery-code', buyer, async (req, res) => res.json(await deliveryCode(req.actor, req.params.id)));
 // A shopper or wholesale buyer calling off their own order before it's packed.
 router.post('/orders/:id/cancel', buyer, async (req, res) => {
@@ -246,6 +259,15 @@ router.get('/packing/orders/:id', packing, async (req, res) => {
   const { deliveryOtpHash, deliveryOtpExpiresAt, deliveryOtpAttempts, ...safe } = order;
   res.json(safe);
 });
+// So the packing team can print or check the same bill that ships with the
+// parcel, with the buyer's name and address on it, per the client's brief.
+router.get('/packing/orders/:id/invoice', packing, async (req, res) => {
+  const order = await db.order.findUnique({ where: { id: req.params.id }, include: packingInclude });
+  requireThat(order, 404, 'Order not found');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${invoiceNumberFor(order)}.pdf"`);
+  await streamInvoice(order, await getSettings(), res);
+});
 router.post('/packing/orders/:id/packed', packing, async (req, res) => {
   const order = await changeStatus(req.params.id, 'PACKED');
   const who = req.actor.account.name || req.actor.account.email;
@@ -278,6 +300,13 @@ router.post('/vendor/messages', roles('VENDOR'), async (req, res) => {
 // much bigger than product photos, so this cap is 25 MB rather than 5.
 router.post('/vendor/attachments', roles('VENDOR'), multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 1 } }).single('file'), async (req, res) => res.status(201).json(await uploadAttachment(req.file)));
 router.use('/admin', admin);
+// The company letterhead invoices are printed with. Upserted as one fixed
+// row, so there is always exactly one to read or write.
+router.get('/admin/settings', async (req, res) => res.json(await getSettings() ?? { id: 'singleton', companyName: 'NTSA', companyAddress: '', companyGSTIN: null, companyPhone: null, companyEmail: null, logoUrl: null }));
+router.put('/admin/settings', async (req, res) => {
+  const data = settingsSchema.parse(req.body);
+  res.json(await db.settings.upsert({ where: { id: 'singleton' }, update: data, create: { id: 'singleton', ...data } }));
+});
 // Panel staff accounts (packing / sales). The admin hands out the logins.
 router.get('/admin/staff', async (req, res) => res.json((await db.admin.findMany({ orderBy: { createdAt: 'asc' } })).map(safeStaff)));
 router.post('/admin/staff', async (req, res) => {

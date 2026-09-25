@@ -65,6 +65,15 @@ class ApiClient {
 
   Future<bool> get hasToken async => (await _token()) != null;
 
+  /// The order's bill, opened directly (in the system browser, or a new
+  /// web tab) rather than fetched with Dio -- that leaves it to the OS/
+  /// browser's own PDF viewer to display, print and save. The token
+  /// travels in the query string since this request carries no headers.
+  Future<Uri> invoiceUrl(String orderId) async {
+    final token = await _token();
+    return Uri.parse('${_dio.options.baseUrl}/orders/$orderId/invoice').replace(queryParameters: token != null ? {'token': token} : null);
+  }
+
   /// Copies the current (customer) token aside before a vendor login.
   Future<void> stashCustomerToken() async {
     final prefs = await SharedPreferences.getInstance();

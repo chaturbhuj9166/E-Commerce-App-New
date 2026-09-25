@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
 import '../../models/order.dart';
@@ -19,6 +20,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   String? _error;
   bool _otpBusy = false;
   bool _cancelling = false;
+  bool _invoiceBusy = false;
   final Set<String> _refunding = {};
 
   static const _stepLabels = {
@@ -52,6 +54,22 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
 
   void _snack(String message) {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Opens the order's bill in the system browser (Android) or a new tab
+  /// (web) -- whichever PDF viewer is already there handles printing and
+  /// saving, so there is no in-app PDF renderer to maintain here.
+  Future<void> _viewInvoice() async {
+    setState(() => _invoiceBusy = true);
+    try {
+      final uri = await ApiClient.instance.invoiceUrl(widget.orderId);
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication, webOnlyWindowName: '_blank');
+      if (!opened) _snack('Could not open the bill');
+    } catch (_) {
+      _snack('Could not open the bill');
+    } finally {
+      if (mounted) setState(() => _invoiceBusy = false);
+    }
   }
 
   Future<void> _getDeliveryOtp() async {
@@ -117,7 +135,19 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   Widget build(BuildContext context) {
     final order = _order;
     return Scaffold(
-      appBar: AppBar(title: const Text('Order Tracking')),
+      appBar: AppBar(
+        title: const Text('Order Tracking'),
+        actions: [
+          if (order != null)
+            IconButton(
+              tooltip: 'View bill',
+              onPressed: _invoiceBusy ? null : _viewInvoice,
+              icon: _invoiceBusy
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.receipt_long_rounded),
+            ),
+        ],
+      ),
       body: order == null
           ? Center(
               child: _error == null

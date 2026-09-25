@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { LayoutDashboard, Package, ShoppingBag, LogOut, Plus, ArrowUpRight, ChevronRight, Check, Menu, ShieldCheck, Wallet, Store, Search, BadgeCheck, Truck } from 'lucide-react';
-import { api, money, paise } from './api';
+import { api, money, paise, suggestCategory } from './api';
 import { Button, Field, PasswordField, Badge, Empty, Modal, Stat, ProductImage, CONDITION_LABEL } from './ui';
 import './style.css';
 
@@ -192,6 +192,11 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
   const [showCondition, setShowCondition] = useState(!!data?.condition && data.condition !== 'NEW');
   const allowsUsedStock = !!categories.find(c => c.id === categoryId)?.allowsUsedStock;
   const category = categories.find(c => c.id === categoryId);
+  // A free, offline nudge from the product's own name/description, so a
+  // shop doesn't end up filing a phone under Books. Only a suggestion --
+  // shown while it disagrees with whatever category is actually picked.
+  const [suggestion, setSuggestion] = useState(null);
+  const checkSuggestion = form => setSuggestion(suggestCategory(`${form.name?.value || ''} ${form.description?.value || ''}`, categories));
   const [sizes, setSizes] = useState(data?.sizes?.join(', ') || '');
   const sizeList = sizes.split(',').map(x => x.trim()).filter(Boolean);
   const [sizePrices, setSizePrices] = useState(() => Object.fromEntries(Object.entries(data?.sizePrices || {}).map(([k, v]) => [k, { retail: v.pricePaise / 100, mrp: v.mrpPaise ? v.mrpPaise / 100 : '' }])));
@@ -227,8 +232,8 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
       });
     } catch (err) { setError(err.message); }
   }}>
-    <Field label="Product name" name="name" defaultValue={data?.name} required maxLength={100}/>
-    <Field label="Description"><textarea name="description" defaultValue={data?.description} required maxLength={5000} placeholder="What it is, what it's made of, what's in the box…"/></Field>
+    <Field label="Product name" name="name" defaultValue={data?.name} required maxLength={100} onChange={e => checkSuggestion(e.target.form)}/>
+    <Field label="Description"><textarea name="description" defaultValue={data?.description} required maxLength={5000} placeholder="What it is, what it's made of, what's in the box…" onChange={e => checkSuggestion(e.target.form)}/></Field>
     <div className="form-grid">
       <Field label="Selling price (₹)" name="retail" type="number" min="0.01" step="0.01" defaultValue={data ? data.pricePaise / 100 : ''} required/>
       <Field label="MRP (₹) — optional, shows a strikethrough discount" name="mrp" type="number" min="0.01" step="0.01" defaultValue={data?.mrpPaise ? data.mrpPaise / 100 : ''}/>
@@ -242,6 +247,7 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
         </select>
       </Field>
     </div>
+    {suggestion && suggestion.id !== categoryId && <p className="muted" style={{ marginTop: -10 }}>This sounds like it belongs in <strong>{suggestion.name}</strong>. <button type="button" className="text-button" style={{ display: 'inline', padding: 0 }} onClick={() => { setCategoryId(suggestion.id); setSuggestion(null); }}>Use this category</button></p>}
     {category && <p className="muted">Anything in {category.name} can be returned within {category.refundWindowHours} hours. NTSA sets that per category.</p>}
     <div className="form-grid">
       <Field label="Colours — comma separated, optional" name="colors" defaultValue={data?.colors?.join(', ') || ''} placeholder="Black, White, Blue"/>

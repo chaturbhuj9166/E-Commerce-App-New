@@ -163,3 +163,14 @@ export const checkoutSchema = z.object({
   couponCode: couponCode.optional(),
   checkoutKey: z.string().uuid(),
 });
+// The letterhead every invoice is printed with. One row, filled in by the
+// admin on the Settings page -- blank company details still produce a
+// working PDF, just with less on it.
+export const settingsSchema = z.object({
+  companyName: z.string().trim().min(1).max(150),
+  companyAddress: z.string().trim().max(500).default(''),
+  companyGSTIN: z.string().trim().toUpperCase().regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/, 'Enter a valid 15-character GST number').nullable().optional(),
+  companyPhone: z.string().regex(/^\+?[0-9]{10,15}$/).nullable().optional(),
+  companyEmail: z.string().trim().toLowerCase().email().max(200).nullable().optional(),
+  logoUrl: imageUrlSchema.nullable().optional(),
+});

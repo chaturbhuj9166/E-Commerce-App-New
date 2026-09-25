@@ -8,7 +8,12 @@ export function tokenFor(role, account) {
 export async function auth(req, res, next) {
   try {
     let claims;
-    try { claims = jwt.verify(req.headers.authorization?.replace(/^Bearer /, '') || '', config.JWT_SECRET, { audience: 'ntsa', issuer: 'ntsa-api', algorithms: ['HS256'] }); }
+    // A GET-only fallback for links a browser/app opens directly (the
+    // invoice PDF) rather than fetching with JS -- those can't attach an
+    // Authorization header. Same token, same expiry, just carried in the URL.
+    const bearer = req.headers.authorization?.replace(/^Bearer /, '');
+    const token = bearer || (req.method === 'GET' ? req.query.token : undefined) || '';
+    try { claims = jwt.verify(token, config.JWT_SECRET, { audience: 'ntsa', issuer: 'ntsa-api', algorithms: ['HS256'] }); }
     catch { throw new HttpError(401, 'Please sign in again'); }
     // PACKING and SALES are admin-panel staff, so they live in the admin table.
     const model = { CUSTOMER: db.user, ADMIN: db.admin, PACKING: db.admin, SALES: db.admin, VENDOR: db.vendor, SELLER: db.seller }[claims.role];

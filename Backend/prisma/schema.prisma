@@ -110,6 +110,19 @@ model DeliveryRule {
   createdAt DateTime @default(now())
   @@map("delivery_rules")
 }
+// One row, holding the business details every invoice is printed with.
+// Blank until the admin fills it in on the Settings page.
+model Settings {
+  id String @id @default("singleton")
+  companyName String @default("NTSA")
+  companyAddress String @default("")
+  companyGSTIN String?
+  companyPhone String?
+  companyEmail String?
+  logoUrl String?
+  updatedAt DateTime @updatedAt
+  @@map("settings")
+}
 // PIN codes the shop refuses to deliver to, e.g. an area with repeated
 // fake returns. Blocked at the address and at checkout, not just in the app.
 model BlockedPincode {
