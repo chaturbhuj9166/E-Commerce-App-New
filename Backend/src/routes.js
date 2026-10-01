@@ -396,26 +396,31 @@ router.get('/admin/reports', async (req, res) => {
   const days = rawDays ?? 30;
   const since = new Date(Date.now() - days * 86400000);
   const previousSince = new Date(Date.now() - days * 2 * 86400000);
+  // PENDING_PAYMENT orders are excluded everywhere below, not just from
+  // revenue: an unpaid Razorpay checkout isn't a real order yet (it either
+  // gets paid and becomes PLACED, or auto-cancels within 30 minutes), so it
+  // shouldn't count toward "orders" either -- otherwise the order count and
+  // the status-breakdown donut it's supposed to add up to would disagree.
   const [periods, revenueByDay, statusBreakdown, topProducts] = await Promise.all([
     db.$queryRaw`
       SELECT ("createdAt" >= ${since}) AS current,
         COUNT(*)::int AS orders,
         COALESCE(SUM("totalPaise") FILTER (WHERE status != 'CANCELLED'), 0)::int AS "revenuePaise",
-        COALESCE(SUM("totalPaise") FILTER (WHERE status NOT IN ('CANCELLED', 'PENDING_PAYMENT') AND ("paymentMethod" != 'COD' OR status = 'DELIVERED')), 0)::int AS "collectedPaise",
+        COALESCE(SUM("totalPaise") FILTER (WHERE status != 'CANCELLED' AND ("paymentMethod" != 'COD' OR status = 'DELIVERED')), 0)::int AS "collectedPaise",
         COALESCE(SUM("totalPaise") FILTER (WHERE "paymentMethod" = 'COD' AND status NOT IN ('CANCELLED', 'DELIVERED')), 0)::int AS "pendingPaise"
-      FROM orders WHERE "createdAt" >= ${previousSince} GROUP BY 1`,
+      FROM orders WHERE "createdAt" >= ${previousSince} AND status != 'PENDING_PAYMENT' GROUP BY 1`,
     db.$queryRaw`
       SELECT DATE_TRUNC('day', "createdAt")::date AS date,
         COUNT(*)::int AS orders,
         COALESCE(SUM("totalPaise") FILTER (WHERE status != 'CANCELLED'), 0)::int AS "revenuePaise"
-      FROM orders WHERE "createdAt" >= ${since} GROUP BY 1 ORDER BY 1`,
+      FROM orders WHERE "createdAt" >= ${since} AND status != 'PENDING_PAYMENT' GROUP BY 1 ORDER BY 1`,
     db.$queryRaw`
       SELECT status, COUNT(*)::int AS count FROM orders
-      WHERE "createdAt" >= ${since} GROUP BY status`,
+      WHERE "createdAt" >= ${since} AND status != 'PENDING_PAYMENT' GROUP BY status`,
     db.$queryRaw`
       SELECT i.name, SUM(i.quantity)::int AS quantity, SUM(i.quantity * i."unitPaise")::int AS "revenuePaise"
       FROM order_items i JOIN orders o ON o.id = i."orderId"
-      WHERE o."createdAt" >= ${since} AND o.status != 'CANCELLED'
+      WHERE o."createdAt" >= ${since} AND o.status NOT IN ('CANCELLED', 'PENDING_PAYMENT')
       GROUP BY i.name ORDER BY quantity DESC LIMIT 8`,
   ]);
   const zero = { orders: 0, revenuePaise: 0, collectedPaise: 0, pendingPaise: 0 };
