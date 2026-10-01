@@ -4,7 +4,7 @@
 // "active products", gets a plain count instead of a fake trend line).
 import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { ArrowUpRight, Check, ShoppingBag, Package, Users, Wallet, Clock3, ClipboardList, AlertTriangle, UserPlus, Store, Bell } from 'lucide-react';
+import { ArrowUpRight, Check, ShoppingBag, Package, Users, Wallet, Clock3, ClipboardList, AlertTriangle, UserPlus, Store, X } from 'lucide-react';
 import { money } from '../api';
 import { Badge, Empty, ProductImage } from '../ui';
 import { OrderTable } from './shared';
@@ -33,7 +33,7 @@ function TrendStat({ icon: Icon, label, value, changePct, note }) {
   </section>;
 }
 
-export function OverviewPage({ isAdmin, me, vendors, orders, products, toPack, applications, notifications, reports, reportsDays, setReportsDays, loadingReports, go, openModal }) {
+export function OverviewPage({ isAdmin, me, vendors, orders, products, toPack, applications, notifications, reports, reportsDays, setReportsDays, loadingReports, go, openModal, clearNotifications, clearNotification }) {
   const pendingApplications = applications.filter(a => a.status === 'PENDING').length;
   const lowStock = products.filter(p => p.stock < 10);
   const s = reports?.summary;
@@ -129,8 +129,8 @@ export function OverviewPage({ isAdmin, me, vendors, orders, products, toPack, a
         <div className="task-list">{tasks.map(t => <button className="task-row" key={t.label} onClick={t.onClick}><t.icon size={18}/><div><strong>{t.label}</strong><small>{t.note}</small></div><span className="count">{t.count}</span></button>)}</div>
       </section>
       <section className="panel">
-        <div className="panel-heading"><div><h2>Recent notifications</h2></div><Bell size={20}/></div>
-        {notifications.length ? notifications.slice(0, 5).map(n => <div className="bell-item" key={n.id}><strong>{n.title}</strong><p>{n.body}</p><small>{new Date(n.createdAt).toLocaleString('en-IN')}</small></div>) : <Empty text="Nothing yet"/>}
+        <div className="panel-heading"><div><h2>Recent notifications</h2></div>{notifications.length > 0 && <button className="text-button" onClick={clearNotifications}>Clear all</button>}</div>
+        {notifications.length ? notifications.slice(0, 5).map(n => <div className="bell-item" key={n.id}><button className="icon-button bell-item-dismiss" aria-label="Dismiss this notification" onClick={() => clearNotification(n.id)}><X size={13}/></button><strong>{n.title}</strong><p>{n.body}</p><small>{new Date(n.createdAt).toLocaleString('en-IN')}</small></div>) : <Empty text="Nothing yet"/>}
       </section>
     </div>
   </>;

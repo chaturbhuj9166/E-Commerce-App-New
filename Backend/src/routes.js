@@ -6,7 +6,7 @@ import { randomInt } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { db, atomic } from './db.js';
 import { config } from './config.js';
-import { z, productSchema, addressSchema, vendorCreateSchema, vendorUpdateSchema, vendorPasswordSchema, vendorMessageSchema, bannerSchema, reviewSchema, couponSchema, staffCreateSchema, staffUpdateSchema, sellerApplicationSchema, sellerApproveSchema, blockedPincodeSchema, deliveryRuleSchema, settingsSchema } from './lib/validation.js';
+import { z, productSchema, addressSchema, vendorCreateSchema, vendorUpdateSchema, vendorPasswordSchema, vendorMessageSchema, bannerSchema, reviewSchema, couponSchema, staffCreateSchema, staffUpdateSchema, sellerApplicationSchema, sellerApproveSchema, sellerUpdateSchema, blockedPincodeSchema, deliveryRuleSchema, settingsSchema } from './lib/validation.js';
 import { requireThat } from './lib/rules.js';
 import { variantFor, priceFor, publicSizePrices } from './lib/variants.js';
 import { auth, roles, tokenFor } from './services/auth.js';
@@ -242,6 +242,14 @@ router.post('/notifications/read', panel, async (req, res) => {
   const { ids } = z.object({ ids: z.array(z.string()).max(100).optional() }).parse(req.body ?? {});
   await db.notification.updateMany({ where: { audience: req.actor.role, readAt: null, ...(ids ? { id: { in: ids } } : {}) }, data: { readAt: new Date() } });
   res.json({ ok: true });
+});
+// Clearing is scoped to the caller's own role's audience, same as the list
+// -- packing can never clear what sales sees, or the other way round.
+router.delete('/notifications', panel, async (req, res) => { await db.notification.deleteMany({ where: { audience: req.actor.role } }); res.status(204).end(); });
+router.delete('/notifications/:id', panel, async (req, res) => {
+  const changed = await db.notification.deleteMany({ where: { id: req.params.id, audience: req.actor.role } });
+  requireThat(changed.count === 1, 404, 'Notification not found');
+  res.status(204).end();
 });
 // Image upload for panel staff, e.g. the sales team's GST/Aadhaar photos.
 router.post('/panel/images', panel, multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => res.status(201).json(await uploadImage(req.file)));
@@ -600,9 +608,10 @@ router.get('/admin/sellers', async (req, res) => {
   res.json(sellers.map(({ passwordHash, sessionVersion, ...safe }) => safe));
 });
 router.patch('/admin/sellers/:id', async (req, res) => {
-  const { enabled } = z.object({ enabled: z.boolean() }).parse(req.body);
-  // Turning a seller off ends their session as well as their next login.
-  const seller = await db.seller.update({ where: { id: req.params.id }, data: { enabled, sessionVersion: { increment: 1 } } });
+  const data = sellerUpdateSchema.parse(req.body);
+  // Turning a seller off (or changing anything else about their account)
+  // ends their current session as well as blocking their next login.
+  const seller = await db.seller.update({ where: { id: req.params.id }, data: { ...data, sessionVersion: { increment: 1 } } });
   const { passwordHash, sessionVersion, ...safe } = seller;
   res.json(safe);
 });
@@ -611,6 +620,16 @@ router.post('/admin/sellers/:id/password', async (req, res) => {
   await db.seller.update({ where: { id: req.params.id }, data: { passwordHash: await bcrypt.hash(password, 12), sessionVersion: { increment: 1 } } });
   res.status(204).end();
 });
+// Soft-deleted, same as a vendor: order history keeps pointing at a real
+// row, and their products are pulled from sale rather than deleted outright.
+router.delete('/admin/sellers/:id', async (req, res) => {
+  await db.product.updateMany({ where: { sellerId: req.params.id }, data: { active: false } });
+  await db.seller.update({ where: { id: req.params.id }, data: { deleted: true, enabled: false, sessionVersion: { increment: 1 } } });
+  res.status(204).end();
+});
+// A read-only look at one seller's numbers, for "view their dashboard"
+// from the Sellers page -- the same figures the seller sees of themself.
+router.get('/admin/sellers/:id/summary', async (req, res) => res.json(await sellerSummaryFor(req.params.id)));
 router.get('/admin/refunds', async (req, res) => res.json(await db.refund.findMany({ include: { orderItem: { include: { order: true } } }, orderBy: { createdAt: 'desc' }, take: 200 })));
 router.patch('/admin/refunds/:id', async (req, res) => {
   const { status } = z.object({ status: z.enum(['APPROVED', 'REJECTED']) }).parse(req.body);
@@ -652,21 +671,23 @@ router.get('/seller/orders', seller, async (req, res) => {
   res.json(items.map(({ order, product, ...item }) => ({ ...item, image: product.images[0] ?? null, orderId: order.id, status: order.status, placedAt: order.createdAt, buyer: order.vendorId ? 'Wholesale' : 'Customer' })));
 });
 // What the shop has earned: cancelled orders don't count, and money is only
-// counted as earned once the order is delivered.
-router.get('/seller/summary', seller, async (req, res) => {
-  const items = await db.orderItem.findMany({ where: { sellerId: req.actor.id }, include: { order: { select: { status: true } } } });
+// counted as earned once the order is delivered. Shared by the seller's own
+// summary and the admin's read-only look at any seller's numbers.
+async function sellerSummaryFor(sellerId) {
+  const items = await db.orderItem.findMany({ where: { sellerId }, include: { order: { select: { status: true } } } });
   const live = items.filter(i => i.order.status !== 'CANCELLED');
   const value = rows => rows.reduce((sum, i) => sum + i.unitPaise * i.quantity, 0);
-  res.json({
-    products: await db.product.count({ where: { sellerId: req.actor.id, active: true } }),
-    outOfStock: await db.product.count({ where: { sellerId: req.actor.id, active: true, stock: 0 } }),
+  return {
+    products: await db.product.count({ where: { sellerId, active: true } }),
+    outOfStock: await db.product.count({ where: { sellerId, active: true, stock: 0 } }),
     orders: new Set(live.map(i => i.orderId)).size,
     piecesSold: live.reduce((sum, i) => sum + i.quantity, 0),
     salesPaise: value(live),
     earnedPaise: value(live.filter(i => i.order.status === 'DELIVERED')),
     awaitingPaise: value(live.filter(i => i.order.status !== 'DELIVERED')),
     cancelledPaise: value(items.filter(i => i.order.status === 'CANCELLED')),
-  });
-});
+  };
+}
+router.get('/seller/summary', seller, async (req, res) => res.json(await sellerSummaryFor(req.actor.id)));
 // Photos for the seller's own products, watermarked like every other one.
 router.post('/seller/images', seller, multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => res.status(201).json(await uploadImage(req.file, { watermark: true })));

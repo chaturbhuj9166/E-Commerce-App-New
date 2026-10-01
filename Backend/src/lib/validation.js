@@ -84,6 +84,19 @@ export const vendorUpdateSchema = z.object({
   limits: limitSchema.optional(),
 });
 export const vendorPasswordSchema = z.object({ password: z.string().min(8).max(100) });
+// A marketplace seller's own details -- the admin can correct anything on
+// here after onboarding, same as a vendor.
+export const sellerUpdateSchema = z.object({
+  shopName: z.string().trim().min(1).max(100).optional(),
+  ownerName: z.string().trim().min(1).max(100).optional(),
+  enabled: z.boolean().optional(),
+  email: z.string().trim().toLowerCase().email().max(200).nullable().optional(),
+  phone: z.string().regex(/^\+?[0-9]{10,15}$/).optional(),
+  gstNumber: z.string().trim().toUpperCase().regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/, 'Enter a valid 15-character GST number').nullable().optional(),
+  aadharNumber: z.string().regex(/^[0-9]{12}$/, 'Aadhaar number must be exactly 12 digits').nullable().optional(),
+  gstVerified: z.boolean().optional(),
+  aadharVerified: z.boolean().optional(),
+});
 // Admin-panel staff: the packing team and the sales team.
 export const deliveryRuleSchema = z.object({
   belowPaise: money,
