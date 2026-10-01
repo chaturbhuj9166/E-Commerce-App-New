@@ -9,7 +9,20 @@ import './style.css';
 /// password the NTSA admin hands out. A shop only ever sees its own stock
 /// and its own sales here.
 function App() {
-  const [session, setSession] = useState(() => sessionStorage.getItem('ntsa-token'));
+  // An admin's "View dashboard" opens this site with ?token=... -- a real
+  // seller-role token, so this just signs the browser in with it like any
+  // other session, then drops it from the address bar.
+  const [session, setSession] = useState(() => {
+    const url = new URL(window.location.href);
+    const fromAdmin = url.searchParams.get('token');
+    if (fromAdmin) {
+      sessionStorage.setItem('ntsa-token', fromAdmin);
+      url.searchParams.delete('token');
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+      return fromAdmin;
+    }
+    return sessionStorage.getItem('ntsa-token');
+  });
   const [me, setMe] = useState(null), [page, setPage] = useState('Overview');
   const [products, setProducts] = useState([]), [orders, setOrders] = useState([]), [summary, setSummary] = useState(null), [categories, setCategories] = useState([]);
   const [error, setError] = useState(''), [toast, setToast] = useState(''), [busy, setBusy] = useState(false);

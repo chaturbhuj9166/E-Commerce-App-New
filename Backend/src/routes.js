@@ -627,9 +627,15 @@ router.delete('/admin/sellers/:id', async (req, res) => {
   await db.seller.update({ where: { id: req.params.id }, data: { deleted: true, enabled: false, sessionVersion: { increment: 1 } } });
   res.status(204).end();
 });
-// A read-only look at one seller's numbers, for "view their dashboard"
-// from the Sellers page -- the same figures the seller sees of themself.
-router.get('/admin/sellers/:id/summary', async (req, res) => res.json(await sellerSummaryFor(req.params.id)));
+// "View their dashboard": a real seller-role token so the admin's browser
+// can open the actual seller panel, signed in as them -- not a copy of the
+// page, the same site. Blocked the same way a real login would be if the
+// account is frozen or deleted (see auth()'s SELLER check).
+router.post('/admin/sellers/:id/impersonate', async (req, res) => {
+  const seller = await db.seller.findUnique({ where: { id: req.params.id } });
+  requireThat(seller && !seller.deleted, 404, 'Seller not found');
+  res.json({ token: tokenFor('SELLER', seller) });
+});
 router.get('/admin/refunds', async (req, res) => res.json(await db.refund.findMany({ include: { orderItem: { include: { order: true } } }, orderBy: { createdAt: 'desc' }, take: 200 })));
 router.patch('/admin/refunds/:id', async (req, res) => {
   const { status } = z.object({ status: z.enum(['APPROVED', 'REJECTED']) }).parse(req.body);

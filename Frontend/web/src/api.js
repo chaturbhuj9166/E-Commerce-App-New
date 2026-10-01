@@ -4,6 +4,11 @@
 // Redirect/Rewrite rules only reliably handle GET navigation, not POST
 // bodies, so routing API calls through one silently breaks every write.
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
+// Where the seller panel itself is hosted, for "View dashboard" to open the
+// real site rather than a copy of it. Set VITE_SELLER_PANEL_URL at build
+// time once it has a real deployed address; this default is only for
+// running both sites locally.
+export const SELLER_PANEL_URL = import.meta.env.VITE_SELLER_PANEL_URL || 'http://127.0.0.1:5174/';
 export async function api(path, options = {}) {
   const token = sessionStorage.getItem('ntsa-token');
   const form = options.body instanceof FormData;

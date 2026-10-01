@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { LayoutDashboard, Package, Shapes, Users, User, ShoppingBag, RotateCcw, LogOut, Search, Plus, ArrowUpRight, ChevronRight, Check, Menu, X, Truck, ShieldCheck, Wallet, Store, Image, Tag, Eye, EyeOff, Bell, ClipboardList, UserPlus, BadgeCheck, UserCog, MapPin, Paperclip, Settings as SettingsIcon, FileText, BarChart3 } from 'lucide-react';
-import { api, money, paise, openInvoice, suggestCategory } from './api';
+import { api, money, paise, openInvoice, suggestCategory, SELLER_PANEL_URL } from './api';
 import { Button, Field, PasswordField, Badge, Empty, Modal, Stat, ProductImage, CONDITION_LABEL } from './ui';
 import { WholesaleProductsPage, AudienceField } from './pages/wholesale-products';
 import { OverviewPage } from './pages/dashboard';
@@ -74,6 +74,20 @@ function App() {
   }
   async function clearNotification(id) {
     try { await api(`/notifications/${id}`, { method: 'DELETE' }); setNotifications(list => list.filter(n => n.id !== id)); } catch (e) { setError(e.message); }
+  }
+  // Opens the real seller panel, signed in as them -- the blank tab has to
+  // open synchronously inside the click or the browser blocks it as an
+  // unrequested pop-up (same trick as openInvoice).
+  async function openSellerDashboard(seller) {
+    const popup = window.open('', '_blank');
+    try {
+      const { token } = await api(`/admin/sellers/${seller.id}/impersonate`, { method: 'POST' });
+      const url = `${SELLER_PANEL_URL}?token=${encodeURIComponent(token)}`;
+      if (popup) popup.location.href = url; else window.open(url, '_blank');
+    } catch (e) {
+      popup?.close();
+      setError(e.message);
+    }
   }
   useEffect(() => { if (session) load(); }, [session]);
   useEffect(() => { if (toast) { const timer = setTimeout(() => setToast(''), 4500); return () => clearTimeout(timer); } }, [toast]);
@@ -157,7 +171,7 @@ function App() {
                 <td>{s.gstVerified || s.aadharVerified ? <small style={{ color: '#418568', fontWeight: 600 }}>{[s.gstVerified && 'GST ✓', s.aadharVerified && 'Aadhaar ✓'].filter(Boolean).join(' · ')}</small> : <small className="muted">Not verified</small>}</td>
                 <td><Badge>{s.enabled ? 'Active' : 'Disabled'}</Badge></td>
                 <td><div className="row-actions">
-                  <button onClick={() => setModal({ type: 'SellerSummary', data: s })}>View dashboard</button>
+                  <button onClick={() => openSellerDashboard(s)}>View dashboard</button>
                   <button onClick={() => setModal({ type: 'Sellers', data: s })}>Edit</button>
                   <button disabled={busy} onClick={() => action(() => api(`/admin/sellers/${s.id}`, { method: 'PATCH', body: { enabled: !s.enabled } }))}>{s.enabled ? 'Freeze' : 'Unfreeze'}</button>
                   <button onClick={() => setModal({ type: 'SellerReset', data: s })}>Reset password</button>
@@ -255,7 +269,7 @@ function App() {
       </main>
     </div>
     {toast && <div role="status" className="toast"><Check size={18}/>{toast}</div>}
-    {modal && <Modal title={({ Products: modal.data ? 'Edit product' : 'New product', 'Wholesale products': modal.data ? 'Edit wholesale product' : 'New wholesale product', Categories: modal.data ? 'Edit category' : 'New category', Vendors: modal.data ? 'Edit partner' : 'New wholesale partner', Sellers: `Edit ${modal.data?.shopName}`, Banners: modal.data ? 'Edit banner' : 'New banner', Coupons: modal.data ? 'Edit coupon' : 'New coupon', Order: 'Order details', Delete: 'Remove record', Reset: 'Reset vendor password', SellerReset: `Reset password · ${modal.data?.shopName}`, SellerSummary: `${modal.data?.shopName} · Dashboard`, Messages: `Messages · ${modal.data?.name}`, Checkout: 'Place wholesale order', Pack: `Order #${modal.data?.id?.slice(0, 10).toUpperCase()}`, Staff: 'New staff login', StaffEdit: 'Edit staff login', StaffReset: 'Reset staff password', Application: modal.data?.shopName, Approve: `Approve ${modal.data?.shopName}`, Reject: `Reject ${modal.data?.shopName}` })[modal.type]} close={() => !busy && setModal(null)}>
+    {modal && <Modal title={({ Products: modal.data ? 'Edit product' : 'New product', 'Wholesale products': modal.data ? 'Edit wholesale product' : 'New wholesale product', Categories: modal.data ? 'Edit category' : 'New category', Vendors: modal.data ? 'Edit partner' : 'New wholesale partner', Sellers: `Edit ${modal.data?.shopName}`, Banners: modal.data ? 'Edit banner' : 'New banner', Coupons: modal.data ? 'Edit coupon' : 'New coupon', Order: 'Order details', Delete: 'Remove record', Reset: 'Reset vendor password', SellerReset: `Reset password · ${modal.data?.shopName}`, Messages: `Messages · ${modal.data?.name}`, Checkout: 'Place wholesale order', Pack: `Order #${modal.data?.id?.slice(0, 10).toUpperCase()}`, Staff: 'New staff login', StaffEdit: 'Edit staff login', StaffReset: 'Reset staff password', Application: modal.data?.shopName, Approve: `Approve ${modal.data?.shopName}`, Reject: `Reject ${modal.data?.shopName}` })[modal.type]} close={() => !busy && setModal(null)}>
       {error && <div role="alert" className="alert">{error}</div>}
       {['Products', 'Wholesale products', 'Categories', 'Vendors', 'Sellers', 'Banners', 'Coupons'].includes(modal.type) && <Editor type={modal.type} data={modal.data} categories={categories} busy={busy} onSubmit={body => action(async () => {
         const path = { Products: 'products', 'Wholesale products': 'products', Categories: 'categories', Vendors: 'vendors', Sellers: 'sellers', Banners: 'banners', Coupons: 'coupons' }[modal.type];
@@ -274,7 +288,6 @@ function App() {
       {modal.type === 'Delete' && <><p>Remove “{modal.data.name}” from the workspace? Order history is retained. Categories still linked to products cannot be removed.</p><Button disabled={busy} onClick={() => action(async () => { await api(modal.data.path, { method: 'DELETE' }); setModal(null); }, 'Record removed')}>Remove</Button></>}
       {modal.type === 'Reset' && <ResetPassword vendor={modal.data} busy={busy} onSubmit={password => action(async () => { await api(`/admin/vendors/${modal.data.id}/reset-password`, { method: 'POST', body: { password } }); setModal(null); }, 'Password updated')}/>}
       {modal.type === 'SellerReset' && <ResetPassword vendor={{ ...modal.data, name: modal.data.shopName }} busy={busy} onSubmit={password => action(async () => { await api(`/admin/sellers/${modal.data.id}/password`, { method: 'POST', body: { password } }); setModal(null); }, 'Password updated')}/>}
-      {modal.type === 'SellerSummary' && <SellerSummaryView seller={modal.data}/>}
       {modal.type === 'Messages' && <VendorMessages vendor={modal.data}/>}
       {modal.type === 'Order' && <OrderDetails order={orders.find(o => o.id === modal.data.id) || modal.data} admin={isAdmin} busy={busy} action={action} next={next} onCancel={reason => action(async () => { await api(`/admin/orders/${modal.data.id}/cancel`, { method: 'POST', body: { reason } }); setModal(null); }, 'Order cancelled, stock put back')}/>}
       {modal.type === 'Checkout' && <WholesaleCheckout items={cartItems} total={cartTotal} limits={me?.limits} busy={busy} onSubmit={body => action(async () => { await api('/orders', { method: 'POST', body }); setCart({}); setModal(null); go('Orders'); }, 'Wholesale order placed')}/>}
@@ -634,20 +647,6 @@ function ResetPassword({ vendor, busy, onSubmit }) {
     <PasswordField label="New password" name="password" minLength={8} maxLength={100} required autoFocus autoComplete="new-password"/>
     {error && <div className="alert">{error}</div>}<Button disabled={busy}>{busy ? 'Saving…' : 'Update password'}</Button>
   </form>;
-}
-// A read-only look at a seller's own numbers -- the same figures they'd
-// see in their own panel's Overview, fetched fresh each time this opens.
-function SellerSummaryView({ seller }) {
-  const [summary, setSummary] = useState(null), [error, setError] = useState('');
-  useEffect(() => { api(`/admin/sellers/${seller.id}/summary`).then(setSummary).catch(e => setError(e.message)); }, [seller.id]);
-  if (error) return <div className="alert">{error}</div>;
-  if (!summary) return <p className="muted">Loading…</p>;
-  return <div className="stats" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', margin: 0 }}>
-    <Stat icon={Package} label="Products listed" value={summary.products} note={`${summary.outOfStock} out of stock`}/>
-    <Stat icon={ShoppingBag} label="Orders" value={summary.orders} note={`${summary.piecesSold} pieces sold`}/>
-    <Stat icon={Wallet} label="Earned" value={money(summary.earnedPaise)} note="From delivered orders"/>
-    <Stat icon={Truck} label="Awaiting" value={money(summary.awaitingPaise)} note="Ordered, not yet delivered"/>
-  </div>;
 }
 function VendorMessages({ vendor }) {
   const [thread, setThread] = useState(null), [reply, setReply] = useState(''), [sending, setSending] = useState(false), [error, setError] = useState('');
