@@ -50,7 +50,7 @@ function App() {
 
   return <div className="app-shell">
     <aside className={mobileNav ? 'sidebar open' : 'sidebar'}>
-      <div className="brand"><Store/><span>N<span className="accent">T</span>SA<span className="brand-dot">.</span></span></div>
+      <div className="brand"><img className="brand-logo" src="/ntsa_logo.png" alt="NTSA"/></div>
       <div className="workspace-label">SELLER WORKSPACE</div>
       <nav>{nav.map(([name, Icon]) => <button key={name} className={page === name ? 'nav-item active' : 'nav-item'} onClick={() => go(name)}><Icon size={19}/><span>{name}</span>{name === 'My orders' && orders.length > 0 && <small>{orders.length}</small>}</button>)}</nav>
       <div className="sidebar-note"><ShieldCheck size={24}/><strong>Your shop on NTSA.</strong><p>Add what you sell, and watch the orders come in.</p></div>
@@ -166,7 +166,7 @@ function Login({ onLogin }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   return <div className="login">
     <section className="login-story">
-      <div className="brand"><Store/><span>NTSA.</span></div>
+      <div className="brand"><img className="brand-logo" src="/ntsa_logo.png" alt="NTSA"/></div>
       <div>
         <div className="eyebrow">SELL WITH NTSA</div>
         <h1>Your shop.<br/><span>More customers.</span></h1>
