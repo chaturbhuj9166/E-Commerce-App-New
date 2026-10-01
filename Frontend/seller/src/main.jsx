@@ -235,7 +235,7 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
       const colorExtraPaise = Object.fromEntries(colorList.filter(c => Number(colorExtras[c]) > 0).map(c => [c, paise(colorExtras[c])]));
       const colorImagesOut = Object.fromEntries(colorList.filter(c => colorImageMap[c]).map(c => [c, colorImageMap[c]]));
       onSubmit({
-        name: f.name, description: f.description,
+        name: f.name, description: f.description, sku: f.sku?.trim() || null,
         pricePaise: paise(f.retail), wholesalePaise: paise(f.retail),
         mrpPaise: f.mrp ? paise(f.mrp) : null,
         stock: Number(f.stock), categoryId: f.categoryId,
@@ -252,6 +252,7 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
   }}>
     <Field label="Product name" name="name" defaultValue={data?.name} required maxLength={100} onChange={e => checkSuggestion(e.target.form)}/>
     <Field label="Description"><textarea name="description" defaultValue={data?.description} required maxLength={5000} placeholder="What it is, what it's made of, what's in the box…" onChange={e => checkSuggestion(e.target.form)}/></Field>
+    <Field label="SKU — your own stock code, optional" name="sku" defaultValue={data?.sku || ''} maxLength={60} placeholder="e.g. SHARMA-001"/>
     <div className="form-grid">
       <Field label="Selling price (₹)" name="retail" type="number" min="0.01" step="0.01" defaultValue={data ? data.pricePaise / 100 : ''} required/>
       <Field label="MRP (₹) — optional, shows a strikethrough discount" name="mrp" type="number" min="0.01" step="0.01" defaultValue={data?.mrpPaise ? data.mrpPaise / 100 : ''}/>

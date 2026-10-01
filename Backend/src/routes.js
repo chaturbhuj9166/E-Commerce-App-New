@@ -371,6 +371,69 @@ router.get('/admin/pincode-stats', async (req, res) => {
     LIMIT 50`;
   res.json(rows);
 });
+// Shoppers, with what they've actually bought -- for the Customers page.
+router.get('/admin/customers', async (req, res) => {
+  const rows = await db.$queryRaw`
+    SELECT u.id, u.name, u.phone, u.email, u."createdAt",
+           COUNT(o.id) FILTER (WHERE o.status != 'CANCELLED')::int AS "orderCount",
+           COALESCE(SUM(o."totalPaise") FILTER (WHERE o.status != 'CANCELLED'), 0)::int AS "totalSpentPaise",
+           MAX(o."createdAt") AS "lastOrderAt"
+    FROM users u
+    LEFT JOIN orders o ON o."userId" = u.id
+    GROUP BY u.id
+    ORDER BY u."createdAt" DESC
+    LIMIT 500`;
+  res.json(rows);
+});
+// Revenue, order mix and top sellers for the dashboard charts and the
+// Reports page. `days` is how far back to look; the same window one period
+// earlier gives the trend arrows a "vs last period" to compare against.
+// Collected vs pending splits out COD orders that haven't reached the
+// customer yet -- that cash isn't in hand until it is, unlike an online
+// payment, which is captured before the order is ever PLACED.
+router.get('/admin/reports', async (req, res) => {
+  const { days: rawDays } = z.object({ days: z.coerce.number().int().min(1).max(365).optional() }).parse(req.query);
+  const days = rawDays ?? 30;
+  const since = new Date(Date.now() - days * 86400000);
+  const previousSince = new Date(Date.now() - days * 2 * 86400000);
+  const [periods, revenueByDay, statusBreakdown, topProducts] = await Promise.all([
+    db.$queryRaw`
+      SELECT ("createdAt" >= ${since}) AS current,
+        COUNT(*)::int AS orders,
+        COALESCE(SUM("totalPaise") FILTER (WHERE status != 'CANCELLED'), 0)::int AS "revenuePaise",
+        COALESCE(SUM("totalPaise") FILTER (WHERE status NOT IN ('CANCELLED', 'PENDING_PAYMENT') AND ("paymentMethod" != 'COD' OR status = 'DELIVERED')), 0)::int AS "collectedPaise",
+        COALESCE(SUM("totalPaise") FILTER (WHERE "paymentMethod" = 'COD' AND status NOT IN ('CANCELLED', 'DELIVERED')), 0)::int AS "pendingPaise"
+      FROM orders WHERE "createdAt" >= ${previousSince} GROUP BY 1`,
+    db.$queryRaw`
+      SELECT DATE_TRUNC('day', "createdAt")::date AS date,
+        COUNT(*)::int AS orders,
+        COALESCE(SUM("totalPaise") FILTER (WHERE status != 'CANCELLED'), 0)::int AS "revenuePaise"
+      FROM orders WHERE "createdAt" >= ${since} GROUP BY 1 ORDER BY 1`,
+    db.$queryRaw`
+      SELECT status, COUNT(*)::int AS count FROM orders
+      WHERE "createdAt" >= ${since} GROUP BY status`,
+    db.$queryRaw`
+      SELECT i.name, SUM(i.quantity)::int AS quantity, SUM(i.quantity * i."unitPaise")::int AS "revenuePaise"
+      FROM order_items i JOIN orders o ON o.id = i."orderId"
+      WHERE o."createdAt" >= ${since} AND o.status != 'CANCELLED'
+      GROUP BY i.name ORDER BY quantity DESC LIMIT 8`,
+  ]);
+  const zero = { orders: 0, revenuePaise: 0, collectedPaise: 0, pendingPaise: 0 };
+  const current = periods.find(p => p.current) || zero;
+  const previous = periods.find(p => !p.current) || zero;
+  const changePct = (now, before) => before === 0 ? (now > 0 ? 100 : 0) : Math.round(((now - before) / before) * 1000) / 10;
+  res.json({
+    days,
+    summary: {
+      revenuePaise: current.revenuePaise, orders: current.orders,
+      collectedPaise: current.collectedPaise, pendingPaise: current.pendingPaise,
+      avgOrderValuePaise: current.orders ? Math.round(current.revenuePaise / current.orders) : 0,
+      revenueChangePct: changePct(current.revenuePaise, previous.revenuePaise),
+      ordersChangePct: changePct(current.orders, previous.orders),
+    },
+    revenueByDay, statusBreakdown, topProducts,
+  });
+});
 
 // Seller sign-ups from the sales team: verify, then create their login.
 router.get('/admin/seller-applications', async (req, res) => res.json(await db.sellerApplication.findMany({

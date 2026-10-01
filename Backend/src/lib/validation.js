@@ -13,6 +13,7 @@ const optionList = z.array(z.string().trim().min(1).max(30)).max(10).default([])
 export const productSchema = z.object({ name: text, description: z.string().trim().min(1).max(5000), pricePaise: money, wholesalePaise: money,
   // Optional fields also accept null so an edit can clear them (undefined
   // would leave the stored value unchanged).
+  sku: z.string().trim().max(60).nullable().optional(),
   mrpPaise: money.nullable().optional(), stock: z.number().int().min(0).max(1000000), categoryId: text,
   images: z.array(imageUrlSchema).max(5),
   sizes: optionList, colors: optionList,

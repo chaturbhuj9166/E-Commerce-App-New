@@ -245,6 +245,9 @@ model Product {
   id String @id @default(cuid())
   name String
   description String
+  // A shop's own stock-keeping code, e.g. "NTSA-SHT-005". Optional and set
+  // by whoever lists the product; never generated or enforced by NTSA.
+  sku String?
   pricePaise Int
   wholesalePaise Int
   mrpPaise Int?
