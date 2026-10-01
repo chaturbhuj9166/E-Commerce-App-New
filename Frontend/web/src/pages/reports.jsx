@@ -6,11 +6,13 @@ import { money } from '../api';
 import { Empty, Stat } from '../ui';
 import { Wallet, ShoppingBag, TrendingUp, Clock3 } from 'lucide-react';
 
-const NAVY = '#163041', ORANGE = '#ffac50';
+const GREEN = '#499b76', ORANGE = '#ffac50';
 
 export function ReportsPage({ reports, reportsDays, setReportsDays, loadingReports }) {
   const s = reports?.summary;
-  const revenueByDay = (reports?.revenueByDay || []).map(d => ({ ...d, date: new Date(d.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) }));
+  // revenuePaise is paise -- convert to plain rupees before charting, or
+  // the axis and tooltip read 100x too high.
+  const revenueByDay = (reports?.revenueByDay || []).map(d => ({ ...d, date: new Date(d.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }), revenue: Math.round(d.revenuePaise / 100) }));
   const topProducts = reports?.topProducts || [];
   return <>
     <div className="panel-heading">
@@ -29,11 +31,11 @@ export function ReportsPage({ reports, reportsDays, setReportsDays, loadingRepor
         <div style={{ padding: '0 10px 10px' }}>
           <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={revenueByDay} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-              <defs><linearGradient id="report-revenue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={NAVY} stopOpacity={0.25}/><stop offset="100%" stopColor={NAVY} stopOpacity={0}/></linearGradient></defs>
+              <defs><linearGradient id="report-revenue" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={GREEN} stopOpacity={0.3}/><stop offset="100%" stopColor={GREEN} stopOpacity={0}/></linearGradient></defs>
               <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#8b9aa3' }} axisLine={false} tickLine={false} interval="preserveStartEnd"/>
               <YAxis tick={{ fontSize: 10, fill: '#8b9aa3' }} axisLine={false} tickLine={false} tickFormatter={v => v >= 1000 ? `₹${Math.round(v / 1000)}k` : `₹${v}`}/>
-              <Tooltip formatter={v => [money(v), 'Revenue']} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e1e8ed' }}/>
-              <Area type="monotone" dataKey="revenuePaise" stroke={NAVY} strokeWidth={2} fill="url(#report-revenue)" isAnimationActive={false}/>
+              <Tooltip formatter={v => [`₹${v.toLocaleString('en-IN')}`, 'Revenue']} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e1e8ed' }}/>
+              <Area type="monotone" dataKey="revenue" stroke={GREEN} strokeWidth={2} fill="url(#report-revenue)" isAnimationActive={false}/>
             </AreaChart>
           </ResponsiveContainer>
         </div>

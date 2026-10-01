@@ -37,7 +37,9 @@ export function OverviewPage({ isAdmin, me, vendors, orders, products, toPack, a
   const pendingApplications = applications.filter(a => a.status === 'PENDING').length;
   const lowStock = products.filter(p => p.stock < 10);
   const s = reports?.summary;
-  const revenueByDay = (reports?.revenueByDay || []).map(d => ({ ...d, date: new Date(d.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) }));
+  // revenuePaise is paise, like everywhere else in the app -- the chart
+  // needs plain rupees, or its axis and tooltip would read 100x too high.
+  const revenueByDay = (reports?.revenueByDay || []).map(d => ({ ...d, date: new Date(d.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }), revenue: Math.round(d.revenuePaise / 100) }));
   const statusBreakdown = reports?.statusBreakdown || [];
   const totalStatusOrders = statusBreakdown.reduce((sum, r) => sum + r.count, 0);
 
@@ -82,11 +84,11 @@ export function OverviewPage({ isAdmin, me, vendors, orders, products, toPack, a
         <div style={{ padding: '0 10px 10px' }}>
           <ResponsiveContainer width="100%" height={260}>
             <AreaChart data={revenueByDay} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-              <defs><linearGradient id="revenue-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={NAVY} stopOpacity={0.25}/><stop offset="100%" stopColor={NAVY} stopOpacity={0}/></linearGradient></defs>
+              <defs><linearGradient id="revenue-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={GREEN} stopOpacity={0.3}/><stop offset="100%" stopColor={GREEN} stopOpacity={0}/></linearGradient></defs>
               <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#8b9aa3' }} axisLine={false} tickLine={false} interval="preserveStartEnd"/>
               <YAxis tick={{ fontSize: 10, fill: '#8b9aa3' }} axisLine={false} tickLine={false} tickFormatter={v => v >= 1000 ? `₹${Math.round(v / 1000)}k` : `₹${v}`}/>
-              <Tooltip formatter={(v, name) => name === 'revenuePaise' ? [money(v), 'Revenue'] : [v, 'Orders']} labelFormatter={l => l} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e1e8ed' }}/>
-              <Area type="monotone" dataKey="revenuePaise" stroke={NAVY} strokeWidth={2} fill="url(#revenue-fill)" isAnimationActive={false}/>
+              <Tooltip formatter={v => [`₹${v.toLocaleString('en-IN')}`, 'Revenue']} labelFormatter={l => l} contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e1e8ed' }}/>
+              <Area type="monotone" dataKey="revenue" stroke={GREEN} strokeWidth={2} fill="url(#revenue-fill)" isAnimationActive={false}/>
             </AreaChart>
           </ResponsiveContainer>
         </div>
