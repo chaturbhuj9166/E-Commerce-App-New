@@ -375,7 +375,16 @@ function Login({ onLogin }) {
 }
 function Editor({ type, data, categories, busy, onSubmit }) {
   const [images, setImages] = useState(data?.images?.join('\n') || ''), [uploading, setUploading] = useState(false), [error, setError] = useState('');
-  const [colorImages, setColorImages] = useState(Object.entries(data?.colorImages || {}).map(([c, u]) => `${c} = ${u}`).join('\n'));
+  const [colorImageMap, setColorImageMap] = useState(() => ({ ...(data?.colorImages || {}) }));
+  const [uploadingColor, setUploadingColor] = useState(null);
+  const uploadColorImage = async (color, file) => {
+    setUploadingColor(color);
+    try {
+      const form = new FormData(); form.append('image', file);
+      const r = await api('/admin/images', { method: 'POST', body: form });
+      setColorImageMap(m => ({ ...m, [color]: r.url }));
+    } catch (err) { setError(err.message); } finally { setUploadingColor(null); }
+  };
   const [attributes, setAttributes] = useState(data?.attributes?.length ? data.attributes : [{ label: '', value: '' }]);
   const setAttr = (i, key, value) => setAttributes(rows => rows.map((r, idx) => idx === i ? { ...r, [key]: value } : r));
   // Options (sizes / storage / ...) and their optional per-option prices, in rupees while editing.
@@ -414,7 +423,7 @@ function Editor({ type, data, categories, busy, onSubmit }) {
   };
   return <form className="editor" onSubmit={e => { e.preventDefault(); setError(''); const f = Object.fromEntries(new FormData(e.target)); try {
     if (type === 'Products' || type === 'Wholesale products') {
-      const colorImageMap = Object.fromEntries(colorImages.split('\n').map(line => line.split('=').map(x => x.trim())).filter(([c, u]) => c && u));
+      const colorImagesOut = Object.fromEntries(colorList.filter(c => colorImageMap[c]).map(c => [c, colorImageMap[c]]));
       const cleanAttributes = attributes.map(a => ({ label: a.label.trim(), value: a.value.trim() })).filter(a => a.label && a.value);
       const colorExtraPaise = Object.fromEntries(colorList.filter(c => Number(colorExtras[c]) > 0).map(c => [c, paise(colorExtras[c])]));
       const optionPrices = Object.fromEntries(sizeList.filter(s => String(sizePrices[s]?.retail ?? '').trim()).map(s => {
@@ -422,7 +431,7 @@ function Editor({ type, data, categories, busy, onSubmit }) {
         if (!String(o.wholesale ?? '').trim()) throw new Error(`Enter a wholesale price for ${s}, or clear its retail price`);
         return [s, { pricePaise: paise(o.retail), wholesalePaise: paise(o.wholesale), mrpPaise: String(o.mrp ?? '').trim() ? paise(o.mrp) : null }];
       }));
-      onSubmit({ name: f.name, description: f.description, pricePaise: paise(f.retail), wholesalePaise: paise(f.wholesale), mrpPaise: f.mrp ? paise(f.mrp) : null, stock: Number(f.stock), categoryId: f.categoryId, images: images.split('\n').map(x => x.trim()).filter(Boolean), colors: f.colors.split(',').map(x => x.trim()).filter(Boolean), sizes: sizeList, sizeLabel: f.sizeLabel?.trim() || 'Size', sizePrices: Object.keys(optionPrices).length ? optionPrices : null, colorImages: Object.keys(colorImageMap).length ? colorImageMap : null, colorExtraPaise: Object.keys(colorExtraPaise).length ? colorExtraPaise : null, attributes: cleanAttributes, deal: f.deal === 'on', condition: f.condition || 'NEW', conditionNote: f.conditionNote?.trim() || null, audience: f.audience });
+      onSubmit({ name: f.name, description: f.description, pricePaise: paise(f.retail), wholesalePaise: paise(f.wholesale), mrpPaise: f.mrp ? paise(f.mrp) : null, stock: Number(f.stock), categoryId: f.categoryId, images: images.split('\n').map(x => x.trim()).filter(Boolean), colors: f.colors.split(',').map(x => x.trim()).filter(Boolean), sizes: sizeList, sizeLabel: f.sizeLabel?.trim() || 'Size', sizePrices: Object.keys(optionPrices).length ? optionPrices : null, colorImages: Object.keys(colorImagesOut).length ? colorImagesOut : null, colorExtraPaise: Object.keys(colorExtraPaise).length ? colorExtraPaise : null, attributes: cleanAttributes, deal: f.deal === 'on', condition: f.condition || 'NEW', conditionNote: f.conditionNote?.trim() || null, audience: f.audience });
     }
     else if (type === 'Categories') onSubmit({ name: f.name, icon: data?.icon || 'shopping_bag', refundWindowHours: Number(f.refundWindowHours), allowsUsedStock: f.allowsUsedStock === 'on' });
     // Cleared optional fields are sent as null so an edit actually removes them.
@@ -456,6 +465,16 @@ function Editor({ type, data, categories, busy, onSubmit }) {
           </div>)}
         </div>
       </Field>}
+      {colorList.length > 0 && <Field label="Colour photos — optional. Shown to the shopper when they pick that colour.">
+        <div className="attribute-rows">
+          {colorList.map(c => <div className="color-image-row" key={c}>
+            <strong>{c}</strong>
+            {colorImageMap[c] ? <img className="product-image" src={colorImageMap[c]} alt={`${c} sample`}/> : <div className="product-image placeholder"><Image size={16}/></div>}
+            <input type="file" accept="image/png,image/jpeg,image/webp" aria-label={`Upload a ${c} photo`} disabled={uploadingColor === c} onChange={e => { if (e.target.files[0]) uploadColorImage(c, e.target.files[0]); }}/>
+            {colorImageMap[c] && <button type="button" className="icon-button" aria-label={`Remove ${c} photo`} onClick={() => setColorImageMap(m => { const n = { ...m }; delete n[c]; return n; })}><X size={16}/></button>}
+          </div>)}
+        </div>
+      </Field>}
       {sizeList.length > 0 && <>
         <Field label="Option name shown to shoppers" name="sizeLabel" defaultValue={data?.sizeLabel || 'Size'} maxLength={30} placeholder="Size, Storage, RAM…" required/>
         <Field label="Price per option — a bigger option should cost more. Type what it costs extra and the prices fill in, or write them yourself.">
@@ -474,7 +493,7 @@ function Editor({ type, data, categories, busy, onSubmit }) {
               ? <small>Every option costs the same right now. Is 10kg really the same price as 5kg?</small>
               : null}
         </Field>
-      </>}<Field label="Color photos — optional, one per line as &quot;Color = image URL&quot;. Shown when the shopper picks that color."><textarea value={colorImages} onChange={e => setColorImages(e.target.value)} placeholder={'Black = https://…\nWhite = https://…'} rows={3}/></Field><Field label="Image URLs — one per line, up to 5"><textarea value={images} onChange={e => setImages(e.target.value)} placeholder="https://…"/></Field><Field label={uploading ? 'Uploading…' : 'Or upload a photo (max 5 MB) — the NTSA logo is stamped on automatically'} type="file" accept="image/png,image/jpeg,image/webp" disabled={uploading} onChange={async e => { if (!e.target.files[0]) return; setUploading(true); try { if (images.split('\n').filter(Boolean).length >= 5) throw new Error('Maximum five images'); const form = new FormData(); form.append('image', e.target.files[0]); const r = await api('/admin/images', { method: 'POST', body: form }); setImages(v => [v, r.url].filter(Boolean).join('\n')); } catch (err) { setError(err.message); } finally { setUploading(false); } }}/>
+      </>}<Field label="Image URLs — one per line, up to 5"><textarea value={images} onChange={e => setImages(e.target.value)} placeholder="https://…"/></Field><Field label={uploading ? 'Uploading…' : 'Or upload a photo (max 5 MB) — the NTSA logo is stamped on automatically'} type="file" accept="image/png,image/jpeg,image/webp" disabled={uploading} onChange={async e => { if (!e.target.files[0]) return; setUploading(true); try { if (images.split('\n').filter(Boolean).length >= 5) throw new Error('Maximum five images'); const form = new FormData(); form.append('image', e.target.files[0]); const r = await api('/admin/images', { method: 'POST', body: form }); setImages(v => [v, r.url].filter(Boolean).join('\n')); } catch (err) { setError(err.message); } finally { setUploading(false); } }}/>
       <Field label="Additional details — anything that doesn't fit a field above, e.g. a bag's capacity">
         <div className="attribute-rows">
           {attributes.map((row, i) => <div className="attribute-row" key={i}>

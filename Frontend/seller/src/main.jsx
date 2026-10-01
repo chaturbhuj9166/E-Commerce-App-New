@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LayoutDashboard, Package, ShoppingBag, LogOut, Plus, ArrowUpRight, ChevronRight, Check, Menu, ShieldCheck, Wallet, Store, Search, BadgeCheck, Truck } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, LogOut, Plus, ArrowUpRight, ChevronRight, Check, Menu, ShieldCheck, Wallet, Store, Search, BadgeCheck, Truck, Image, X } from 'lucide-react';
 import { api, money, paise, suggestCategory } from './api';
 import { Button, Field, PasswordField, Badge, Empty, Modal, Stat, ProductImage, CONDITION_LABEL } from './ui';
 import './style.css';
@@ -201,6 +201,20 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
   const sizeList = sizes.split(',').map(x => x.trim()).filter(Boolean);
   const [sizePrices, setSizePrices] = useState(() => Object.fromEntries(Object.entries(data?.sizePrices || {}).map(([k, v]) => [k, { retail: v.pricePaise / 100, mrp: v.mrpPaise ? v.mrpPaise / 100 : '' }])));
   const setSizePrice = (size, key, value) => setSizePrices(p => ({ ...p, [size]: { ...p[size], [key]: value } }));
+  const [colors, setColors] = useState(data?.colors?.join(', ') || '');
+  const colorList = colors.split(',').map(x => x.trim()).filter(Boolean);
+  const [colorExtras, setColorExtras] = useState(() => Object.fromEntries(Object.entries(data?.colorExtraPaise || {}).map(([k, v]) => [k, v / 100])));
+  const setColorExtra = (color, value) => setColorExtras(p => ({ ...p, [color]: value }));
+  const [colorImageMap, setColorImageMap] = useState(() => ({ ...(data?.colorImages || {}) }));
+  const [uploadingColor, setUploadingColor] = useState(null);
+  const uploadColorImage = async (color, file) => {
+    setUploadingColor(color);
+    try {
+      const form = new FormData(); form.append('image', file);
+      const r = await api('/seller/images', { method: 'POST', body: form });
+      setColorImageMap(m => ({ ...m, [color]: r.url }));
+    } catch (err) { setError(err.message); } finally { setUploadingColor(null); }
+  };
   const applyExtra = (form, size, extra) => {
     const add = Number(extra);
     if (!Number.isFinite(add)) return;
@@ -218,15 +232,19 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
         // A seller sets one price; NTSA's wholesale rate is not theirs to set.
         return [s, { pricePaise: paise(o.retail), wholesalePaise: paise(o.retail), mrpPaise: String(o.mrp ?? '').trim() ? paise(o.mrp) : null }];
       }));
+      const colorExtraPaise = Object.fromEntries(colorList.filter(c => Number(colorExtras[c]) > 0).map(c => [c, paise(colorExtras[c])]));
+      const colorImagesOut = Object.fromEntries(colorList.filter(c => colorImageMap[c]).map(c => [c, colorImageMap[c]]));
       onSubmit({
         name: f.name, description: f.description,
         pricePaise: paise(f.retail), wholesalePaise: paise(f.retail),
         mrpPaise: f.mrp ? paise(f.mrp) : null,
         stock: Number(f.stock), categoryId: f.categoryId,
         images: images.split('\n').map(x => x.trim()).filter(Boolean),
-        colors: f.colors.split(',').map(x => x.trim()).filter(Boolean),
+        colors: colorList,
         sizes: sizeList, sizeLabel: f.sizeLabel?.trim() || 'Size',
         sizePrices: Object.keys(optionPrices).length ? optionPrices : null,
+        colorExtraPaise: Object.keys(colorExtraPaise).length ? colorExtraPaise : null,
+        colorImages: Object.keys(colorImagesOut).length ? colorImagesOut : null,
         attributes: [], audience: 'RETAIL',
         condition: f.condition || 'NEW', conditionNote: f.conditionNote?.trim() || null,
       });
@@ -250,9 +268,27 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
     {suggestion && suggestion.id !== categoryId && <p className="muted" style={{ marginTop: -10 }}>This sounds like it belongs in <strong>{suggestion.name}</strong>. <button type="button" className="text-button" style={{ display: 'inline', padding: 0 }} onClick={() => { setCategoryId(suggestion.id); setSuggestion(null); }}>Use this category</button></p>}
     {category && <p className="muted">Anything in {category.name} can be returned within {category.refundWindowHours} hours. NTSA sets that per category.</p>}
     <div className="form-grid">
-      <Field label="Colours — comma separated, optional" name="colors" defaultValue={data?.colors?.join(', ') || ''} placeholder="Black, White, Blue"/>
+      <Field label="Colours — comma separated, optional" name="colors" value={colors} onChange={e => setColors(e.target.value)} placeholder="Black, White, Blue"/>
       <Field label="Options (sizes, storage…) — comma separated, optional" name="sizes" value={sizes} onChange={e => setSizes(e.target.value)} placeholder="6, 7, 8  or  128GB, 256GB"/>
     </div>
+    {colorList.length > 0 && <Field label="Colour price difference — optional. What a colour costs on top of the price above; leave blank when it costs the same.">
+      <div className="attribute-rows">
+        {colorList.map(c => <div className="option-price-row" key={c}>
+          <strong>{c}</strong>
+          <input type="number" min="0" step="0.01" placeholder="+ Extra ₹" aria-label={`${c} extra over the base price`} value={colorExtras[c] ?? ''} onChange={e => setColorExtra(c, e.target.value)}/>
+        </div>)}
+      </div>
+    </Field>}
+    {colorList.length > 0 && <Field label="Colour photos — optional. Shown to the shopper when they pick that colour.">
+      <div className="attribute-rows">
+        {colorList.map(c => <div className="color-image-row" key={c}>
+          <strong>{c}</strong>
+          {colorImageMap[c] ? <img className="product-image" src={colorImageMap[c]} alt={`${c} sample`}/> : <div className="product-image placeholder"><Image size={16}/></div>}
+          <input type="file" accept="image/png,image/jpeg,image/webp" aria-label={`Upload a ${c} photo`} disabled={uploadingColor === c} onChange={e => { if (e.target.files[0]) uploadColorImage(c, e.target.files[0]); }}/>
+          {colorImageMap[c] && <button type="button" className="icon-button" aria-label={`Remove ${c} photo`} onClick={() => setColorImageMap(m => { const n = { ...m }; delete n[c]; return n; })}><X size={16}/></button>}
+        </div>)}
+      </div>
+    </Field>}
     {sizeList.length > 0 && <>
       <Field label="Option name shown to shoppers" name="sizeLabel" defaultValue={data?.sizeLabel || 'Size'} maxLength={30} placeholder="Size, Storage, Weight…" required/>
       <Field label="Price per option — a bigger option should cost more. Type what it costs extra and the price fills in.">
