@@ -5,11 +5,17 @@ import { checkLimits, deadline, eligible, nextStatus, requireThat, totalFor, MAX
 import { checkoutSchema } from '../lib/validation.js';
 import { variantFor, priceFor } from '../lib/variants.js';
 import { notifyOrder } from './firebase.js';
-export const orderInclude = { items: { include: { refund: true } } };
+// Every item carries its own seller's shop name (null = NTSA's own stock)
+// and the product's photo, so anyone looking at an order -- the admin
+// list, a customer's own order, a packing slip -- can tell whose product
+// they're looking at, and what it actually looks like. The product itself
+// might since be edited or removed; this is a live join, not a snapshot,
+// so a since-changed photo is what shows (same as the name already works).
+export const orderInclude = { items: { include: { refund: true, seller: { select: { shopName: true } }, product: { select: { images: true } } } } };
 export const ownerWhere = actor => actor.role === 'ADMIN' ? {} : actor.role === 'CUSTOMER' ? { userId: actor.id } : { vendorId: actor.id };
 export function publicOrder(order) {
   const { deliveryOtpHash, deliveryOtpExpiresAt, deliveryOtpAttempts, ...safe } = order;
-  safe.items = safe.items.map(item => ({ ...item, refundEligible: eligible(item, order) }));
+  safe.items = safe.items.map(({ product, seller, ...item }) => ({ ...item, image: product?.images?.[0] ?? null, sellerName: seller?.shopName ?? null, refundEligible: eligible(item, order) }));
   safe.refundEligible = safe.items.some(item => item.refundEligible);
   return safe;
 }

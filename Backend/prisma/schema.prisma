@@ -90,6 +90,10 @@ model Seller {
   aadharNumber String?
   gstVerified Boolean @default(false)
   aadharVerified Boolean @default(false)
+  // What NTSA keeps from each of this seller's sales, 0-100. Set per
+  // seller (not a single store-wide rate) so a negotiated deal is just a
+  // different number here, not a special case anywhere else.
+  commissionPercent Int @default(10)
   enabled Boolean @default(true)
   deleted Boolean @default(false)
   sessionVersion Int @default(0)

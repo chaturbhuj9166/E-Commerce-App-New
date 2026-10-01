@@ -668,32 +668,48 @@ router.delete('/seller/products/:id', seller, async (req, res) => {
 // the order to fulfil it. Another seller's lines in the same order are not
 // included, and neither is the buyer's full address until it is theirs to
 // pack -- the packing team handles delivery.
+// Buyer name comes straight off the order's own address snapshot -- a
+// seller's products are retail-only (never wholesale), so that's always a
+// customer's name, never a vendor's. The full address/phone still isn't
+// here: NTSA packs and delivers for sellers, so that's the packing team's
+// business, not the seller's.
 router.get('/seller/orders', seller, async (req, res) => {
+  const commissionPercent = req.actor.account.commissionPercent;
   const items = await db.orderItem.findMany({
     where: { sellerId: req.actor.id },
-    include: { order: { select: { id: true, status: true, createdAt: true, paymentMethod: true, vendorId: true } }, product: { select: { images: true } } },
+    include: { order: { select: { id: true, status: true, createdAt: true, paymentMethod: true, vendorId: true, address: true } }, product: { select: { images: true } } },
     orderBy: { id: 'desc' }, take: 200,
   });
-  res.json(items.map(({ order, product, ...item }) => ({ ...item, image: product.images[0] ?? null, orderId: order.id, status: order.status, placedAt: order.createdAt, buyer: order.vendorId ? 'Wholesale' : 'Customer' })));
+  res.json(items.map(({ order, product, ...item }) => {
+    const grossPaise = item.unitPaise * item.quantity;
+    const commissionPaise = Math.round(grossPaise * commissionPercent / 100);
+    return { ...item, image: product.images[0] ?? null, orderId: order.id, status: order.status, placedAt: order.createdAt,
+      buyerName: order.address?.name || null, buyer: order.vendorId ? 'Wholesale' : 'Customer',
+      grossPaise, commissionPercent, commissionPaise, netPaise: grossPaise - commissionPaise };
+  }));
 });
 // What the shop has earned: cancelled orders don't count, and money is only
-// counted as earned once the order is delivered. Shared by the seller's own
-// summary and the admin's read-only look at any seller's numbers.
-async function sellerSummaryFor(sellerId) {
+// counted as earned once the order is delivered. `earnedPaise` is net, after
+// NTSA's commission -- `commissionPaise` is the other half of that split.
+async function sellerSummaryFor(sellerId, commissionPercent) {
   const items = await db.orderItem.findMany({ where: { sellerId }, include: { order: { select: { status: true } } } });
   const live = items.filter(i => i.order.status !== 'CANCELLED');
   const value = rows => rows.reduce((sum, i) => sum + i.unitPaise * i.quantity, 0);
+  const deliveredGrossPaise = value(live.filter(i => i.order.status === 'DELIVERED'));
+  const commissionPaise = Math.round(deliveredGrossPaise * commissionPercent / 100);
   return {
     products: await db.product.count({ where: { sellerId, active: true } }),
     outOfStock: await db.product.count({ where: { sellerId, active: true, stock: 0 } }),
     orders: new Set(live.map(i => i.orderId)).size,
     piecesSold: live.reduce((sum, i) => sum + i.quantity, 0),
     salesPaise: value(live),
-    earnedPaise: value(live.filter(i => i.order.status === 'DELIVERED')),
+    commissionPercent,
+    commissionPaise,
+    earnedPaise: deliveredGrossPaise - commissionPaise,
     awaitingPaise: value(live.filter(i => i.order.status !== 'DELIVERED')),
     cancelledPaise: value(items.filter(i => i.order.status === 'CANCELLED')),
   };
 }
-router.get('/seller/summary', seller, async (req, res) => res.json(await sellerSummaryFor(req.actor.id)));
+router.get('/seller/summary', seller, async (req, res) => res.json(await sellerSummaryFor(req.actor.id, req.actor.account.commissionPercent)));
 // Photos for the seller's own products, watermarked like every other one.
 router.post('/seller/images', seller, multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => res.status(201).json(await uploadImage(req.file, { watermark: true })));

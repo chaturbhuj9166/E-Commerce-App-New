@@ -96,6 +96,7 @@ export const sellerUpdateSchema = z.object({
   aadharNumber: z.string().regex(/^[0-9]{12}$/, 'Aadhaar number must be exactly 12 digits').nullable().optional(),
   gstVerified: z.boolean().optional(),
   aadharVerified: z.boolean().optional(),
+  commissionPercent: z.number().int().min(0).max(100).optional(),
 });
 // Admin-panel staff: the packing team and the sales team.
 export const deliveryRuleSchema = z.object({

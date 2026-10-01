@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LayoutDashboard, Package, ShoppingBag, LogOut, Plus, ArrowUpRight, ChevronRight, Check, Menu, ShieldCheck, Wallet, Store, Search, BadgeCheck, Truck, Image, X } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, LogOut, Plus, ArrowUpRight, ChevronRight, Check, Menu, ShieldCheck, Wallet, Store, Search, BadgeCheck, Truck, Image, X, Percent } from 'lucide-react';
 import { api, money, paise, suggestCategory } from './api';
 import { Button, Field, PasswordField, Badge, Empty, Modal, Stat, ProductImage, CONDITION_LABEL } from './ui';
 import './style.css';
@@ -88,7 +88,8 @@ function App() {
               <div className="hero-art" aria-hidden="true"><div className="orbit"/><div className="parcel parcel-back"/><div className="parcel parcel-front"><Store size={52} strokeWidth={1.2}/></div><div className="art-tag"><Check size={15}/>Selling on NTSA</div><span className="sparkle">✦</span></div>
             </section>
             <div className="stats">
-              <Stat icon={Wallet} label="Earned" value={money(summary?.earnedPaise)} note="From orders already delivered"/>
+              <Stat icon={Wallet} label="Earned" value={money(summary?.earnedPaise)} note="After NTSA's commission, from delivered orders"/>
+              <Stat icon={Percent} label="Commission paid" value={money(summary?.commissionPaise)} note={`NTSA's ${summary?.commissionPercent ?? 0}% on delivered orders`}/>
               <Stat icon={Truck} label="On the way" value={money(summary?.awaitingPaise)} note="Ordered, not yet delivered"/>
               <Stat icon={ShoppingBag} label="Pieces sold" value={summary?.piecesSold ?? 0} note={`Across ${summary?.orders ?? 0} order(s)`}/>
               <Stat icon={Package} label="Products listed" value={summary?.products ?? 0} note={`${summary?.outOfStock ?? 0} out of stock`}/>
@@ -151,12 +152,14 @@ function App() {
 
 function OrderTable({ orders, full }) {
   return orders.length ? <div className="table-scroll"><table>
-    <thead><tr><th>Item</th><th>Order</th><th>Qty</th><th>Value</th><th>Status</th></tr></thead>
+    <thead><tr><th>Item</th><th>Order</th>{full && <th>Customer</th>}<th>Qty</th><th>Order value</th>{full && <th>You earn</th>}<th>Status</th></tr></thead>
     <tbody>{orders.map(o => <tr key={o.id}>
       <td><div className="product-cell">{o.image ? <img className="product-image" src={o.image} alt=""/> : <div className="product-image placeholder"><Package/></div>}<div><strong>{o.name}</strong>{(o.size || o.color) && <small>{[o.size, o.color].filter(Boolean).join(' · ')}</small>}</div></div></td>
-      <td><strong>#{o.orderId.slice(-8).toUpperCase()}</strong><small>{o.buyer} · {new Date(o.placedAt).toLocaleDateString('en-IN')}</small></td>
+      <td><strong>#{o.orderId.slice(-8).toUpperCase()}</strong><small>{full ? new Date(o.placedAt).toLocaleDateString('en-IN') : `${o.buyerName || o.buyer} · ${new Date(o.placedAt).toLocaleDateString('en-IN')}`}</small></td>
+      {full && <td>{o.buyerName || <span className="muted">—</span>}</td>}
       <td>{o.quantity}</td>
-      <td>{money(o.unitPaise * o.quantity)}{full && <small>{money(o.unitPaise)} each</small>}</td>
+      <td>{money(o.grossPaise ?? o.unitPaise * o.quantity)}{full && <small>{money(o.unitPaise)} each</small>}</td>
+      {full && <td>{money(o.netPaise)}<small>{money(o.commissionPaise)} commission ({o.commissionPercent}%)</small></td>}
       <td><Badge>{o.status}</Badge></td>
     </tr>)}</tbody>
   </table></div> : <Empty text="Your first order will show up here"/>;
