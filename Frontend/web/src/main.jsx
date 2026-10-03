@@ -613,6 +613,24 @@ function Editor({ type, data, categories, busy, onSubmit }) {
       mrp: base.mrp > 0 ? (base.mrp + add).toFixed(2) : '',
     } }));
   };
+  // The per-option / per-grade price grid; placed in the options block for a
+  // normal product, or right under the grade tick-boxes for a graded one.
+  const priceTable = sizeList.length > 0 ? <Field label={gradeMode ? 'Price per grade — Fair cheapest, Superb dearest. Type what it costs extra and the prices fill in, or write them yourself.' : 'Price per option — a bigger option should cost more. Type what it costs extra and the prices fill in, or write them yourself.'}>
+    <div className="attribute-rows">
+      {sizeList.map(s => <div className="option-price-row" key={s}>
+        <strong>{s}</strong>
+        <input type="number" step="0.01" placeholder="+ Extra ₹" aria-label={`${s} extra over the base price`} onChange={e => applyExtra(e.target.form, s, e.target.value)}/>
+        <input type="number" min="0.01" step="0.01" placeholder="Retail ₹" aria-label={`${s} retail price`} value={sizePrices[s]?.retail ?? ''} onChange={e => setSizePrice(s, 'retail', e.target.value)}/>
+        <input type="number" min="0.01" step="0.01" placeholder="Wholesale ₹" aria-label={`${s} wholesale price`} value={sizePrices[s]?.wholesale ?? ''} onChange={e => setSizePrice(s, 'wholesale', e.target.value)}/>
+        <input type="number" min="0.01" step="0.01" placeholder="MRP ₹ (optional)" aria-label={`${s} MRP`} value={sizePrices[s]?.mrp ?? ''} onChange={e => setSizePrice(s, 'mrp', e.target.value)}/>
+      </div>)}
+    </div>
+    {sizeList.some(s => String(sizePrices[s]?.retail ?? '').trim()) && sizeList.some(s => !String(sizePrices[s]?.retail ?? '').trim())
+      ? <small className="danger-text">Price every {gradeMode ? 'grade' : 'option'}, or clear them all — a half-filled list is refused.</small>
+      : sizeList.every(s => !String(sizePrices[s]?.retail ?? '').trim())
+        ? <small>Every {gradeMode ? 'grade' : 'option'} costs the same right now. Is the better one really the same price?</small>
+        : null}
+  </Field> : null;
   return <form className="editor" onSubmit={e => { e.preventDefault(); setError(''); const f = Object.fromEntries(new FormData(e.target)); try {
     if (type === 'Products' || type === 'Wholesale products') {
       const colorImagesOut = Object.fromEntries(colorList.filter(c => colorImageMap[c]).map(c => [c, colorImageMap[c]]));
@@ -668,24 +686,9 @@ function Editor({ type, data, categories, busy, onSubmit }) {
           </div>)}
         </div>
       </Field>}
-      {sizeList.length > 0 && <>
-        {!gradeMode && <Field label="Option name shown to shoppers" name="sizeLabel" defaultValue={data?.sizeLabel || 'Size'} maxLength={30} placeholder="Size, Storage, RAM…" required/>}
-        <Field label={gradeMode ? 'Price per grade — Superb should cost more than Fair. Type what it costs extra and the prices fill in, or write them yourself.' : 'Price per option — a bigger option should cost more. Type what it costs extra and the prices fill in, or write them yourself.'}>
-          <div className="attribute-rows">
-            {sizeList.map(s => <div className="option-price-row" key={s}>
-              <strong>{s}</strong>
-              <input type="number" step="0.01" placeholder="+ Extra ₹" aria-label={`${s} extra over the base price`} onChange={e => applyExtra(e.target.form, s, e.target.value)}/>
-              <input type="number" min="0.01" step="0.01" placeholder="Retail ₹" aria-label={`${s} retail price`} value={sizePrices[s]?.retail ?? ''} onChange={e => setSizePrice(s, 'retail', e.target.value)}/>
-              <input type="number" min="0.01" step="0.01" placeholder="Wholesale ₹" aria-label={`${s} wholesale price`} value={sizePrices[s]?.wholesale ?? ''} onChange={e => setSizePrice(s, 'wholesale', e.target.value)}/>
-              <input type="number" min="0.01" step="0.01" placeholder="MRP ₹ (optional)" aria-label={`${s} MRP`} value={sizePrices[s]?.mrp ?? ''} onChange={e => setSizePrice(s, 'mrp', e.target.value)}/>
-            </div>)}
-          </div>
-          {sizeList.some(s => String(sizePrices[s]?.retail ?? '').trim()) && sizeList.some(s => !String(sizePrices[s]?.retail ?? '').trim())
-            ? <small className="danger-text">Price every {gradeMode ? 'grade' : 'option'}, or clear them all — a half-filled list is refused.</small>
-            : sizeList.every(s => !String(sizePrices[s]?.retail ?? '').trim())
-              ? <small>Every {gradeMode ? 'grade' : 'option'} costs the same right now. Is the better one really the same price?</small>
-              : null}
-        </Field>
+      {!gradeMode && sizeList.length > 0 && <>
+        <Field label="Option name shown to shoppers" name="sizeLabel" defaultValue={data?.sizeLabel || 'Size'} maxLength={30} placeholder="Size, Storage, RAM…" required/>
+        {priceTable}
       </>}<Field label="Image URLs — one per line, up to 5"><textarea value={images} onChange={e => setImages(e.target.value)} placeholder="https://…"/></Field><Field label={uploading ? 'Uploading…' : 'Or upload a photo (max 5 MB) — the NTSA logo is stamped on automatically'} type="file" accept="image/png,image/jpeg,image/webp" disabled={uploading} onChange={async e => { if (!e.target.files[0]) return; setUploading(true); try { if (images.split('\n').filter(Boolean).length >= 5) throw new Error('Maximum five images'); const form = new FormData(); form.append('image', e.target.files[0]); const r = await api('/admin/images', { method: 'POST', body: form }); setImages(v => [v, r.url].filter(Boolean).join('\n')); } catch (err) { setError(err.message); } finally { setUploading(false); } }}/>
       <Field label="Additional details — anything that doesn't fit a field above, e.g. a bag's capacity">
         <div className="attribute-rows">
@@ -701,7 +704,7 @@ function Editor({ type, data, categories, busy, onSubmit }) {
       {/* Hidden behind a button: most products are plain new stock. */}
       {!allowsUsedStock && !showCondition ? null : !showCondition ? <button type="button" className="button secondary" onClick={() => setShowCondition(true)}>Not brand-new stock? (refurbished / open box)</button> : <>
         <Field label="Condition"><select name="condition" value={condition} onChange={e => setCondition(e.target.value)}><option value="NEW">New</option><option value="REFURBISHED">Refurbished</option><option value="OPEN_BOX">Open box — unused, box opened</option><option value="USED">Used</option></select></Field>
-        {gradeMode && <Field label="Condition grades — tick the ones you're selling. The shopper picks one and pays that grade's price."><div className="grade-picker">{GRADES.map(g => <label key={g} className="grade-chip"><input type="checkbox" checked={sizeList.includes(g)} onChange={() => toggleGrade(g)}/>{g}</label>)}</div></Field>}
+        {gradeMode && <><Field label="Condition grades — tick the ones you're selling. The shopper picks one and pays that grade's price."><div className="grade-picker">{GRADES.map(g => <label key={g} className="grade-chip"><input type="checkbox" checked={sizeList.includes(g)} onChange={() => toggleGrade(g)}/>{g}</label>)}</div></Field>{priceTable}</>}
         <Field label="Condition note — shown to the shopper (optional)" name="conditionNote" defaultValue={data?.conditionNote || ''} maxLength={200} placeholder="e.g. Box opened for testing, product unused"/>
       </>}</>}
     {type === 'Banners' && <>
