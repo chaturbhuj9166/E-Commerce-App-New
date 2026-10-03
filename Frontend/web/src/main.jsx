@@ -93,18 +93,40 @@ function App() {
   }
   useEffect(() => { if (session) load(); }, [session]);
   useEffect(() => { if (toast) { const timer = setTimeout(() => setToast(''), 4500); return () => clearTimeout(timer); } }, [toast]);
-  // Keeps every screen live without a manual refresh. Paused while a modal is
-  // open so a background reload never yanks the form out from under someone
-  // mid-edit, and skipped if the last poll is still in flight.
+  // Keeps every screen live without a manual refresh -- but only what other
+  // people change (orders, the pack queue, notifications...), not the whole
+  // workspace, and only in the tab that's actually on screen: every panel on
+  // one machine shares one IP, and the API rate-limits per IP. Paused while a
+  // modal is open so a reload never yanks a form out from under someone.
+  async function refresh() {
+    const role = me?.role;
+    if (role === 'PACKING') {
+      const [queue, done, notes] = await Promise.all([api('/packing/orders'), api('/packing/orders?status=PACKED'), api('/notifications')]);
+      setToPack(queue); setPacked(done); setNotifications(notes);
+    } else if (role === 'SALES') {
+      const [apps, notes] = await Promise.all([api('/sales/applications'), api('/notifications')]);
+      setApplications(apps); setNotifications(notes);
+    } else if (role === 'ADMIN') {
+      const [o, notes, queue, r, apps, rep] = await Promise.all([api('/orders'), api('/notifications'), api('/packing/orders'), api('/admin/refunds'), api('/admin/seller-applications'), api(`/admin/reports?days=${reportsDays}`)]);
+      setOrders(o); setNotifications(notes); setToPack(queue); setRefunds(r); setApplications(apps); setReports(rep);
+    } else if (role) {
+      setOrders(await api('/orders'));
+    }
+  }
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
   const pollingRef = useRef(false);
   useEffect(() => {
     if (!session) return;
     const id = setInterval(async () => {
-      if (pollingRef.current || modal) return;
+      if (pollingRef.current || modal || document.hidden) return;
       pollingRef.current = true;
-      try { await load(); } finally { pollingRef.current = false; }
-    }, 5000);
-    return () => clearInterval(id);
+      // A missed background poll isn't worth an error banner; the next one retries.
+      try { await refreshRef.current(); } catch {} finally { pollingRef.current = false; }
+    }, 10000);
+    const onShow = () => { if (!document.hidden && !modal) refreshRef.current().catch(() => {}); };
+    document.addEventListener('visibilitychange', onShow);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onShow); };
   }, [session, modal]);
   async function action(fn, message = 'Changes saved') {
     if (busy) return; setBusy(true); setError('');

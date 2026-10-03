@@ -39,18 +39,27 @@ function App() {
   }
   useEffect(() => { if (session) load(); }, [session]);
   useEffect(() => { if (toast) { const timer = setTimeout(() => setToast(''), 4500); return () => clearTimeout(timer); } }, [toast]);
-  // Keeps every page live without a manual refresh. Paused while a modal is
-  // open so a background reload never yanks a form out from under someone
-  // mid-edit, and skipped if the last poll is still in flight.
+  // Keeps every page live without a manual refresh -- orders and the summary
+  // are what change under a seller, and only in the tab that's on screen (the
+  // API rate-limits per IP). Paused while a modal is open so a reload never
+  // yanks a form out from under someone mid-edit.
+  async function refresh() {
+    const [o, s] = await Promise.all([api('/seller/orders'), api('/seller/summary')]);
+    setOrders(o); setSummary(s);
+  }
   const pollingRef = useRef(false);
   useEffect(() => {
     if (!session) return;
-    const id = setInterval(async () => {
-      if (pollingRef.current || modal || cancelOrderId) return;
+    const busyNow = () => pollingRef.current || modal || cancelOrderId || document.hidden;
+    const tick = async () => {
+      if (busyNow()) return;
       pollingRef.current = true;
-      try { await load(); } finally { pollingRef.current = false; }
-    }, 5000);
-    return () => clearInterval(id);
+      // A missed background poll isn't worth an error banner; the next one retries.
+      try { await refresh(); } catch {} finally { pollingRef.current = false; }
+    };
+    const id = setInterval(tick, 10000);
+    document.addEventListener('visibilitychange', tick);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', tick); };
   }, [session, modal, cancelOrderId]);
   async function action(fn, message = 'Changes saved') {
     if (busy) return; setBusy(true); setError('');
