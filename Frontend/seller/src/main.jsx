@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LayoutDashboard, Package, ShoppingBag, LogOut, Plus, ArrowUpRight, ChevronRight, Check, Menu, ShieldCheck, Wallet, Store, Search, BadgeCheck, Truck, Image, X, Percent, PackageCheck } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, LogOut, Plus, ArrowUpRight, ChevronRight, Check, Menu, ShieldCheck, Wallet, Store, Search, BadgeCheck, Truck, Image, X, Percent, PackageCheck, BarChart3, PieChart } from 'lucide-react';
 import { api, money, paise, suggestCategory } from './api';
 import { Button, Field, PasswordField, Badge, Empty, Modal, Stat, ProductImage, CONDITION_LABEL } from './ui';
 import './style.css';
+
+// The refurbished/used grades a shopper can be offered, cheapest intent first.
+const GRADES = ['Fair', 'Good', 'Superb'];
 
 /// The seller panel: its own site, signed into with the username and
 /// password the NTSA admin hands out. A shop only ever sees its own stock
@@ -120,6 +123,16 @@ function App() {
               <Stat icon={ShoppingBag} label="Pieces sold" value={summary?.piecesSold ?? 0} note={`Across ${summary?.orders ?? 0} order(s)`}/>
               <Stat icon={Package} label="Products listed" value={summary?.products ?? 0} note={`${summary?.outOfStock ?? 0} out of stock`}/>
             </div>
+            <div className="chart-grid">
+              <section className="panel">
+                <div className="panel-heading"><div><h2>Sales, last 14 days</h2><p>What buyers ordered from your shop each day</p></div><BarChart3 size={20}/></div>
+                <SalesChart orders={orders}/>
+              </section>
+              <section className="panel">
+                <div className="panel-heading"><div><h2>Order status</h2><p>Where your orders stand right now</p></div><PieChart size={20}/></div>
+                <StatusDonut orders={orders}/>
+              </section>
+            </div>
             <div className="overview-grid">
               <section className="panel">
                 <div className="panel-heading"><div><h2>Recent orders</h2><p>Your latest sales</p></div><button className="text-button" onClick={() => go('My orders')}>View all<ArrowUpRight size={14}/></button></div>
@@ -202,6 +215,45 @@ function App() {
   </div>;
 }
 
+// A dependency-free bar chart of the last 14 days' sales, drawn straight from
+// the seller's own order lines (gross value, cancelled lines left out). Kept as
+// inline SVG so the seller panel stays a tiny bundle with no chart library.
+function SalesChart({ orders }) {
+  const days = [];
+  for (let i = 13; i >= 0; i--) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i); days.push(d); }
+  const key = d => new Date(d).toISOString().slice(0, 10);
+  const totals = Object.create(null);
+  for (const o of orders) if (o.status !== 'CANCELLED') totals[key(o.placedAt)] = (totals[key(o.placedAt)] || 0) + (o.grossPaise ?? o.unitPaise * o.quantity);
+  const data = days.map(d => ({ d, paise: totals[key(d)] || 0 }));
+  const max = Math.max(1, ...data.map(x => x.paise));
+  const total = data.reduce((s, x) => s + x.paise, 0);
+  if (!total) return <Empty text="No sales in the last 14 days yet"/>;
+  return <div className="bar-chart">
+    <div className="bar-chart-total">{money(total)}<small>total, last 14 days</small></div>
+    <div className="bars">{data.map((x, i) => <div key={i} className="bar-col" title={`${x.d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}: ${money(x.paise)}`}>
+      <div className="bar" style={{ height: `${Math.round((x.paise / max) * 100)}%` }}/>
+      {(i % 2 === 0) && <small>{x.d.getDate()}</small>}
+    </div>)}</div>
+  </div>;
+}
+// Order-status mix as an SVG donut, one order counted once (by its id).
+function StatusDonut({ orders }) {
+  const COLORS = { PLACED: '#e0a63a', PACKED: '#3f86c7', DELIVERED: '#499b76', CANCELLED: '#b4544b' };
+  const seen = new Set(), counts = {};
+  for (const o of orders) { if (seen.has(o.orderId)) continue; seen.add(o.orderId); counts[o.status] = (counts[o.status] || 0) + 1; }
+  const entries = Object.entries(counts).filter(([, n]) => n > 0);
+  const total = entries.reduce((s, [, n]) => s + n, 0);
+  if (!total) return <Empty text="No orders yet"/>;
+  const R = 54, C = 2 * Math.PI * R; let offset = 0;
+  return <div className="donut-wrap">
+    <svg viewBox="0 0 140 140" className="donut">
+      {entries.map(([st, n]) => { const frac = n / total, dash = `${frac * C} ${C}`, el = <circle key={st} cx="70" cy="70" r={R} fill="none" stroke={COLORS[st] || '#9aa8b0'} strokeWidth="18" strokeDasharray={dash} strokeDashoffset={-offset} transform="rotate(-90 70 70)"/>; offset += frac * C; return el; })}
+      <text x="70" y="66" textAnchor="middle" className="donut-num">{total}</text>
+      <text x="70" y="84" textAnchor="middle" className="donut-lbl">orders</text>
+    </svg>
+    <div className="donut-legend">{entries.map(([st, n]) => <div key={st} className="legend-row"><span className="dot" style={{ background: COLORS[st] || '#9aa8b0' }}/>{st.charAt(0) + st.slice(1).toLowerCase().replace('_', ' ')}<strong>{n}</strong></div>)}</div>
+  </div>;
+}
 function OrderTable({ orders, full, onCancel }) {
   return orders.length ? <div className="table-scroll"><table>
     <thead><tr><th>Item</th><th>Order</th>{full && <th>Customer</th>}<th>Qty</th><th>Order value</th>{full && <th>You earn</th>}<th>Status</th>{full && onCancel && <th>Actions</th>}</tr></thead>
@@ -259,6 +311,12 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
   const [images, setImages] = useState(data?.images?.join('\n') || ''), [uploading, setUploading] = useState(false), [error, setError] = useState('');
   const [categoryId, setCategoryId] = useState(data?.categoryId || '');
   const [showCondition, setShowCondition] = useState(!!data?.condition && data.condition !== 'NEW');
+  const [condition, setCondition] = useState(data?.condition || 'NEW');
+  // A refurbished/used item can be listed in grades the shopper picks between,
+  // each its own price (Superb costs more than Fair). The grades ride on the
+  // generic option slot -- the app already lets a shopper pick an option and
+  // charges its price -- just labelled "Condition" instead of "Size".
+  const gradeMode = showCondition && condition !== 'NEW';
   const allowsUsedStock = !!categories.find(c => c.id === categoryId)?.allowsUsedStock;
   const category = categories.find(c => c.id === categoryId);
   // A free, offline nudge from the product's own name/description, so a
@@ -270,6 +328,12 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
   const sizeList = sizes.split(',').map(x => x.trim()).filter(Boolean);
   const [sizePrices, setSizePrices] = useState(() => Object.fromEntries(Object.entries(data?.sizePrices || {}).map(([k, v]) => [k, { retail: v.pricePaise / 100, mrp: v.mrpPaise ? v.mrpPaise / 100 : '' }])));
   const setSizePrice = (size, key, value) => setSizePrices(p => ({ ...p, [size]: { ...p[size], [key]: value } }));
+  // Grades live in the same list as options; keep them in Fair→Superb order.
+  const toggleGrade = g => setSizes(prev => {
+    const picked = prev.split(',').map(x => x.trim()).filter(Boolean);
+    const next = picked.includes(g) ? picked.filter(x => x !== g) : [...picked, g];
+    return GRADES.filter(x => next.includes(x)).join(', ');
+  });
   const [colors, setColors] = useState(data?.colors?.join(', ') || '');
   const colorList = colors.split(',').map(x => x.trim()).filter(Boolean);
   const [colorExtras, setColorExtras] = useState(() => Object.fromEntries(Object.entries(data?.colorExtraPaise || {}).map(([k, v]) => [k, v / 100])));
@@ -310,12 +374,12 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
         stock: Number(f.stock), categoryId: f.categoryId,
         images: images.split('\n').map(x => x.trim()).filter(Boolean),
         colors: colorList,
-        sizes: sizeList, sizeLabel: f.sizeLabel?.trim() || 'Size',
+        sizes: sizeList, sizeLabel: gradeMode ? 'Condition' : (f.sizeLabel?.trim() || 'Size'),
         sizePrices: Object.keys(optionPrices).length ? optionPrices : null,
         colorExtraPaise: Object.keys(colorExtraPaise).length ? colorExtraPaise : null,
         colorImages: Object.keys(colorImagesOut).length ? colorImagesOut : null,
         attributes: [], audience: 'RETAIL',
-        condition: f.condition || 'NEW', conditionNote: f.conditionNote?.trim() || null,
+        condition, conditionNote: f.conditionNote?.trim() || null,
       });
     } catch (err) { setError(err.message); }
   }}>
@@ -339,7 +403,7 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
     {category && <p className="muted">Anything in {category.name} can be returned within {category.refundWindowHours} hours. NTSA sets that per category.</p>}
     <div className="form-grid">
       <Field label="Colours — comma separated, optional" name="colors" value={colors} onChange={e => setColors(e.target.value)} placeholder="Black, White, Blue"/>
-      <Field label="Options (sizes, storage…) — comma separated, optional" name="sizes" value={sizes} onChange={e => setSizes(e.target.value)} placeholder="6, 7, 8  or  128GB, 256GB"/>
+      {!gradeMode && <Field label="Options (sizes, storage…) — comma separated, optional" name="sizes" value={sizes} onChange={e => setSizes(e.target.value)} placeholder="6, 7, 8  or  128GB, 256GB"/>}
     </div>
     {colorList.length > 0 && <Field label="Colour price difference — optional. What a colour costs on top of the price above; leave blank when it costs the same.">
       <div className="attribute-rows">
@@ -360,8 +424,8 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
       </div>
     </Field>}
     {sizeList.length > 0 && <>
-      <Field label="Option name shown to shoppers" name="sizeLabel" defaultValue={data?.sizeLabel || 'Size'} maxLength={30} placeholder="Size, Storage, Weight…" required/>
-      <Field label="Price per option — a bigger option should cost more. Type what it costs extra and the price fills in.">
+      {!gradeMode && <Field label="Option name shown to shoppers" name="sizeLabel" defaultValue={data?.sizeLabel || 'Size'} maxLength={30} placeholder="Size, Storage, Weight…" required/>}
+      <Field label={gradeMode ? 'Price per grade — Superb should cost more than Fair. Type what it costs extra and the price fills in.' : 'Price per option — a bigger option should cost more. Type what it costs extra and the price fills in.'}>
         <div className="attribute-rows">
           {sizeList.map(s => <div className="option-price-row" key={s}>
             <strong>{s}</strong>
@@ -371,9 +435,9 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
           </div>)}
         </div>
         {sizeList.some(s => String(sizePrices[s]?.retail ?? '').trim()) && sizeList.some(s => !String(sizePrices[s]?.retail ?? '').trim())
-          ? <small className="danger-text">Price every option, or clear them all — a half-filled list is refused.</small>
+          ? <small className="danger-text">Price every {gradeMode ? 'grade' : 'option'}, or clear them all — a half-filled list is refused.</small>
           : sizeList.every(s => !String(sizePrices[s]?.retail ?? '').trim())
-            ? <small>Every option costs the same right now. Is the bigger one really the same price?</small>
+            ? <small>Every {gradeMode ? 'grade' : 'option'} costs the same right now. Is the better one really the same price?</small>
             : null}
       </Field>
     </>}
@@ -391,7 +455,10 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
     {!allowsUsedStock && !showCondition ? null : !showCondition
       ? <button type="button" className="button secondary" onClick={() => setShowCondition(true)}>Not brand-new stock? (refurbished / open box)</button>
       : <>
-        <Field label="Condition"><select name="condition" defaultValue={data?.condition || 'NEW'}><option value="NEW">New</option><option value="REFURBISHED">Refurbished</option><option value="OPEN_BOX">Open box — unused, box opened</option><option value="USED">Used</option></select></Field>
+        <Field label="Condition"><select name="condition" value={condition} onChange={e => setCondition(e.target.value)}><option value="NEW">New</option><option value="REFURBISHED">Refurbished</option><option value="OPEN_BOX">Open box — unused, box opened</option><option value="USED">Used</option></select></Field>
+        {gradeMode && <Field label="Condition grades — tick the ones you're selling. The shopper picks one and pays that grade's price.">
+          <div className="grade-picker">{GRADES.map(g => <label key={g} className="grade-chip"><input type="checkbox" checked={sizeList.includes(g)} onChange={() => toggleGrade(g)}/>{g}</label>)}</div>
+        </Field>}
         <Field label="Condition note — shown to the shopper (optional)" name="conditionNote" defaultValue={data?.conditionNote || ''} maxLength={200} placeholder="e.g. Box opened for testing, product unused"/>
       </>}
     {error && <div role="alert" className="alert">{error}</div>}
