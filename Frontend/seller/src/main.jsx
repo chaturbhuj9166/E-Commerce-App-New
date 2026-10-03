@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LayoutDashboard, Package, ShoppingBag, LogOut, Plus, ArrowUpRight, ChevronRight, Check, Menu, ShieldCheck, Wallet, Store, Search, BadgeCheck, Truck, Image, X, Percent } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, LogOut, Plus, ArrowUpRight, ChevronRight, Check, Menu, ShieldCheck, Wallet, Store, Search, BadgeCheck, Truck, Image, X, Percent, PackageCheck } from 'lucide-react';
 import { api, money, paise, suggestCategory } from './api';
 import { Button, Field, PasswordField, Badge, Empty, Modal, Stat, ProductImage, CONDITION_LABEL } from './ui';
 import './style.css';
@@ -27,6 +27,7 @@ function App() {
   const [products, setProducts] = useState([]), [orders, setOrders] = useState([]), [summary, setSummary] = useState(null), [categories, setCategories] = useState([]);
   const [error, setError] = useState(''), [toast, setToast] = useState(''), [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false), [modal, setModal] = useState(null), [query, setQuery] = useState(''), [mobileNav, setMobileNav] = useState(false);
+  const [cancelOrderId, setCancelOrderId] = useState(null);
 
   function logout() { sessionStorage.removeItem('ntsa-token'); setSession(null); setMe(null); setModal(null); setError(''); }
   async function load() {
@@ -38,13 +39,29 @@ function App() {
   }
   useEffect(() => { if (session) load(); }, [session]);
   useEffect(() => { if (toast) { const timer = setTimeout(() => setToast(''), 4500); return () => clearTimeout(timer); } }, [toast]);
+  // Keeps every page live without a manual refresh. Paused while a modal is
+  // open so a background reload never yanks a form out from under someone
+  // mid-edit, and skipped if the last poll is still in flight.
+  const pollingRef = useRef(false);
+  useEffect(() => {
+    if (!session) return;
+    const id = setInterval(async () => {
+      if (pollingRef.current || modal || cancelOrderId) return;
+      pollingRef.current = true;
+      try { await load(); } finally { pollingRef.current = false; }
+    }, 5000);
+    return () => clearInterval(id);
+  }, [session, modal, cancelOrderId]);
   async function action(fn, message = 'Changes saved') {
     if (busy) return; setBusy(true); setError('');
     try { await fn(); setToast(message); await load(); setModal(null); } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
 
   if (!session) return <Login onLogin={token => { sessionStorage.setItem('ntsa-token', token); setSession(token); }}/>;
-  const nav = [['Overview', LayoutDashboard], ['My products', Package], ['My orders', ShoppingBag]];
+  // A line needs packing once it's PLACED and this shop hasn't ticked it off
+  // yet -- NTSA's own stock never shows up here, only ever the seller's own.
+  const toPack = orders.filter(o => o.status === 'PLACED' && !o.packedAt);
+  const nav = [['Overview', LayoutDashboard], ['My products', Package], ['My orders', ShoppingBag], ['To pack', PackageCheck]];
   const shown = products.filter(p => `${p.name} ${p.category?.name}`.toLowerCase().includes(query.toLowerCase()));
   function go(name) { setPage(name); setQuery(''); setMobileNav(false); }
 
@@ -52,7 +69,7 @@ function App() {
     <aside className={mobileNav ? 'sidebar open' : 'sidebar'}>
       <div className="brand"><img className="brand-logo" src="/ntsa_logo.png" alt="NTSA"/></div>
       <div className="workspace-label">SELLER WORKSPACE</div>
-      <nav>{nav.map(([name, Icon]) => <button key={name} className={page === name ? 'nav-item active' : 'nav-item'} onClick={() => go(name)}><Icon size={19}/><span>{name}</span>{name === 'My orders' && orders.length > 0 && <small>{orders.length}</small>}</button>)}</nav>
+      <nav>{nav.map(([name, Icon]) => <button key={name} className={page === name ? 'nav-item active' : 'nav-item'} onClick={() => go(name)}><Icon size={19}/><span>{name}</span>{name === 'My orders' && orders.length > 0 && <small>{orders.length}</small>}{name === 'To pack' && toPack.length > 0 && <small>{toPack.length}</small>}</button>)}</nav>
       <div className="sidebar-note"><ShieldCheck size={24}/><strong>Your shop on NTSA.</strong><p>Add what you sell, and watch the orders come in.</p></div>
       <button className="nav-item signout" onClick={logout}><LogOut size={18}/>Sign out</button>
     </aside>
@@ -133,7 +150,21 @@ function App() {
 
           {page === 'My orders' && <section className="panel">
             <div className="panel-heading"><div><h2>My orders <span className="count">{orders.length}</span></h2><p>Every line a buyer has ordered from your shop. NTSA packs and delivers.</p></div><button className="text-button" onClick={load}>Refresh</button></div>
-            <OrderTable orders={orders} full/>
+            <OrderTable orders={orders} full onCancel={setCancelOrderId}/>
+          </section>}
+
+          {page === 'To pack' && <section className="panel">
+            <div className="panel-heading"><div><h2>To pack <span className="count">{toPack.length}</span></h2><p>Pack your own lines and tick them off. NTSA still delivers everything.</p></div><button className="text-button" onClick={load}>Refresh</button></div>
+            {toPack.length ? <div className="table-scroll"><table>
+              <thead><tr><th>Item</th><th>Order</th><th>Customer</th><th>Qty</th><th>Action</th></tr></thead>
+              <tbody>{toPack.map(o => <tr key={o.id}>
+                <td><div className="product-cell">{o.image ? <img className="product-image" src={o.image} alt=""/> : <div className="product-image placeholder"><Package/></div>}<div><strong>{o.name}</strong>{(o.size || o.color) && <small>{[o.size, o.color].filter(Boolean).join(' · ')}</small>}</div></div></td>
+                <td><strong>#{o.orderId.slice(-8).toUpperCase()}</strong><small>{new Date(o.placedAt).toLocaleDateString('en-IN')}</small></td>
+                <td>{o.buyerName ? <><strong>{o.buyerName}</strong>{o.address && <small>{o.address.phone}<br/>{o.address.line1}, {o.address.city}, {o.address.state} {o.address.postalCode}</small>}</> : <span className="muted">—</span>}</td>
+                <td>{o.quantity}</td>
+                <td><Button disabled={busy} onClick={() => action(() => api(`/seller/orders/${o.id}/pack`, { method: 'POST' }), 'Marked packed')}><Check size={16}/>Mark packed</Button></td>
+              </tr>)}</tbody>
+            </table></div> : <Empty text="Nothing waiting on you right now"/>}
           </section>}
         </>}
         <footer>NTSA <span>·</span> Seller panel<span className="footer-right">Your shop, your customers</span></footer>
@@ -147,20 +178,33 @@ function App() {
         modal.data ? 'Product updated' : 'Product added',
       )}/>
     </Modal>}
+    {cancelOrderId && <Modal title="Cancel this order?" close={() => !busy && setCancelOrderId(null)}>
+      {error && <div role="alert" className="alert">{error}</div>}
+      <p className="muted">Only works when every line in this order is your own stock. Stock will be put back.</p>
+      <form className="editor" onSubmit={e => {
+        e.preventDefault();
+        const reason = new FormData(e.target).get('reason');
+        action(async () => { await api(`/seller/orders/${cancelOrderId}/cancel`, { method: 'POST', body: { reason } }); setCancelOrderId(null); }, 'Order cancelled, stock put back');
+      }}>
+        <Field label="Why is this order being cancelled?"><textarea name="reason" required maxLength={300} rows={2} placeholder="e.g. Out of stock"/></Field>
+        <div style={{ display: 'flex', gap: 10 }}><Button secondary type="button" onClick={() => setCancelOrderId(null)}>Keep order</Button><Button disabled={busy}>Cancel this order</Button></div>
+      </form>
+    </Modal>}
   </div>;
 }
 
-function OrderTable({ orders, full }) {
+function OrderTable({ orders, full, onCancel }) {
   return orders.length ? <div className="table-scroll"><table>
-    <thead><tr><th>Item</th><th>Order</th>{full && <th>Customer</th>}<th>Qty</th><th>Order value</th>{full && <th>You earn</th>}<th>Status</th></tr></thead>
+    <thead><tr><th>Item</th><th>Order</th>{full && <th>Customer</th>}<th>Qty</th><th>Order value</th>{full && <th>You earn</th>}<th>Status</th>{full && onCancel && <th>Actions</th>}</tr></thead>
     <tbody>{orders.map(o => <tr key={o.id}>
       <td><div className="product-cell">{o.image ? <img className="product-image" src={o.image} alt=""/> : <div className="product-image placeholder"><Package/></div>}<div><strong>{o.name}</strong>{(o.size || o.color) && <small>{[o.size, o.color].filter(Boolean).join(' · ')}</small>}</div></div></td>
       <td><strong>#{o.orderId.slice(-8).toUpperCase()}</strong><small>{full ? new Date(o.placedAt).toLocaleDateString('en-IN') : `${o.buyerName || o.buyer} · ${new Date(o.placedAt).toLocaleDateString('en-IN')}`}</small></td>
-      {full && <td>{o.buyerName || <span className="muted">—</span>}</td>}
+      {full && <td>{o.buyerName ? <><strong>{o.buyerName}</strong>{o.address && <small>{o.address.phone}<br/>{o.address.line1}, {o.address.city}, {o.address.state} {o.address.postalCode}</small>}</> : <span className="muted">—</span>}</td>}
       <td>{o.quantity}</td>
       <td>{money(o.grossPaise ?? o.unitPaise * o.quantity)}{full && <small>{money(o.unitPaise)} each</small>}</td>
       {full && <td>{money(o.netPaise)}<small>{money(o.commissionPaise)} commission ({o.commissionPercent}%)</small></td>}
       <td><Badge>{o.status}</Badge></td>
+      {full && onCancel && <td>{['PENDING_PAYMENT', 'PLACED'].includes(o.status) && <button className="danger-text" onClick={() => onCancel(o.orderId)}>Cancel order</button>}</td>}
     </tr>)}</tbody>
   </table></div> : <Empty text="Your first order will show up here"/>;
 }

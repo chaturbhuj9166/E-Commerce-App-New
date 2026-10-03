@@ -365,6 +365,10 @@ model OrderItem {
   // Copied from the product when the order is placed, so a seller's sales
   // stay theirs even if the product is edited or removed later.
   sellerId String?
+  // When this specific line was packed -- a seller's own stock is packed
+  // by the seller, NTSA's own stock by the packing team. The order as a
+  // whole only reaches PACKED once every line in it does, whoever packs it.
+  packedAt DateTime?
   refundWindowHours Int
   refundExpiresAt DateTime?
   refundEligible Boolean @default(false)

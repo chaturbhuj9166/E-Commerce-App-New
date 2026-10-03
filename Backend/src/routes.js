@@ -255,7 +255,7 @@ router.delete('/notifications/:id', panel, async (req, res) => {
 router.post('/panel/images', panel, multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => res.status(201).json(await uploadImage(req.file)));
 
 // Packing team: what to pack, and marking it packed.
-const packingInclude = { items: true };
+const packingInclude = { items: { include: { seller: { select: { shopName: true } } } } };
 router.get('/packing/orders', packing, async (req, res) => {
   const { status = 'PLACED' } = z.object({ status: z.enum(['PLACED', 'PACKED', 'CANCELLED']).optional() }).parse(req.query);
   const orders = await db.order.findMany({ where: { status }, include: { ...packingInclude, user: { select: { name: true, phone: true } }, vendor: { select: { name: true, phone: true } } }, orderBy: { createdAt: 'asc' }, take: 200 });
@@ -684,9 +684,32 @@ router.get('/seller/orders', seller, async (req, res) => {
     const grossPaise = item.unitPaise * item.quantity;
     const commissionPaise = Math.round(grossPaise * commissionPercent / 100);
     return { ...item, image: product.images[0] ?? null, orderId: order.id, status: order.status, placedAt: order.createdAt,
-      buyerName: order.address?.name || null, buyer: order.vendorId ? 'Wholesale' : 'Customer',
+      buyerName: order.address?.name || null, buyer: order.vendorId ? 'Wholesale' : 'Customer', address: order.address || null,
       grossPaise, commissionPercent, commissionPaise, netPaise: grossPaise - commissionPaise };
   }));
+});
+// Packing one of the seller's own lines. NTSA still delivers everything --
+// this only means "my part is ready", same as the packing team ticking off
+// its own lines; the order moves to PACKED once every line is.
+router.post('/seller/orders/:itemId/pack', seller, async (req, res) => {
+  const item = await db.orderItem.findUnique({ where: { id: req.params.itemId }, include: { order: { select: { status: true } } } });
+  requireThat(item && item.sellerId === req.actor.id, 404, 'Order item not found');
+  requireThat(item.order.status === 'PLACED', 400, 'This order is not ready to pack, or has already moved past packing');
+  requireThat(!item.packedAt, 409, 'Already marked packed');
+  const { order, ...updated } = await db.orderItem.update({ where: { id: item.id }, data: { packedAt: new Date() } });
+  res.json(updated);
+});
+// A seller can only cancel an order that is entirely their own -- see
+// cancelOrder() for why a mixed cart isn't theirs to call off.
+router.post('/seller/orders/:id/cancel', seller, async (req, res) => {
+  const { reason } = z.object({ reason: z.string().trim().min(1).max(300) }).parse(req.body);
+  const order = await cancelOrder(req.actor, req.params.id, reason);
+  const short = `#${order.id.slice(0, 10).toUpperCase()}`;
+  await Promise.all([
+    notify('ADMIN', 'ORDER_CANCELLED', 'Order cancelled', `${req.actor.account.shopName} cancelled order ${short}: ${reason}. Stock has been put back.`, order.id),
+    notify('PACKING', 'ORDER_CANCELLED', 'Do not pack this order', `Order ${short} was cancelled by the seller: ${reason}`, order.id),
+  ]);
+  res.json(order);
 });
 // What the shop has earned: cancelled orders don't count, and money is only
 // counted as earned once the order is delivered. `earnedPaise` is net, after

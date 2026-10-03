@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { LayoutDashboard, Package, Shapes, Users, User, ShoppingBag, RotateCcw, LogOut, Search, Plus, ArrowUpRight, ChevronRight, Check, Menu, X, Truck, ShieldCheck, Wallet, Store, Image, Tag, Eye, EyeOff, Bell, ClipboardList, UserPlus, BadgeCheck, UserCog, MapPin, Paperclip, Settings as SettingsIcon, FileText, BarChart3 } from 'lucide-react';
 import { api, money, paise, openInvoice, suggestCategory, SELLER_PANEL_URL } from './api';
@@ -59,9 +59,9 @@ function App() {
       setProducts(p); setCategories(c); setOrders(o);
       if (account.role === 'ADMIN') setWholesaleProducts(await api('/admin/products?audience=WHOLESALE'));
       if (account.role === 'ADMIN') {
-        const [v, r, b, cp, st, apps, notes, queue, pins, stats, rules, cfg, custs, rep, sls] = await Promise.all([api('/admin/vendors'), api('/admin/refunds'), api('/admin/banners'), api('/admin/coupons'), api('/admin/staff'), api('/admin/seller-applications'), api('/notifications'), api('/packing/orders'), api('/admin/blocked-pincodes'), api('/admin/pincode-stats'), api('/admin/delivery-rules'), api('/admin/settings'), api('/admin/customers'), api('/admin/reports?days=30'), api('/admin/sellers')]);
+        const [v, r, b, cp, st, apps, notes, queue, pins, stats, rules, cfg, custs, rep, sls] = await Promise.all([api('/admin/vendors'), api('/admin/refunds'), api('/admin/banners'), api('/admin/coupons'), api('/admin/staff'), api('/admin/seller-applications'), api('/notifications'), api('/packing/orders'), api('/admin/blocked-pincodes'), api('/admin/pincode-stats'), api('/admin/delivery-rules'), api('/admin/settings'), api('/admin/customers'), api(`/admin/reports?days=${reportsDays}`), api('/admin/sellers')]);
         setVendors(v); setRefunds(r); setBanners(b); setCoupons(cp); setStaff(st); setApplications(apps); setNotifications(notes); setToPack(queue); setBlockedPins(pins); setPinStats(stats); setDeliveryRules(rules); setSettings(cfg);
-        setCustomers(custs); setReports(rep); setReportsDays(30); setSellers(sls);
+        setCustomers(custs); setReports(rep); setSellers(sls);
       }
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   }
@@ -91,6 +91,19 @@ function App() {
   }
   useEffect(() => { if (session) load(); }, [session]);
   useEffect(() => { if (toast) { const timer = setTimeout(() => setToast(''), 4500); return () => clearTimeout(timer); } }, [toast]);
+  // Keeps every screen live without a manual refresh. Paused while a modal is
+  // open so a background reload never yanks the form out from under someone
+  // mid-edit, and skipped if the last poll is still in flight.
+  const pollingRef = useRef(false);
+  useEffect(() => {
+    if (!session) return;
+    const id = setInterval(async () => {
+      if (pollingRef.current || modal) return;
+      pollingRef.current = true;
+      try { await load(); } finally { pollingRef.current = false; }
+    }, 5000);
+    return () => clearInterval(id);
+  }, [session, modal]);
   async function action(fn, message = 'Changes saved') {
     if (busy) return; setBusy(true); setError('');
     try { await fn(); setToast(message); await load(); } catch (e) { setError(e.message); } finally { setBusy(false); }
@@ -305,20 +318,25 @@ function PackSlip({ order, busy, onPacked }) {
     setInvoiceBusy(true); setInvoiceError('');
     try { await openInvoice(order.id, '/packing/orders'); } catch (e) { setInvoiceError(e.message); } finally { setInvoiceBusy(false); }
   }
+  // A seller packs their own lines from their own panel -- NTSA's lines
+  // (no seller) are implicitly ready, since packing them is this screen's
+  // whole job. The button is blocked until every seller's line is too.
+  const pendingSellers = [...new Set(order.items.filter(i => i.sellerId && !i.packedAt).map(i => i.seller?.shopName))];
   return <div className="order-detail">
     {order.status === 'CANCELLED' && <div className="alert" role="alert"><strong>CANCELLED — do not pack this order.</strong></div>}
     <div className="detail-summary"><strong>{order.vendorId ? 'Wholesale order' : 'Customer order'}</strong><Badge>{order.status}</Badge></div>
     <h3>Pack this</h3>
-    {order.items.map(i => <div key={i.id} className="line-item"><div><strong>{i.name}</strong>{(i.size || i.color) && <small className="variant">{[i.size && `Size / option: ${i.size}`, i.color && `Color: ${i.color}`].filter(Boolean).join(' · ')}</small>}</div><strong>× {i.quantity}</strong></div>)}
+    {order.items.map(i => <div key={i.id} className="line-item"><div><strong>{i.name}</strong>{(i.size || i.color) && <small className="variant">{[i.size && `Size / option: ${i.size}`, i.color && `Color: ${i.color}`].filter(Boolean).join(' · ')}</small>}<small>{i.sellerId ? (i.packedAt ? `✓ Packed by ${i.seller?.shopName}` : `Waiting on ${i.seller?.shopName} to pack this`) : 'NTSA’s own stock'}</small></div><strong>× {i.quantity}</strong></div>)}
     <div className="line-item"><strong>Total pieces</strong><strong>{order.items.reduce((s, i) => s + i.quantity, 0)}</strong></div>
     <h3>Deliver to</h3>
     <p><strong>{a.name}</strong> · {a.phone}<br/>{a.line1}, {a.city}, {a.state} {a.postalCode}</p>
     <p className="muted">Payment: {order.paymentMethod} · Order value {money(order.totalPaise)} · Placed {new Date(order.createdAt).toLocaleString('en-IN')}</p>
     {invoiceError && <div className="alert" role="alert">{invoiceError}</div>}
+    {pendingSellers.length > 0 && <p className="danger-text">Waiting on {pendingSellers.join(', ')} to pack their item{pendingSellers.length > 1 ? 's' : ''} first.</p>}
     <div style={{ display: 'flex', gap: 10, marginTop: 20, flexWrap: 'wrap' }}>
       <Button secondary onClick={() => window.print()}>Print slip</Button>
       <Button secondary disabled={invoiceBusy} onClick={viewBill}><FileText size={16}/>{invoiceBusy ? 'Opening…' : 'View bill'}</Button>
-      {order.status === 'PLACED' && <Button disabled={busy} onClick={onPacked}><Check size={16}/>Mark packed</Button>}
+      {order.status === 'PLACED' && <Button disabled={busy || pendingSellers.length > 0} onClick={onPacked}><Check size={16}/>Mark packed</Button>}
     </div>
   </div>;
 }

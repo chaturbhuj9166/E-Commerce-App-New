@@ -115,9 +115,14 @@ export async function checkout(actor, input) {
 export const CANCELLABLE_BY_BUYER = ['PENDING_PAYMENT', 'PLACED'];
 export async function cancelOrder(actor, id, reason) {
   const order = await atomic(async tx => {
+    // A seller can call off an order only when every line in it is theirs
+    // -- cancelling someone else's line (another seller's, or NTSA's own)
+    // isn't theirs to decide, so a mixed order is the admin's call instead.
     const current = actor.role === 'ADMIN'
       ? await tx.order.findUnique({ where: { id }, include: orderInclude })
-      : await ownedOrder(actor, id, tx);
+      : actor.role === 'SELLER'
+        ? await tx.order.findUnique({ where: { id }, include: orderInclude }).then(o => o?.items.length && o.items.every(i => i.sellerId === actor.id) ? o : null)
+        : await ownedOrder(actor, id, tx);
     requireThat(current, 404, 'Order not found');
     requireThat(current.status !== 'CANCELLED', 409, 'This order is already cancelled');
     requireThat(current.status !== 'DELIVERED', 400, 'A delivered order cannot be cancelled; ask for a refund instead');
@@ -146,6 +151,15 @@ export async function changeStatus(id, status) {
     const order = await tx.order.findUnique({ where: { id }, include: orderInclude });
     requireThat(order, 404, 'Order not found');
     requireThat(nextStatus(order.status, status), 400, 'Invalid status transition; delivery requires OTP');
+    if (status === 'PACKED') {
+      // Every line has to be ready, not just the ones NTSA packs itself --
+      // a seller's own stock is their line to pack. NTSA's own lines are
+      // implicitly packed the moment the whole order is, since nobody else
+      // is responsible for them.
+      const pending = [...new Set(order.items.filter(i => i.sellerId && !i.packedAt).map(i => i.seller?.shopName))];
+      requireThat(pending.length === 0, 400, `Waiting on ${pending.join(', ')} to pack their item${pending.length > 1 ? 's' : ''} first`);
+      await tx.orderItem.updateMany({ where: { orderId: id, sellerId: null, packedAt: null }, data: { packedAt: new Date() } });
+    }
     return tx.order.update({ where: { id }, data: { status }, include: orderInclude });
   });
   await notifyOrder(order.userId && await db.user.findUnique({ where: { id: order.userId } }), order);
