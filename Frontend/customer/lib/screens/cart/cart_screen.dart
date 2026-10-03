@@ -189,12 +189,12 @@ class _CartScreenState extends State<CartScreen> {
                         children: [
                           _StepperButton(
                             icon: Icons.remove,
-                            onTap: item.quantity <= 1 || cart.loading ? null : () => _run(() => cartProvider.setQuantity(item.product.id, item.quantity - 1, size: item.size, color: item.color)),
+                            onTap: item.quantity <= 1 || cart.loading ? null : () => _run(() => cartProvider.setQuantity(item.product.id, item.quantity - 1, size: item.size, color: item.color, grade: item.grade)),
                           ),
                           Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.w600))),
                           _StepperButton(
                             icon: Icons.add,
-                            onTap: cart.loading ? null : () => _run(() => cartProvider.setQuantity(item.product.id, item.quantity + 1, size: item.size, color: item.color)),
+                            onTap: cart.loading ? null : () => _run(() => cartProvider.setQuantity(item.product.id, item.quantity + 1, size: item.size, color: item.color, grade: item.grade)),
                           ),
                           const Spacer(),
                           Text(formatPaise(item.lineTotalPaise), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
@@ -206,7 +206,7 @@ class _CartScreenState extends State<CartScreen> {
               ),
               IconButton(
                 icon: Icon(Icons.delete_outline, color: AppColors.textMuted),
-                onPressed: () => _run(() => cartProvider.remove(item.product.id, size: item.size, color: item.color)),
+                onPressed: () => _run(() => cartProvider.remove(item.product.id, size: item.size, color: item.color, grade: item.grade)),
               ),
             ],
           ),

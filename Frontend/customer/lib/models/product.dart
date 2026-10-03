@@ -20,6 +20,8 @@ class Product {
     this.sizePrices = const {},
     this.colorImages = const {},
     this.colorExtraPaise = const {},
+    this.conditionGrades = const [],
+    this.conditionGradeExtraPaise = const {},
     this.attributes = const [],
     this.category,
     this.rating,
@@ -54,6 +56,11 @@ class Product {
   /// What a colour adds to the price, e.g. {"Red": 5000} for 50 rupees more.
   /// A colour that costs the same as the rest is simply absent.
   final Map<String, int> colorExtraPaise;
+  /// Condition grades the shopper picks from, e.g. ["Fair","Good","Superb"].
+  final List<String> conditionGrades;
+  /// What a grade adds to the price, e.g. {"Good": 300000}. A grade that costs
+  /// the base price (typically the cheapest) is simply absent.
+  final Map<String, int> conditionGradeExtraPaise;
   /// Extra admin-defined specs, e.g. [("Capacity", "20L")] -- shown as a
   /// "Specifications" list on the product page.
   final List<(String label, String value)> attributes;
@@ -70,7 +77,7 @@ class Product {
 
   double get price => pricePaise / 100;
   String get image => images.isNotEmpty ? images.first : '';
-  bool get hasVariants => sizes.isNotEmpty || colors.isNotEmpty;
+  bool get hasVariants => sizes.isNotEmpty || colors.isNotEmpty || conditionGrades.isNotEmpty;
   bool get isNewStock => condition == 'NEW';
   /// Short label for the badge on listings, e.g. "Refurbished".
   String get conditionLabel => const {
@@ -81,14 +88,14 @@ class Product {
 
   /// Price / MRP for a picked variant (the base price when nothing is picked
   /// yet). The option sets the price and the colour adds its extra on top.
-  int extraFor(String? color) => colorExtraPaise[color] ?? 0;
-  int priceFor(String? size, [String? color]) => (sizePrices[size]?.price ?? pricePaise) + extraFor(color);
-  int? mrpFor(String? size, [String? color]) {
+  int extraFor(String? color, [String? grade]) => (colorExtraPaise[color] ?? 0) + (conditionGradeExtraPaise[grade] ?? 0);
+  int priceFor(String? size, [String? color, String? grade]) => (sizePrices[size]?.price ?? pricePaise) + extraFor(color, grade);
+  int? mrpFor(String? size, [String? color, String? grade]) {
     final base = sizePrices.containsKey(size) ? sizePrices[size]!.mrp : mrpPaise;
-    return base == null ? null : base + extraFor(color);
+    return base == null ? null : base + extraFor(color, grade);
   }
-  int wholesaleFor(String? size, [String? color]) =>
-      (sizePrices[size]?.wholesale ?? wholesalePaise ?? (sizePrices[size]?.price ?? pricePaise)) + extraFor(color);
+  int wholesaleFor(String? size, [String? color, String? grade]) =>
+      (sizePrices[size]?.wholesale ?? wholesalePaise ?? (sizePrices[size]?.price ?? pricePaise)) + extraFor(color, grade);
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
         id: json['id'] as String,
@@ -105,6 +112,8 @@ class Product {
         sizePrices: (json['sizePrices'] as Map?)?.map((k, v) => MapEntry(k.toString(), (price: ((v as Map)['pricePaise'] as num).toInt(), mrp: (v['mrpPaise'] as num?)?.toInt(), wholesale: (v['wholesalePaise'] as num?)?.toInt()))) ?? const {},
         colorImages: (json['colorImages'] as Map?)?.map((k, v) => MapEntry(k.toString(), v.toString())) ?? const {},
         colorExtraPaise: (json['colorExtraPaise'] as Map?)?.map((k, v) => MapEntry(k.toString(), (v as num).toInt())) ?? const {},
+        conditionGrades: (json['conditionGrades'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+        conditionGradeExtraPaise: (json['conditionGradeExtraPaise'] as Map?)?.map((k, v) => MapEntry(k.toString(), (v as num).toInt())) ?? const {},
         attributes: (json['attributes'] as List?)
                 ?.map((e) => ((e as Map<String, dynamic>)['label'].toString(), e['value'].toString()))
                 .toList() ??

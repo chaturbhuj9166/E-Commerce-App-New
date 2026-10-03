@@ -28,6 +28,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   int _activeImage = 0;
   String? _selectedColor;
   String? _selectedSize;
+  String? _selectedGrade;
   // Only a customer who has actually received this product may review it
   // (Backend enforces this too on submit -- this just controls whether the
   // button shows at all, matching the client's requirement).
@@ -42,6 +43,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   bool _showColorImage = false;
   // Set when the shopper tries to buy without picking a size/option.
   bool _missingSize = false;
+  // Set when the shopper tries to buy without picking a condition grade.
+  bool _missingGrade = false;
 
   bool get _busy => _addingToCart || _buyingNow;
 
@@ -75,6 +78,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       if (firstLoad || !p.colors.contains(_selectedColor)) _selectedColor = p.colors.isNotEmpty ? p.colors.first : null;
       // No default size: shoes, phones etc. must be picked on purpose.
       if (firstLoad || !p.sizes.contains(_selectedSize)) _selectedSize = null;
+      // Likewise a condition grade (Fair / Good / Superb) must be picked.
+      if (firstLoad || !p.conditionGrades.contains(_selectedGrade)) _selectedGrade = null;
       if (_activeImage >= p.images.length) _activeImage = 0;
       if (firstLoad) _showColorImage = true;
     });
@@ -92,9 +97,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please select a ${p.sizeLabel.toLowerCase()} first')));
       return;
     }
+    if (p.conditionGrades.isNotEmpty && _selectedGrade == null) {
+      setState(() => _missingGrade = true);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a condition first')));
+      return;
+    }
     setState(() => buyNow ? _buyingNow = true : _addingToCart = true);
     try {
-      await context.read<CartProvider>().add(widget.productId, size: _selectedSize, color: _selectedColor, onlyIfMissing: buyNow);
+      await context.read<CartProvider>().add(widget.productId, size: _selectedSize, color: _selectedColor, grade: _selectedGrade, onlyIfMissing: buyNow);
       if (!mounted) return;
       if (buyNow) {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CartScreen()));
@@ -215,7 +225,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               const SizedBox(height: 6),
                               RatingStars(rating: rating, reviewCount: reviewCount, size: 14),
                               const SizedBox(height: 10),
-                              PriceTag(pricePaise: p.priceFor(_selectedSize, _selectedColor), mrpPaise: p.mrpFor(_selectedSize, _selectedColor), size: 22),
+                              PriceTag(pricePaise: p.priceFor(_selectedSize, _selectedColor, _selectedGrade), mrpPaise: p.mrpFor(_selectedSize, _selectedColor, _selectedGrade), size: 22),
                               if (p.sizePrices.isNotEmpty && _selectedSize == null)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 2),
@@ -276,6 +286,35 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   Padding(
                                     padding: const EdgeInsets.only(top: 6),
                                     child: Text('Please select a ${p.sizeLabel.toLowerCase()} to continue', style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+                                  ),
+                              ],
+                              if (p.conditionGrades.isNotEmpty) ...[
+                                const SizedBox(height: 14),
+                                Text(
+                                  _selectedGrade == null ? 'Select Condition' : 'Condition : $_selectedGrade',
+                                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: _missingGrade ? AppColors.danger : null),
+                                ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: p.conditionGrades.map((g) {
+                                    final extra = p.conditionGradeExtraPaise[g] ?? 0;
+                                    return ChoiceChip(
+                                      label: Text(extra > 0 ? '$g  (+${formatPaise(extra)})' : g),
+                                      selected: _selectedGrade == g,
+                                      side: _missingGrade ? const BorderSide(color: AppColors.danger) : null,
+                                      onSelected: (_) => setState(() {
+                                        _selectedGrade = g;
+                                        _missingGrade = false;
+                                      }),
+                                    );
+                                  }).toList(),
+                                ),
+                                if (_missingGrade)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Text('Please select a condition to continue', style: const TextStyle(color: AppColors.danger, fontSize: 12)),
                                   ),
                               ],
                               const SizedBox(height: 14),

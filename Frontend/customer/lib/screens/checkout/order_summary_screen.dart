@@ -94,7 +94,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
     });
     try {
       final order = await ApiClient.instance.post('/orders', data: {
-        'items': cart.items.where((i) => i.available).map((i) => {'productId': i.product.id, 'quantity': i.quantity, 'size': ?i.size, 'color': ?i.color}).toList(),
+        'items': cart.items.where((i) => i.available).map((i) => {'productId': i.product.id, 'quantity': i.quantity, 'size': ?i.size, 'color': ?i.color, 'grade': ?i.grade}).toList(),
         'addressId': widget.addressId,
         'paymentMethod': _backendMethod,
         if (_appliedCoupon != null) 'couponCode': _appliedCoupon!.code,

@@ -1,11 +1,12 @@
 class OrderItem {
-  OrderItem({this.id = '', required this.name, required this.quantity, required this.unitPaise, this.refundEligible = false, this.refundStatus, this.size, this.color});
+  OrderItem({this.id = '', required this.name, required this.quantity, required this.unitPaise, this.refundEligible = false, this.refundStatus, this.size, this.color, this.grade});
 
   final String id;
   final String name;
   final String? size;
   final String? color;
-  String get variantText => [?size, ?color].join(' · ');
+  final String? grade;
+  String get variantText => [?size, ?color, ?grade].join(' · ');
   final int quantity;
   final int unitPaise;
   final bool refundEligible;
@@ -21,6 +22,7 @@ class OrderItem {
         refundStatus: (json['refund'] as Map?)?['status'] as String?,
         size: json['size'] as String?,
         color: json['color'] as String?,
+        grade: json['grade'] as String?,
       );
 }
 

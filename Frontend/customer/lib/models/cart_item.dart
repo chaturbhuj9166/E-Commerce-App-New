@@ -1,13 +1,14 @@
 import 'product.dart';
 
 class CartItem {
-  CartItem({required this.product, required this.quantity, required this.unitPaise, this.mrpPaise, this.size, this.color, this.active = true});
+  CartItem({required this.product, required this.quantity, required this.unitPaise, this.mrpPaise, this.size, this.color, this.grade, this.active = true});
 
   final Product product;
   int quantity;
   /// The picked variant ("" from the API means the product has no such option).
   final String? size;
   final String? color;
+  final String? grade;
   /// Price of the picked option, worked out by the Backend.
   final int unitPaise;
   final int? mrpPaise;
@@ -21,6 +22,7 @@ class CartItem {
   String get variantText => [
         if (size != null) '${product.sizeLabel}: $size',
         if (color != null) 'Color: $color',
+        ?grade,
       ].join(' · ');
 
   factory CartItem.fromJson(Map<String, dynamic> json) {
@@ -34,6 +36,7 @@ class CartItem {
       mrpPaise: (json['mrpPaise'] as num?)?.toInt(),
       size: pick(json['size']),
       color: pick(json['color']),
+      grade: pick(json['grade']),
       active: product['active'] as bool? ?? true,
     );
   }
