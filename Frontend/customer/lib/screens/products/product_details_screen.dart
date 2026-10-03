@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:provider/provider.dart';
 import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
@@ -125,7 +126,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   icon: Icon(wishlist.contains(p.id) ? Icons.favorite : Icons.favorite_border, color: wishlist.contains(p.id) ? AppColors.danger : null),
                   onPressed: () => _toggleWishlist(p.id),
                 ),
-                IconButton(icon: const Icon(Icons.share_outlined), onPressed: () {}),
+                IconButton(
+                  icon: const Icon(Icons.share_outlined),
+                  onPressed: () {
+                    final price = (p.pricePaise / 100).toStringAsFixed(0);
+                    Clipboard.setData(ClipboardData(text: '${p.name} — ₹$price on NTSA. Shop smarter, live better.'));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Product details copied — paste it anywhere to share')));
+                  },
+                ),
               ],
       ),
       body: p == null

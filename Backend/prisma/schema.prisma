@@ -108,7 +108,21 @@ model Seller {
   applicationId String? @unique
   products Product[]
   items OrderItem[]
+  penalties SellerPenalty[]
   @@map("sellers")
+}
+// One fine the admin has docked, kept as its own row so the seller can see
+// what each penalty was for and when -- `Seller.penaltyPaise` is the sum of
+// these, and removing a row refunds that much of the total.
+model SellerPenalty {
+  id String @id @default(cuid())
+  sellerId String
+  amountPaise Int
+  reason String
+  createdAt DateTime @default(now())
+  seller Seller @relation(fields: [sellerId], references: [id])
+  @@index([sellerId, createdAt])
+  @@map("seller_penalties")
 }
 // Delivery charge slabs the admin sets, e.g. "under ₹500 costs ₹30". The
 // cheapest matching slab wins; an order above every slab ships free.
@@ -347,6 +361,10 @@ model Order {
   paymentId String? @unique
   razorpayOrderId String? @unique
   checkoutKey String @unique
+  // Set by the admin once an order is on its way: who's delivering it and
+  // when the customer can expect it. Shown on the customer's order tracking.
+  deliveryPartner String?
+  expectedDeliveryAt DateTime?
   deliveredAt DateTime?
   cancelledAt DateTime?
   // Who called it off and why, shown to the admin and on the packing slip.

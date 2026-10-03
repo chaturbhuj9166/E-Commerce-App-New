@@ -265,12 +265,6 @@ router.get('/packing/orders', packing, async (req, res) => {
   const orders = await db.order.findMany({ where: { status }, include: { ...packingInclude, user: { select: { name: true, phone: true } }, vendor: { select: { name: true, phone: true } } }, orderBy: { createdAt: 'asc' }, take: 200 });
   res.json(orders.map(({ deliveryOtpHash, deliveryOtpExpiresAt, deliveryOtpAttempts, ...o }) => o));
 });
-router.get('/packing/orders/:id', packing, async (req, res) => {
-  const order = await db.order.findUnique({ where: { id: req.params.id }, include: { ...packingInclude, user: { select: { name: true, phone: true } }, vendor: { select: { name: true, phone: true } } } });
-  requireThat(order, 404, 'Order not found');
-  const { deliveryOtpHash, deliveryOtpExpiresAt, deliveryOtpAttempts, ...safe } = order;
-  res.json(safe);
-});
 // So the packing team can print or check the same bill that ships with the
 // parcel, with the buyer's name and address on it, per the client's brief.
 router.get('/packing/orders/:id/invoice', packing, async (req, res) => {
@@ -306,7 +300,11 @@ router.get('/vendor/products', roles('VENDOR'), async (req, res) => res.json(awa
 router.get('/vendor/messages', roles('VENDOR'), async (req, res) => res.json(await db.vendorMessage.findMany({ where: { vendorId: req.actor.id }, orderBy: { createdAt: 'asc' } })));
 router.post('/vendor/messages', roles('VENDOR'), async (req, res) => {
   const { body, attachments } = vendorMessageSchema.parse(req.body);
-  res.status(201).json(await db.vendorMessage.create({ data: { vendorId: req.actor.id, sender: 'VENDOR', body, attachments } }));
+  const message = await db.vendorMessage.create({ data: { vendorId: req.actor.id, sender: 'VENDOR', body, attachments } });
+  // So the admin bell flags an incoming wholesaler message instead of it
+  // sitting unread until someone happens to open that thread.
+  await notify('ADMIN', 'VENDOR_MESSAGE', 'New wholesale message', `${req.actor.account.name} sent a message${attachments?.length ? ' with an attachment' : ''}.`, req.actor.id);
+  res.status(201).json(message);
 });
 // A photo or short clip a wholesaler attaches to the thread. Video files are
 // much bigger than product photos, so this cap is 25 MB rather than 5.
@@ -677,6 +675,19 @@ router.post('/admin/orders/:id/deliver', loginLimiter, async (req, res) => {
   const { otp } = z.object({ otp: z.string().regex(/^\d{6}$/) }).parse(req.body);
   res.json(await deliver(req.params.id, otp));
 });
+// Who's delivering an order and when it's expected -- set by the admin,
+// shown to the customer on their order tracking. Either can be cleared.
+router.patch('/admin/orders/:id/delivery', async (req, res) => {
+  const { deliveryPartner, expectedDeliveryAt } = z.object({
+    deliveryPartner: z.string().trim().max(120).nullable().optional(),
+    expectedDeliveryAt: z.string().datetime().nullable().optional(),
+  }).parse(req.body);
+  const data = {};
+  if (deliveryPartner !== undefined) data.deliveryPartner = deliveryPartner || null;
+  if (expectedDeliveryAt !== undefined) data.expectedDeliveryAt = expectedDeliveryAt ? new Date(expectedDeliveryAt) : null;
+  const order = await db.order.update({ where: { id: req.params.id }, data, include: orderInclude });
+  res.json(publicOrder(order));
+});
 // When a seller is late, the admin can tick their line off for them so the
 // order isn't stuck waiting.
 router.post('/admin/order-items/:itemId/pack', async (req, res) => {
@@ -725,14 +736,27 @@ router.post('/admin/sellers/:id/impersonate', async (req, res) => {
   requireThat(seller && !seller.deleted, 404, 'Seller not found');
   res.json({ token: tokenFor('SELLER', seller) });
 });
-// A fine for a late or mishandled order: it adds to the seller's running
-// penalty total (shown on their own earnings) and tells them why.
+// A fine for a late or mishandled order: a row the seller can read (reason
+// + date) and the running total on their account, kept in step.
 router.post('/admin/sellers/:id/penalty', async (req, res) => {
   const { amountPaise, reason } = z.object({ amountPaise: z.number().int().min(1).max(10000000), reason: z.string().trim().min(1).max(300) }).parse(req.body);
   const seller = await db.seller.findUnique({ where: { id: req.params.id } });
   requireThat(seller && !seller.deleted, 404, 'Seller not found');
-  const updated = await db.seller.update({ where: { id: req.params.id }, data: { penaltyPaise: { increment: amountPaise } } });
-  await notify('SELLER', 'PENALTY', 'A penalty was applied', `NTSA applied a penalty of ₹${(amountPaise / 100).toFixed(2)}: ${reason}. Your total penalties are now ₹${(updated.penaltyPaise / 100).toFixed(2)}.`, null);
+  const [, updated] = await db.$transaction([
+    db.sellerPenalty.create({ data: { sellerId: req.params.id, amountPaise, reason } }),
+    db.seller.update({ where: { id: req.params.id }, data: { penaltyPaise: { increment: amountPaise } } }),
+  ]);
+  res.json({ penaltyPaise: updated.penaltyPaise });
+});
+router.get('/admin/sellers/:id/penalties', async (req, res) => res.json(await db.sellerPenalty.findMany({ where: { sellerId: req.params.id }, orderBy: { createdAt: 'desc' } })));
+// Reversing a penalty gives the seller that much of the total back.
+router.delete('/admin/sellers/:id/penalties/:penaltyId', async (req, res) => {
+  const penalty = await db.sellerPenalty.findFirst({ where: { id: req.params.penaltyId, sellerId: req.params.id } });
+  requireThat(penalty, 404, 'Penalty not found');
+  const [, updated] = await db.$transaction([
+    db.sellerPenalty.delete({ where: { id: penalty.id } }),
+    db.seller.update({ where: { id: req.params.id }, data: { penaltyPaise: { decrement: penalty.amountPaise } } }),
+  ]);
   res.json({ penaltyPaise: updated.penaltyPaise });
 });
 router.get('/admin/refunds', async (req, res) => res.json(await db.refund.findMany({ include: { orderItem: { include: { order: true } } }, orderBy: { createdAt: 'desc' }, take: 200 })));
@@ -843,5 +867,8 @@ async function sellerSummaryFor(sellerId, commissionPercent, penaltyPaise = 0) {
   };
 }
 router.get('/seller/summary', seller, async (req, res) => res.json(await sellerSummaryFor(req.actor.id, req.actor.account.commissionPercent, req.actor.account.penaltyPaise)));
+// Every penalty the admin has docked this shop, with the reason, so the
+// seller knows exactly what each deduction on their earnings was for.
+router.get('/seller/penalties', seller, async (req, res) => res.json(await db.sellerPenalty.findMany({ where: { sellerId: req.actor.id }, orderBy: { createdAt: 'desc' } })));
 // Photos for the seller's own products, watermarked like every other one.
 router.post('/seller/images', seller, multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => res.status(201).json(await uploadImage(req.file, { watermark: true })));

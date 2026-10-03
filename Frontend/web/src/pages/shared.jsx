@@ -4,10 +4,14 @@ import { ArrowUpRight, Package } from 'lucide-react';
 import { money } from '../api';
 import { Badge, Empty } from '../ui';
 
+// The distinct shops an order's items belong to; empty means it's all NTSA's
+// own stock.
+export const orderSellers = items => [...new Set(items.map(i => i.sellerName).filter(Boolean))];
+export const isNtsaOwnOrder = order => orderSellers(order.items).length === 0;
 // Who an order's items actually belong to -- NTSA's own stock, one seller,
 // or several mixed in the same cart.
 function sellerSummary(items) {
-  const names = [...new Set(items.map(i => i.sellerName).filter(Boolean))];
+  const names = orderSellers(items);
   if (!names.length) return 'NTSA';
   if (names.length === 1) return names[0];
   return `${names[0]} +${names.length - 1} more`;

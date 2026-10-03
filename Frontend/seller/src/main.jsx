@@ -26,7 +26,7 @@ function App() {
     }
     return sessionStorage.getItem('ntsa-token');
   });
-  const [me, setMe] = useState(null), [page, setPage] = useState('Overview');
+  const [me, setMe] = useState(null), [page, setPage] = useState('Overview'), [penalties, setPenalties] = useState([]);
   const [products, setProducts] = useState([]), [orders, setOrders] = useState([]), [summary, setSummary] = useState(null), [categories, setCategories] = useState([]);
   const [error, setError] = useState(''), [toast, setToast] = useState(''), [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false), [modal, setModal] = useState(null), [query, setQuery] = useState(''), [mobileNav, setMobileNav] = useState(false);
@@ -36,8 +36,8 @@ function App() {
   async function load() {
     setLoading(true);
     try {
-      const [account, p, o, s, c] = await Promise.all([api('/me'), api('/seller/products'), api('/seller/orders'), api('/seller/summary'), api('/categories')]);
-      setMe(account); setProducts(p); setOrders(o); setSummary(s); setCategories(c);
+      const [account, p, o, s, c, pen] = await Promise.all([api('/me'), api('/seller/products'), api('/seller/orders'), api('/seller/summary'), api('/categories'), api('/seller/penalties')]);
+      setMe(account); setProducts(p); setOrders(o); setSummary(s); setCategories(c); setPenalties(pen);
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   }
   useEffect(() => { if (session) load(); }, [session]);
@@ -133,6 +133,12 @@ function App() {
                 <StatusDonut orders={orders}/>
               </section>
             </div>
+            {penalties.length > 0 && <section className="panel" style={{ marginBottom: 22, border: '1px solid #f0d2cc' }}>
+              <div className="panel-heading"><div><h2>Penalties</h2><p>Fines NTSA has applied, and what each was for. These are deducted from your earnings.</p></div><strong className="danger-text">{money(summary?.penaltyPaise)}</strong></div>
+              <div className="table-scroll"><table><thead><tr><th>Date</th><th>Amount</th><th>Reason</th></tr></thead>
+                <tbody>{penalties.map(p => <tr key={p.id}><td><small>{new Date(p.createdAt).toLocaleDateString('en-IN')}</small></td><td><strong className="danger-text">{money(p.amountPaise)}</strong></td><td>{p.reason}</td></tr>)}</tbody>
+              </table></div>
+            </section>}
             <div className="overview-grid">
               <section className="panel">
                 <div className="panel-heading"><div><h2>Recent orders</h2><p>Your latest sales</p></div><button className="text-button" onClick={() => go('My orders')}>View all<ArrowUpRight size={14}/></button></div>

@@ -10,7 +10,7 @@ import { ReviewsPage } from './pages/reviews';
 import { SellerInsightsPage } from './pages/seller-insights';
 import { ShipmentsPage } from './pages/shipments';
 import { ReportsPage } from './pages/reports';
-import { OrderTable } from './pages/shared';
+import { OrderTable, isNtsaOwnOrder, orderSellers } from './pages/shared';
 import './style.css';
 
 // The refurbished/used grades a shopper can be offered, cheapest intent first.
@@ -25,6 +25,9 @@ function App() {
   const [wholesaleProducts, setWholesaleProducts] = useState([]);
   const [loading, setLoading] = useState(false), [busy, setBusy] = useState(false), [modal, setModal] = useState(null), [query, setQuery] = useState(''), [mobileNav, setMobileNav] = useState(false);
   const [cart, setCart] = useState({});
+  // Admin Orders page: split NTSA's own stock from sellers', and find a shop's
+  // orders by name.
+  const [orderView, setOrderView] = useState('all'), [orderSellerQ, setOrderSellerQ] = useState('');
   // Packing and sales staff sign in on the same page and get their own few pages.
   const [staff, setStaff] = useState([]), [applications, setApplications] = useState([]), [notifications, setNotifications] = useState([]);
   const [toPack, setToPack] = useState([]), [packed, setPacked] = useState([]), [bellOpen, setBellOpen] = useState(false);
@@ -140,7 +143,7 @@ function App() {
   const nav = isPacking ? [['To pack', ClipboardList], ['Packed', Check]]
     : isSales ? [['Add seller', UserPlus], ['My sellers', Store]]
     : isAdmin ? [['Overview', LayoutDashboard], ['Products', Package], ['Wholesale products', Store], ['Categories', Shapes], ['Orders', ShoppingBag], ['Customers', User], ['Reviews', Star], ['Vendors', Users], ['To pack', ClipboardList], ['Shipments', Truck], ['Banners', Image], ['Coupons', Tag], ['Reports', BarChart3], ['Sellers', BadgeCheck], ['Seller insights', TrendingUp], ['Refunds', RotateCcw], ['Delivery areas', MapPin], ['Staff', UserCog], ['Settings', SettingsIcon]]
-    : [['Overview', LayoutDashboard], ['Wholesale catalog', Store], ['Orders', ShoppingBag]];
+    : [['Overview', LayoutDashboard], ['Wholesale catalog', Store], ['Orders', ShoppingBag], ['Messages', Paperclip]];
   const pendingApplications = applications.filter(a => a.status === 'PENDING').length;
   const shown = products.filter(p => `${p.name} ${p.category?.name} ${p.seller?.shopName || ''}`.toLowerCase().includes(query.toLowerCase()));
   const cartItems = products.filter(p => cart[p.id] > 0).map(p => ({ ...p, quantity: cart[p.id] }));
@@ -189,7 +192,19 @@ function App() {
           {page === 'Categories' && <div className="category-grid">{categories.map(c => <section className="panel category-card" key={c.id}><div className="category-icon"><Shapes size={26}/></div><h2>{c.name}</h2><p>{products.filter(p => p.categoryId === c.id).length} active products · returns within {c.refundWindowHours} hours{c.allowsUsedStock ? ' · refurbished allowed' : ''}</p><div className="row-actions"><button onClick={() => setModal({ type: 'Categories', data: c })}>Edit category</button><button className="danger-text" onClick={() => setModal({ type: 'Delete', data: { path: `/admin/categories/${c.id}`, name: c.name } })}>Remove</button></div></section>)}</div>}
           {page === 'Banners' && <section className="panel"><div className="panel-heading"><h2>Home screen banner/slider <span className="count">{banners.length}</span></h2></div><div className="table-scroll"><table><thead><tr><th>Preview</th><th>Title</th><th>Order</th><th>Status</th><th>Actions</th></tr></thead><tbody>{banners.map(b => <tr key={b.id}><td>{b.imageUrl ? <img className="product-image" src={b.imageUrl} alt={b.title}/> : <div className="product-image placeholder" style={{ background: b.backgroundColor || '#13224A' }}/>}</td><td><strong style={{ whiteSpace: 'pre-line' }}>{b.title}</strong>{b.subtitle && <small>{b.subtitle}</small>}</td><td>{b.sortOrder}</td><td><Badge>{b.active ? 'Active' : 'Disabled'}</Badge></td><td><div className="row-actions"><button onClick={() => setModal({ type: 'Banners', data: b })}>Edit</button><button className="danger-text" onClick={() => setModal({ type: 'Delete', data: { path: `/admin/banners/${b.id}`, name: b.title } })}>Remove</button></div></td></tr>)}</tbody></table></div>{!banners.length && <Empty text="Add a banner to light up the Home screen"/>}</section>}
           {page === 'Coupons' && <section className="panel"><div className="panel-heading"><h2>Discount coupons <span className="count">{coupons.length}</span></h2></div><div className="table-scroll"><table><thead><tr><th>Code</th><th>Discount</th><th>Min. order</th><th>Redeemed</th><th>Status</th><th>Actions</th></tr></thead><tbody>{coupons.map(c => <tr key={c.id}><td><strong>{c.code}</strong><small>{c.description}</small></td><td>{c.discountType === 'PERCENT' ? `${c.value}%${c.maxDiscountPaise ? ` (up to ${money(c.maxDiscountPaise)})` : ''}` : money(c.value)}</td><td>{money(c.minOrderPaise)}</td><td>{c.usedCount}{c.usageLimit ? ` / ${c.usageLimit}` : ''}</td><td><Badge>{c.active ? 'Active' : 'Disabled'}</Badge></td><td><div className="row-actions"><button onClick={() => setModal({ type: 'Coupons', data: c })}>Edit</button><button className="danger-text" onClick={() => setModal({ type: 'Delete', data: { path: `/admin/coupons/${c.id}`, name: c.code } })}>Remove</button></div></td></tr>)}</tbody></table></div>{!coupons.length && <Empty text="Create your first discount code"/>}</section>}
-          {page === 'Orders' && <section className="panel"><div className="panel-heading"><div><h2>Order history</h2>{orders.length >= 200 && <p>Showing the 200 most recent. Overview and Reports count every order, not just these.</p>}</div><button className="text-button" onClick={load}>Refresh</button></div><OrderTable orders={orders} onOpen={o => setModal({ type: 'Order', data: o })}/></section>}
+          {page === 'Orders' && (() => {
+            const q = orderSellerQ.trim().toLowerCase();
+            const shownOrders = (isAdmin ? orders.filter(o => {
+              if (orderView === 'ntsa' && !isNtsaOwnOrder(o)) return false;
+              if (orderView === 'seller' && isNtsaOwnOrder(o)) return false;
+              if (q && !orderSellers(o.items).some(n => n.toLowerCase().includes(q))) return false;
+              return true;
+            }) : orders);
+            return <section className="panel"><div className="panel-heading"><div><h2>Order history <span className="count">{shownOrders.length}</span></h2>{orders.length >= 200 && <p>Showing the 200 most recent. Overview and Reports count every order, not just these.</p>}</div><button className="text-button" onClick={load}>Refresh</button></div>
+              {isAdmin && <div className="order-filters"><div className="tabs" style={{ margin: 0, width: 'auto' }}>{[['all', 'All orders'], ['ntsa', "NTSA's own"], ['seller', 'Seller orders']].map(([v, label]) => <button key={v} type="button" className={orderView === v ? 'selected' : ''} onClick={() => setOrderView(v)}>{label}</button>)}</div><div className="search"><Search size={16}/><input aria-label="Search by seller" placeholder="Find a seller's orders by shop name…" value={orderSellerQ} onChange={e => setOrderSellerQ(e.target.value)}/></div></div>}
+              <OrderTable orders={shownOrders} onOpen={o => setModal({ type: 'Order', data: o })}/></section>;
+          })()}
+          {!isAdmin && page === 'Messages' && <section className="panel"><div className="panel-heading"><div><h2>Messages</h2><p>Reach the NTSA team — attach a photo or video if something arrived damaged.</p></div></div><div style={{ padding: 20 }}><VendorMessages vendor={me} self/></div></section>}
           {page === 'Vendors' && <section className="panel"><div className="panel-heading"><h2>Your wholesale partners <span className="count">{vendors.length}</span></h2></div><div className="table-scroll"><table><thead><tr><th>Partner</th><th>Contact</th><th>Order limits</th><th>Status</th><th>Actions</th></tr></thead><tbody>{vendors.map(v => <tr key={v.id}><td><strong>{v.name}</strong><small>{v.username}</small></td><td>{v.email && <small>{v.email}</small>}{v.email && v.phone && <br/>}{v.phone && <small>{v.phone}</small>}{!v.email && !v.phone && <small className="muted">Not on file</small>}</td><td>{money(v.limits.minPaise)} – {money(v.limits.maxPaise)}</td><td><Badge>{v.enabled ? 'Active' : 'Disabled'}</Badge>{v.gstVerified || v.aadharVerified ? <small style={{ color: '#418568', fontWeight: 600 }}>{[v.gstVerified && 'GST ✓', v.aadharVerified && 'Aadhaar ✓'].filter(Boolean).join(' · ')}</small> : <small className="muted">Not verified</small>}</td><td><div className="row-actions"><button onClick={() => setModal({ type: 'Vendors', data: v })}>Edit</button><button disabled={busy} onClick={() => action(() => api(`/admin/vendors/${v.id}`, { method: 'PATCH', body: { enabled: !v.enabled } }))}>{v.enabled ? 'Disable' : 'Enable'}</button><button onClick={() => setModal({ type: 'Reset', data: v })}>Reset password</button><button onClick={() => setModal({ type: 'Messages', data: v })}>Messages</button><button className="danger-text" onClick={() => setModal({ type: 'Delete', data: { path: `/admin/vendors/${v.id}`, name: v.name } })}>Remove</button></div></td></tr>)}</tbody></table></div>{!vendors.length && <Empty text="Your first partnership starts here"/>}</section>}
           {page === 'Refunds' && <section className="panel"><div className="panel-heading"><div><h2>Refund requests</h2><p>Approved refunds are credited to the customer's NTSA wallet.</p></div></div><div className="table-scroll"><table><thead><tr><th>Product / order</th><th>Reason</th><th>Amount</th><th>Status</th><th>Review</th></tr></thead><tbody>{refunds.map(r => <tr key={r.id}><td><strong>{r.orderItem.name}</strong><small>#{r.orderItem.orderId.slice(-8).toUpperCase()}</small></td><td>{r.reason}</td><td>{money(r.orderItem.unitPaise * r.orderItem.quantity)}</td><td><Badge>{r.status}</Badge></td><td>{r.status === 'REQUESTED' && <div className="row-actions"><button disabled={busy} onClick={() => action(() => api(`/admin/refunds/${r.id}`, { method: 'PATCH', body: { status: 'APPROVED' } }))}>Approve</button><button disabled={busy} className="danger-text" onClick={() => action(() => api(`/admin/refunds/${r.id}`, { method: 'PATCH', body: { status: 'REJECTED' } }))}>Reject</button></div>}</td></tr>)}</tbody></table></div>{!refunds.length && <Empty text="No refund requests"/>}</section>}
           {['To pack', 'Packed'].includes(page) && <section className="panel"><div className="panel-heading"><h2>{page === 'To pack' ? 'Waiting to be packed' : 'Packed and on the way'} <span className="count">{(page === 'To pack' ? toPack : packed).length}</span></h2></div>
@@ -336,16 +351,42 @@ function App() {
       {modal.type === 'Delete' && <><p>Remove “{modal.data.name}” from the workspace? Order history is retained. Categories still linked to products cannot be removed.</p><Button disabled={busy} onClick={() => action(async () => { await api(modal.data.path, { method: 'DELETE' }); setModal(null); }, 'Record removed')}>Remove</Button></>}
       {modal.type === 'Reset' && <ResetPassword vendor={modal.data} busy={busy} onSubmit={password => action(async () => { await api(`/admin/vendors/${modal.data.id}/reset-password`, { method: 'POST', body: { password } }); setModal(null); }, 'Password updated')}/>}
       {modal.type === 'SellerReset' && <ResetPassword vendor={{ ...modal.data, name: modal.data.shopName }} busy={busy} onSubmit={password => action(async () => { await api(`/admin/sellers/${modal.data.id}/password`, { method: 'POST', body: { password } }); setModal(null); }, 'Password updated')}/>}
-      {modal.type === 'Penalty' && <><p className="muted">A fine for a late or mishandled order. It adds to {modal.data.shopName}'s running penalty total ({money(modal.data.penaltyPaise || 0)} so far) and tells them why.</p><form className="editor" onSubmit={e => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); action(async () => { await api(`/admin/sellers/${modal.data.id}/penalty`, { method: 'POST', body: { amountPaise: paise(f.amount), reason: f.reason.trim() } }); setModal(null); }, 'Penalty applied'); }}><Field label="Amount (₹)" name="amount" type="number" min="1" step="0.01" required/><Field label="Reason — shown to the seller"><textarea name="reason" required maxLength={300} rows={2} placeholder="e.g. Order #A1B2 not packed for 3 days"/></Field><Button disabled={busy}>Apply penalty</Button></form></>}
+      {modal.type === 'Penalty' && <PenaltyManager seller={modal.data} busy={busy} onApply={(amount, reason, done) => action(async () => { await api(`/admin/sellers/${modal.data.id}/penalty`, { method: 'POST', body: { amountPaise: paise(amount), reason } }); done(); }, 'Penalty applied')} onRemove={(id, done) => action(async () => { await api(`/admin/sellers/${modal.data.id}/penalties/${id}`, { method: 'DELETE' }); done(); }, 'Penalty removed')}/>}
       {modal.type === 'AdminReview' && <AdminReviewForm products={products} busy={busy} onSubmit={({ productId, body }) => action(async () => { await api(`/admin/products/${productId}/reviews`, { method: 'POST', body }); setModal(null); }, 'Review added')}/>}
       {modal.type === 'Messages' && <VendorMessages vendor={modal.data}/>}
-      {modal.type === 'Order' && <OrderDetails order={orders.find(o => o.id === modal.data.id) || modal.data} admin={isAdmin} busy={busy} action={action} next={next} onCancel={reason => action(async () => { await api(`/admin/orders/${modal.data.id}/cancel`, { method: 'POST', body: { reason } }); setModal(null); }, 'Order cancelled, stock put back')}/>}
+      {modal.type === 'Order' && <OrderDetails order={orders.find(o => o.id === modal.data.id) || modal.data} admin={isAdmin} busy={busy} action={action} next={next} onCancel={reason => action(async () => { await api(`${isAdmin ? '/admin' : ''}/orders/${modal.data.id}/cancel`, { method: 'POST', body: { reason } }); setModal(null); }, 'Order cancelled, stock put back')} onSetDelivery={isAdmin ? ((body, done) => action(async () => { await api(`/admin/orders/${modal.data.id}/delivery`, { method: 'PATCH', body }); done(); }, 'Delivery details saved')) : null}/>}
       {modal.type === 'Checkout' && <WholesaleCheckout items={cartItems} total={cartTotal} limits={me?.limits} busy={busy} onSubmit={body => action(async () => { await api('/orders', { method: 'POST', body }); setCart({}); setModal(null); go('Orders'); }, 'Wholesale order placed')}/>}
     </Modal>}
   </div>;
 }
 // What the packing team works from: who it goes to, and exactly what to put
 // in the box. Cancelled orders say so in red so nothing gets packed by mistake.
+// Applying penalties to a seller and seeing the ones already on them, so a
+// mistaken fine can be taken back. The list reloads itself after each change.
+function PenaltyManager({ seller, busy, onApply, onRemove }) {
+  const [list, setList] = useState(null), [total, setTotal] = useState(seller.penaltyPaise || 0);
+  const load = () => api(`/admin/sellers/${seller.id}/penalties`).then(setList).catch(() => setList([]));
+  useEffect(() => { load(); }, []);
+  return <>
+    <p className="muted">A fine for a late or mishandled order. It shows on {seller.shopName}'s own earnings with the reason. Total so far: <strong>{money(total)}</strong>.</p>
+    <form className="editor" onSubmit={e => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); onApply(f.amount, f.reason.trim(), () => { e.target.reset(); setTotal(t => t + paise(f.amount)); load(); }); }}>
+      <Field label="Amount (₹)" name="amount" type="number" min="1" step="0.01" required/>
+      <Field label="Reason — shown to the seller"><textarea name="reason" required maxLength={300} rows={2} placeholder="e.g. Order #A1B2 not packed for 3 days"/></Field>
+      <Button disabled={busy}>Apply penalty</Button>
+    </form>
+    {list === null ? <p className="muted" style={{ marginTop: 18 }}>Loading…</p> : list.length > 0 && <div style={{ marginTop: 22 }}>
+      <h3 style={{ marginBottom: 10 }}>Penalties so far</h3>
+      <div className="table-scroll"><table><thead><tr><th>Date</th><th>Amount</th><th>Reason</th><th></th></tr></thead>
+        <tbody>{list.map(p => <tr key={p.id}>
+          <td><small>{new Date(p.createdAt).toLocaleDateString('en-IN')}</small></td>
+          <td><strong>{money(p.amountPaise)}</strong></td>
+          <td>{p.reason}</td>
+          <td><button className="danger-text" disabled={busy} onClick={() => onRemove(p.id, () => { setTotal(t => t - p.amountPaise); load(); })}>Remove</button></td>
+        </tr>)}</tbody>
+      </table></div>
+    </div>}
+  </>;
+}
 // The admin seeding a review on a product -- a star rating, the words, a name
 // to show, and an optional photo (uploaded the same way product photos are).
 function AdminReviewForm({ products, busy, onSubmit }) {
@@ -365,7 +406,7 @@ function AdminReviewForm({ products, busy, onSubmit }) {
     {image && <img className="product-image" src={image} alt="" style={{ marginBottom: 12 }}/>}
     <Field label={uploading ? 'Uploading…' : 'Photo — optional'} type="file" accept="image/png,image/jpeg,image/webp" disabled={uploading} onChange={async e => {
       if (!e.target.files[0]) return; setUploading(true); setError('');
-      try { const form = new FormData(); form.append('image', e.target.files[0]); const r = await api('/admin/images', { method: 'POST', body: form }); setImage(r.url); }
+      try { const form = new FormData(); form.append('image', e.target.files[0]); form.append('watermark', 'false'); const r = await api('/admin/images', { method: 'POST', body: form }); setImage(r.url); }
       catch (err) { setError(err.message); } finally { setUploading(false); }
     }}/>
     {error && <div role="alert" className="alert">{error}</div>}
@@ -511,8 +552,8 @@ function SellerApplicationForm({ busy, onSubmit }) {
 function Login({ onLogin }) {
   // Vendor sign-in is hidden for now (wholesale is being added later); the
   // role switch comes back by restoring the tabs below with a role state.
-  const role = 'ADMIN', [busy, setBusy] = useState(false), [error, setError] = useState('');
-  return <div className="login"><section className="login-story"><div className="brand"><img className="brand-logo" src="/ntsa_logo.png" alt="NTSA"/></div><div><div className="eyebrow">GOOD BUSINESS STARTS HERE</div><h1>Everything you need.<br/><span>Room to grow.</span></h1><p>Your store, your partners, your next big idea.<br/>Bring it all together with NTSA.</p><div className="login-tags"><span><Check size={16}/>Simple operations</span><span><Check size={16}/>Stronger partnerships</span></div></div><small>Shop smarter. Live better.</small></section><section className="login-form"><div><div className="eyebrow">WELCOME TO YOUR WORKSPACE</div><h2>Let’s get you settled.</h2><p>Sign in to manage your everyday business.</p><form style={{ marginTop: 28 }}onSubmit={async e => { e.preventDefault(); setBusy(true); setError(''); const data = new FormData(e.target); try { const r = await api('/auth/login', { method: 'POST', body: { role, username: data.get('username'), password: data.get('password') } }); onLogin(r.token, r.role); } catch (err) { setError(err.message); } finally { setBusy(false); } }}><Field label={role === 'ADMIN' ? 'Email address' : 'Username'} name="username" type={role === 'ADMIN' ? 'email' : 'text'} placeholder={role === 'ADMIN' ? 'you@company.com' : 'Your assigned username'} required autoComplete="username"/><PasswordField label="Password" name="password" placeholder="Enter your password" required autoComplete="current-password"/>{error && <div role="alert" className="alert">{error}</div>}<Button disabled={busy}>{busy ? 'Signing in…' : 'Sign in to workspace'}<ArrowUpRight size={18}/></Button></form><p className="login-help"><ShieldCheck size={17}/>{role === 'ADMIN' ? 'Access is reserved for your store administrator.' : 'Your account is created by the NTSA administrator.'}</p></div></section></div>;
+  const [role, setRole] = useState('ADMIN'), [busy, setBusy] = useState(false), [error, setError] = useState('');
+  return <div className="login"><section className="login-story"><div className="brand"><img className="brand-logo" src="/ntsa_logo.png" alt="NTSA"/></div><div><div className="eyebrow">GOOD BUSINESS STARTS HERE</div><h1>Everything you need.<br/><span>Room to grow.</span></h1><p>Your store, your partners, your next big idea.<br/>Bring it all together with NTSA.</p><div className="login-tags"><span><Check size={16}/>Simple operations</span><span><Check size={16}/>Stronger partnerships</span></div></div><small>Shop smarter. Live better.</small></section><section className="login-form"><div><div className="eyebrow">WELCOME TO YOUR WORKSPACE</div><h2>Let’s get you settled.</h2><p>Sign in to manage your everyday business.</p><div className="tabs"><button type="button" className={role === 'ADMIN' ? 'selected' : ''} onClick={() => { setRole('ADMIN'); setError(''); }}>Workspace team</button><button type="button" className={role === 'VENDOR' ? 'selected' : ''} onClick={() => { setRole('VENDOR'); setError(''); }}>Wholesale partner</button></div><form onSubmit={async e => { e.preventDefault(); setBusy(true); setError(''); const data = new FormData(e.target); try { const r = await api('/auth/login', { method: 'POST', body: { role, username: data.get('username'), password: data.get('password') } }); onLogin(r.token, r.role); } catch (err) { setError(err.message); } finally { setBusy(false); } }}><Field label={role === 'ADMIN' ? 'Email address' : 'Username'} name="username" type={role === 'ADMIN' ? 'email' : 'text'} placeholder={role === 'ADMIN' ? 'you@company.com' : 'Your assigned username'} required autoComplete="username"/><PasswordField label="Password" name="password" placeholder="Enter your password" required autoComplete="current-password"/>{error && <div role="alert" className="alert">{error}</div>}<Button disabled={busy}>{busy ? 'Signing in…' : 'Sign in to workspace'}<ArrowUpRight size={18}/></Button></form><p className="login-help"><ShieldCheck size={17}/>{role === 'ADMIN' ? 'Staff and admins sign in here.' : 'Your wholesale account is created by the NTSA team.'}</p></div></section></div>;
 }
 function Editor({ type, data, categories, busy, onSubmit }) {
   const [images, setImages] = useState(data?.images?.join('\n') || ''), [uploading, setUploading] = useState(false), [error, setError] = useState('');
@@ -741,34 +782,38 @@ function ResetPassword({ vendor, busy, onSubmit }) {
     {error && <div className="alert">{error}</div>}<Button disabled={busy}>{busy ? 'Saving…' : 'Update password'}</Button>
   </form>;
 }
-function VendorMessages({ vendor }) {
+// The admin-vendor chat. `self` flips it to the wholesale partner's own view:
+// same thread, but reading/posting through the vendor's own routes.
+function VendorMessages({ vendor, self }) {
   const [thread, setThread] = useState(null), [reply, setReply] = useState(''), [sending, setSending] = useState(false), [error, setError] = useState('');
-  // Photos or clips picked for the next message, uploaded as soon as they're chosen.
   const [attachments, setAttachments] = useState([]), [uploading, setUploading] = useState(false);
-  useEffect(() => { api(`/admin/vendors/${vendor.id}/messages`).then(setThread).catch(err => setError(err.message)); }, [vendor.id]);
+  const listPath = self ? '/vendor/messages' : `/admin/vendors/${vendor.id}/messages`;
+  const attachPath = self ? '/vendor/attachments' : '/admin/attachments';
+  const mine = self ? 'VENDOR' : 'ADMIN';
+  useEffect(() => { api(listPath).then(setThread).catch(err => setError(err.message)); }, [vendor?.id, self]);
   async function attach(file) {
     if (!file) return;
     if (attachments.length >= 4) { setError('Up to four attachments per message'); return; }
     setUploading(true); setError('');
-    try { const form = new FormData(); form.append('file', file); const { url } = await api('/admin/attachments', { method: 'POST', body: form }); setAttachments(a => [...a, url]); }
+    try { const form = new FormData(); form.append('file', file); const { url } = await api(attachPath, { method: 'POST', body: form }); setAttachments(a => [...a, url]); }
     catch (err) { setError(err.message); } finally { setUploading(false); }
   }
   async function send() {
     if (!reply.trim() && !attachments.length) return;
     setSending(true); setError('');
     try {
-      const msg = await api(`/admin/vendors/${vendor.id}/messages`, { method: 'POST', body: { body: reply.trim(), attachments } });
+      const msg = await api(listPath, { method: 'POST', body: { body: reply.trim(), attachments } });
       setThread(t => [...(t || []), msg]); setReply(''); setAttachments([]);
     } catch (err) { setError(err.message); } finally { setSending(false); }
   }
   return <div className="messages-thread">
     <div className="messages-scroll">
-      {thread === null ? <p className="muted">Loading conversation…</p> : thread.length === 0 ? <p className="muted">No messages yet from this partner.</p> : thread.map(m => <div key={m.id} className={`message-bubble ${m.sender === 'ADMIN' ? 'from-admin' : 'from-vendor'}`}>{m.body && <p>{m.body}</p>}{!!m.attachments?.length && <div className="message-media">{m.attachments.map(url => <Attachment key={url} url={url}/>)}</div>}<small>{m.sender === 'ADMIN' ? 'You' : vendor.name} · {new Date(m.createdAt).toLocaleString()}</small></div>)}
+      {thread === null ? <p className="muted">Loading conversation…</p> : thread.length === 0 ? <p className="muted">{self ? 'No messages yet. Send the NTSA team a note below.' : 'No messages yet from this partner.'}</p> : thread.map(m => <div key={m.id} className={`message-bubble ${m.sender === mine ? 'from-admin' : 'from-vendor'}`}>{m.body && <p>{m.body}</p>}{!!m.attachments?.length && <div className="message-media">{m.attachments.map(url => <Attachment key={url} url={url}/>)}</div>}<small>{m.sender === mine ? 'You' : (self ? 'NTSA' : vendor.name)} · {new Date(m.createdAt).toLocaleString()}</small></div>)}
     </div>
     {error && <div className="alert">{error}</div>}
     {!!attachments.length && <div className="message-media pending">{attachments.map(url => <div key={url} className="pending-attachment"><Attachment url={url}/><button type="button" aria-label="Remove attachment" onClick={() => setAttachments(a => a.filter(u => u !== url))}>×</button></div>)}</div>}
     <div className="message-compose">
-      <input placeholder="Reply to this partner…" value={reply} onChange={e => setReply(e.target.value)} maxLength={1000} onKeyDown={e => e.key === 'Enter' && send()}/>
+      <input placeholder={self ? 'Message the NTSA team…' : 'Reply to this partner…'} value={reply} onChange={e => setReply(e.target.value)} maxLength={1000} onKeyDown={e => e.key === 'Enter' && send()}/>
       <label className="attach-button" title="Attach a photo or video">{uploading ? '…' : <Paperclip size={17}/>}<input type="file" name="attachment" accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime" disabled={uploading || attachments.length >= 4} style={{ display: 'none' }} onChange={async e => { await attach(e.target.files[0]); e.target.value = ''; }}/></label>
       <Button disabled={sending || uploading || (!reply.trim() && !attachments.length)} onClick={send}>Send</Button>
     </div>
@@ -782,19 +827,28 @@ function Attachment({ url }) {
     ? <video src={url} controls preload="metadata"/>
     : <a href={url} target="_blank" rel="noreferrer"><img src={url} alt="Attachment"/></a>;
 }
-function OrderDetails({ order, admin, busy, action, next, onCancel }) {
-  const [otp, setOtp] = useState(''), [code, setCode] = useState(''), [cancelling, setCancelling] = useState(false);
+function OrderDetails({ order, admin, busy, action, next, onCancel, onSetDelivery }) {
+  const [otp, setOtp] = useState(''), [code, setCode] = useState(''), [cancelling, setCancelling] = useState(false), [editingDelivery, setEditingDelivery] = useState(false);
   const [invoiceBusy, setInvoiceBusy] = useState(false), [invoiceError, setInvoiceError] = useState('');
   async function viewBill() {
     setInvoiceBusy(true); setInvoiceError('');
     try { await openInvoice(order.id); } catch (e) { setInvoiceError(e.message); } finally { setInvoiceBusy(false); }
   }
-  // An order can be called off until it is handed over as delivered.
-  const cancellable = admin && onCancel && !['DELIVERED', 'CANCELLED'].includes(order.status);
+  // Admin can call off any order up to delivery; a wholesale buyer only their
+  // own, and only before it's packed (the backend enforces the same).
+  const cancellable = onCancel && !['DELIVERED', 'CANCELLED'].includes(order.status) && (admin || ['PENDING_PAYMENT', 'PLACED'].includes(order.status));
+  const localDate = v => v ? new Date(v).toISOString().slice(0, 10) : '';
   return <div className="order-detail"><div className="detail-summary"><strong>#{order.id.slice(-8).toUpperCase()}</strong><Badge>{order.status}</Badge></div>
     <div style={{ margin: '2px 0 16px' }}><Button secondary disabled={invoiceBusy} onClick={viewBill}><FileText size={15}/>{invoiceBusy ? 'Opening…' : 'View / download bill'}</Button></div>
     {invoiceError && <div className="alert" role="alert">{invoiceError}</div>}
     {order.items.map(i => <div key={i.id} className="line-item"><div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>{i.image ? <img className="product-image" src={i.image} alt={i.name}/> : <div className="product-image placeholder"><Package size={18}/></div>}<div><strong>{i.name}</strong>{(i.size || i.color) && <small className="variant">{[i.size && `Size / option: ${i.size}`, i.color && `Color: ${i.color}`].filter(Boolean).join(' · ')}</small>}<small>{i.quantity} × {money(i.unitPaise)} · {i.refundWindowHours}h refund window</small><small>{i.sellerName ? `Sold by ${i.sellerName}` : 'NTSA’s own stock'}</small></div></div><strong>{money(i.unitPaise * i.quantity)}</strong></div>)}<div className="line-item"><strong>Total · {order.paymentMethod}</strong><strong>{money(order.totalPaise)}</strong></div><h3>Delivery address</h3><p>{order.address.name} · {order.address.phone}<br/>{order.address.line1}, {order.address.city}, {order.address.state} {order.address.postalCode}</p>{order.deliveredAt && <p>Delivered: {new Date(order.deliveredAt).toLocaleString()}</p>}
+    {(order.deliveryPartner || order.expectedDeliveryAt) && order.status !== 'CANCELLED' && <p className="muted">{order.deliveryPartner && <>Delivery partner: <strong>{order.deliveryPartner}</strong></>}{order.deliveryPartner && order.expectedDeliveryAt && <br/>}{order.expectedDeliveryAt && <>Expected by: <strong>{new Date(order.expectedDeliveryAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</strong></>}</p>}
+    {admin && onSetDelivery && !['DELIVERED', 'CANCELLED'].includes(order.status) && (editingDelivery
+      ? <form className="editor" style={{ marginTop: 10 }} onSubmit={e => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); onSetDelivery({ deliveryPartner: f.partner.trim() || null, expectedDeliveryAt: f.eta ? new Date(f.eta + 'T18:00:00').toISOString() : null }, () => setEditingDelivery(false)); }}>
+          <div className="form-grid"><Field label="Delivery partner" name="partner" defaultValue={order.deliveryPartner || ''} maxLength={120} placeholder="e.g. NTSA Express / Delhivery"/><Field label="Expected delivery date" name="eta" type="date" defaultValue={localDate(order.expectedDeliveryAt)}/></div>
+          <div style={{ display: 'flex', gap: 10 }}><Button secondary type="button" onClick={() => setEditingDelivery(false)}>Cancel</Button><Button disabled={busy}>Save</Button></div>
+        </form>
+      : <p><button className="text-button" style={{ display: 'inline', padding: 0 }} onClick={() => setEditingDelivery(true)}>{order.deliveryPartner || order.expectedDeliveryAt ? 'Edit delivery partner / ETA' : 'Set delivery partner / ETA'}</button></p>)}
     {admin && next[order.status] && <Button disabled={busy} onClick={() => action(() => api(`/admin/orders/${order.id}/status`, { method: 'PATCH', body: { status: next[order.status] } }))}>Mark {next[order.status].toLowerCase().replaceAll('_', ' ')}</Button>}
     {admin && order.status === 'OUT_FOR_DELIVERY' && <form onSubmit={e => { e.preventDefault(); action(() => api(`/admin/orders/${order.id}/deliver`, { method: 'POST', body: { otp } })); }}><Field label="Recipient's delivery OTP" value={otp} onChange={e => setOtp(e.target.value)} pattern="[0-9]{6}" maxLength={6} required/><Button disabled={busy}>Verify and confirm delivery</Button></form>}
     {order.status === 'CANCELLED' && <p className="danger-text"><strong>Cancelled{order.cancelledBy ? ` by ${order.cancelledBy.toLowerCase()}` : ''}.</strong>{order.cancelReason ? ` ${order.cancelReason}` : ''} Stock has been put back.</p>}

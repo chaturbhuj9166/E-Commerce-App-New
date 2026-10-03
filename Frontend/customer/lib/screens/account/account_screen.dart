@@ -13,6 +13,7 @@ import 'coupons_screen.dart';
 import 'edit_profile_screen.dart';
 import 'refer_earn_screen.dart';
 import 'premium_screen.dart';
+import 'help_support_screen.dart';
 import 'settings_screen.dart';
 
 class AccountScreen extends StatelessWidget {
@@ -78,7 +79,7 @@ class AccountScreen extends StatelessWidget {
             _MenuTile(icon: Icons.favorite_border_rounded, label: 'My Wishlist', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WishlistScreen()))),
             _MenuTile(icon: Icons.local_offer_outlined, label: 'Coupons & Offers', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CouponsScreen()))),
             _MenuTile(icon: Icons.card_giftcard_rounded, label: 'Refer & Earn', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReferEarnScreen()))),
-            _MenuTile(icon: Icons.support_agent_rounded, label: 'Help & Support', onTap: () {}),
+            _MenuTile(icon: Icons.support_agent_rounded, label: 'Help & Support', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HelpSupportScreen()))),
             _MenuTile(icon: Icons.settings_outlined, label: 'Settings', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()))),
             _MenuTile(
               icon: Icons.logout_rounded,
