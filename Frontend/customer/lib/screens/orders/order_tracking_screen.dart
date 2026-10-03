@@ -179,6 +179,10 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                             const _StatusBanner(icon: Icons.cancel_outlined, color: AppColors.danger, title: 'Order cancelled', message: 'This order was cancelled and will not be delivered.')
                           else
                             ..._timeline(order),
+                          if (order.status != 'CANCELLED' && order.status != 'DELIVERED' && (order.deliveryPartner != null || order.expectedDeliveryAt != null)) ...[
+                            const SizedBox(height: 4),
+                            _DeliveryInfo(partner: order.deliveryPartner, expectedAt: order.expectedDeliveryAt),
+                          ],
                           const SizedBox(height: 8),
                           const Text('Items', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                           const SizedBox(height: 8),
@@ -319,6 +323,42 @@ class _StatusBanner extends StatelessWidget {
                 Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: color)),
                 const SizedBox(height: 2),
                 Text(message, style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Who's delivering the order and when it's expected, once the admin has set it.
+class _DeliveryInfo extends StatelessWidget {
+  const _DeliveryInfo({this.partner, this.expectedAt});
+  final String? partner;
+  final DateTime? expectedAt;
+
+  @override
+  Widget build(BuildContext context) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final eta = expectedAt == null ? null : '${expectedAt!.day} ${months[expectedAt!.month - 1]}';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: AppColors.orange.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        children: [
+          const Icon(Icons.local_shipping_outlined, color: AppColors.orange),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (eta != null) Text('Expected by $eta', style: const TextStyle(fontWeight: FontWeight.w700)),
+                if (partner != null) Padding(
+                  padding: EdgeInsets.only(top: eta != null ? 2 : 0),
+                  child: Text('Delivered by $partner', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+                ),
               ],
             ),
           ),

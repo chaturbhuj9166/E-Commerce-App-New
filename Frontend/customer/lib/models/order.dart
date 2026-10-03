@@ -36,6 +36,8 @@ class Order {
     this.couponCode,
     this.paymentMethod,
     this.deliveredAt,
+    this.deliveryPartner,
+    this.expectedDeliveryAt,
     this.isVendorOrder = false,
   });
 
@@ -49,6 +51,8 @@ class Order {
   final String? couponCode;
   final String? paymentMethod;
   final DateTime? deliveredAt;
+  final String? deliveryPartner;
+  final DateTime? expectedDeliveryAt;
   final bool isVendorOrder;
 
   static const statusSteps = ['PLACED', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'];
@@ -64,6 +68,8 @@ class Order {
         couponCode: json['couponCode'] as String?,
         paymentMethod: json['paymentMethod'] as String?,
         deliveredAt: DateTime.tryParse(json['deliveredAt']?.toString() ?? ''),
+        deliveryPartner: json['deliveryPartner'] as String?,
+        expectedDeliveryAt: DateTime.tryParse(json['expectedDeliveryAt']?.toString() ?? ''),
         isVendorOrder: json['vendorId'] != null,
       );
 }
