@@ -14,7 +14,8 @@ export const productSchema = z.object({ name: text, description: z.string().trim
   // Optional fields also accept null so an edit can clear them (undefined
   // would leave the stored value unchanged).
   sku: z.string().trim().max(60).nullable().optional(),
-  mrpPaise: money.nullable().optional(), stock: z.number().int().min(0).max(1000000), categoryId: text,
+  mrpPaise: money.nullable().optional(), marketPricePaise: money.nullable().optional(), featuredRank: z.number().int().min(0).max(1000000).optional(),
+  stock: z.number().int().min(0).max(1000000), categoryId: text,
   images: z.array(imageUrlSchema).max(5),
   sizes: optionList, colors: optionList,
   // What the size-like option is called in the app, e.g. "Size", "Storage".
@@ -97,7 +98,10 @@ export const sellerUpdateSchema = z.object({
   gstVerified: z.boolean().optional(),
   aadharVerified: z.boolean().optional(),
   commissionPercent: z.number().int().min(0).max(100).optional(),
+  penaltyPaise: z.number().int().min(0).max(MAX_MONEY).optional(),
 });
+// An admin-posted review: the shown author's name on top of the usual fields.
+export const adminReviewSchema = reviewSchema.extend({ authorName: z.string().trim().min(1).max(60) });
 // Admin-panel staff: the packing team and the sales team.
 export const deliveryRuleSchema = z.object({
   belowPaise: money,

@@ -117,7 +117,7 @@ function App() {
               <div className="hero-art" aria-hidden="true"><div className="orbit"/><div className="parcel parcel-back"/><div className="parcel parcel-front"><Store size={52} strokeWidth={1.2}/></div><div className="art-tag"><Check size={15}/>Selling on NTSA</div><span className="sparkle">✦</span></div>
             </section>
             <div className="stats">
-              <Stat icon={Wallet} label="Earned" value={money(summary?.earnedPaise)} note="After NTSA's commission, from delivered orders"/>
+              <Stat icon={Wallet} label="Earned" value={money(summary?.earnedPaise)} note={summary?.penaltyPaise ? `After NTSA's commission and ${money(summary.penaltyPaise)} in penalties` : "After NTSA's commission, from delivered orders"}/>
               <Stat icon={Percent} label="Commission paid" value={money(summary?.commissionPaise)} note={`NTSA's ${summary?.commissionPercent ?? 0}% on delivered orders`}/>
               <Stat icon={Truck} label="On the way" value={money(summary?.awaitingPaise)} note="Ordered, not yet delivered"/>
               <Stat icon={ShoppingBag} label="Pieces sold" value={summary?.piecesSold ?? 0} note={`Across ${summary?.orders ?? 0} order(s)`}/>
@@ -163,6 +163,7 @@ function App() {
                 <td>{p.refundWindowHours} hours<small>from {p.category?.name}</small></td>
                 <td><div className="row-actions">
                   <button onClick={() => setModal({ data: p })}>Edit</button>
+                  <button disabled={busy} onClick={() => action(() => api(`/seller/products/${p.id}/duplicate`, { method: 'POST' }), `Copied “${p.name}” — it's hidden; edit it, then it shows`)}>Duplicate</button>
                   <button className="danger-text" onClick={() => action(() => api(`/seller/products/${p.id}`, { method: 'DELETE' }), 'Product removed')}>Remove</button>
                 </div></td>
               </tr>)}</tbody>
@@ -370,7 +371,7 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
       onSubmit({
         name: f.name, description: f.description, sku: f.sku?.trim() || null,
         pricePaise: paise(f.retail), wholesalePaise: paise(f.retail),
-        mrpPaise: f.mrp ? paise(f.mrp) : null,
+        mrpPaise: f.mrp ? paise(f.mrp) : null, marketPricePaise: f.market ? paise(f.market) : null,
         stock: Number(f.stock), categoryId: f.categoryId,
         images: images.split('\n').map(x => x.trim()).filter(Boolean),
         colors: colorList,
@@ -389,6 +390,7 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
     <div className="form-grid">
       <Field label="Selling price (₹)" name="retail" type="number" min="0.01" step="0.01" defaultValue={data ? data.pricePaise / 100 : ''} required/>
       <Field label="MRP (₹) — optional, shows a strikethrough discount" name="mrp" type="number" min="0.01" step="0.01" defaultValue={data?.mrpPaise ? data.mrpPaise / 100 : ''}/>
+      <Field label="Market price (₹) — optional, what it sells for elsewhere" name="market" type="number" min="0.01" step="0.01" defaultValue={data?.marketPricePaise ? data.marketPricePaise / 100 : ''}/>
     </div>
     <div className="form-grid">
       <Field label="Stock quantity" name="stock" type="number" min="0" step="1" defaultValue={data?.stock ?? 0} required/>

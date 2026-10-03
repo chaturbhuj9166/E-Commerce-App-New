@@ -6,7 +6,7 @@ import { randomInt } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { db, atomic } from './db.js';
 import { config } from './config.js';
-import { z, productSchema, addressSchema, vendorCreateSchema, vendorUpdateSchema, vendorPasswordSchema, vendorMessageSchema, bannerSchema, reviewSchema, couponSchema, staffCreateSchema, staffUpdateSchema, sellerApplicationSchema, sellerApproveSchema, sellerUpdateSchema, blockedPincodeSchema, deliveryRuleSchema, settingsSchema } from './lib/validation.js';
+import { z, productSchema, addressSchema, vendorCreateSchema, vendorUpdateSchema, vendorPasswordSchema, vendorMessageSchema, bannerSchema, reviewSchema, adminReviewSchema, couponSchema, staffCreateSchema, staffUpdateSchema, sellerApplicationSchema, sellerApproveSchema, sellerUpdateSchema, blockedPincodeSchema, deliveryRuleSchema, settingsSchema } from './lib/validation.js';
 import { requireThat } from './lib/rules.js';
 import { variantFor, priceFor, publicSizePrices } from './lib/variants.js';
 import { auth, roles, tokenFor } from './services/auth.js';
@@ -88,12 +88,15 @@ router.get('/products', async (req, res) => {
   // The search box (and the AI assistant's free-text queries) match against
   // both the name and description, since a shopper describing what they want
   // ("something to carry my laptop") rarely types the exact product name.
-  const products = await db.product.findMany({ where: { active: true, audience: { in: ['RETAIL', 'BOTH'] }, categoryId: q.categoryId, deal: q.deal ? q.deal === 'true' : undefined, ...(q.search ? { OR: [{ name: { contains: q.search, mode: 'insensitive' } }, { description: { contains: q.search, mode: 'insensitive' } }] } : {}) }, include: { category: true, reviews: { select: { rating: true } } }, orderBy: { createdAt: 'desc' }, take: 200 });
+  const products = await db.product.findMany({ where: { active: true, audience: { in: ['RETAIL', 'BOTH'] }, categoryId: q.categoryId, deal: q.deal ? q.deal === 'true' : undefined, ...(q.search ? { OR: [{ name: { contains: q.search, mode: 'insensitive' } }, { description: { contains: q.search, mode: 'insensitive' } }] } : {}) }, include: { category: true, reviews: { select: { rating: true } } }, orderBy: [{ featuredRank: 'desc' }, { createdAt: 'desc' }], take: 200 });
   res.json(products.map(({ wholesalePaise, reviews, ...p }) => ({ ...p, sizePrices: publicSizePrices(p.sizePrices), rating: reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : null, reviewCount: reviews.length })));
 });
 router.get('/products/:id', async (req, res) => {
-  const p = await db.product.findFirst({ where: { id: req.params.id, active: true, audience: { in: ['RETAIL', 'BOTH'] } }, include: { category: true, reviews: { select: { rating: true, comment: true, images: true, createdAt: true, user: { select: { name: true } } }, take: 100, orderBy: { createdAt: 'desc' } } } });
-  requireThat(p, 404, 'Product not found'); const { wholesalePaise, ...safe } = p; res.json({ ...safe, sizePrices: publicSizePrices(safe.sizePrices) });
+  const p = await db.product.findFirst({ where: { id: req.params.id, active: true, audience: { in: ['RETAIL', 'BOTH'] } }, include: { category: true, reviews: { select: { rating: true, comment: true, images: true, createdAt: true, authorName: true, user: { select: { name: true } } }, take: 100, orderBy: { createdAt: 'desc' } } } });
+  requireThat(p, 404, 'Product not found'); const { wholesalePaise, ...safe } = p;
+  // A review shows the customer's name, or the name the admin gave a seeded one.
+  safe.reviews = safe.reviews.map(({ user, authorName, ...r }) => ({ ...r, authorName: user?.name || authorName || 'Customer' }));
+  res.json({ ...safe, sizePrices: publicSizePrices(safe.sizePrices) });
 });
 router.get('/coupons', async (req, res) => res.json(await db.coupon.findMany({ where: { active: true, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }, orderBy: { createdAt: 'desc' } })));
 // The app shows the delivery charge in the cart before checkout; the server
@@ -499,7 +502,7 @@ router.get('/admin/products', async (req, res) => {
   // `hidden=true` lists the products taken off the shop, so one can be put back.
   const { audience, hidden } = z.object({ audience: z.enum(['RETAIL', 'WHOLESALE', 'BOTH']).optional(), hidden: z.enum(['true', 'false']).optional() }).parse(req.query);
   const where = { active: hidden !== 'true', ...(audience === 'RETAIL' ? { audience: { in: ['RETAIL', 'BOTH'] } } : audience === 'WHOLESALE' ? { audience: { in: ['WHOLESALE', 'BOTH'] } } : {}) };
-  res.json(await db.product.findMany({ where, include: { category: true, seller: { select: { shopName: true } } }, orderBy: { createdAt: 'desc' } }));
+  res.json(await db.product.findMany({ where, include: { category: true, seller: { select: { shopName: true } } }, orderBy: [{ featuredRank: 'desc' }, { createdAt: 'desc' }] }));
 });
 // Prisma won't take a bare null for a Json column; DbNull clears it. The
 // return window is not asked for here: it is whatever the chosen category
@@ -516,6 +519,31 @@ router.post('/admin/products', async (req, res) => res.status(201).json(await db
 router.put('/admin/products/:id', async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: await productData(req.body) })));
 router.delete('/admin/products/:id', async (req, res) => { await db.product.update({ where: { id: req.params.id }, data: { active: false } }); res.status(204).end(); });
 router.post('/admin/products/:id/restore', async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: { active: true } })));
+// A fresh copy to tweak -- same stock, a "(copy)" name, and hidden until the
+// admin is happy with it, so a near-identical listing is a click, not a retype.
+router.post('/admin/products/:id/duplicate', async (req, res) => {
+  const src = await db.product.findUnique({ where: { id: req.params.id } });
+  requireThat(src, 404, 'Product not found');
+  const { id, createdAt, categoryId, sellerId, ...p } = src;
+  res.status(201).json(await db.product.create({ data: {
+    ...p, name: `${p.name} (copy)`, active: false, featuredRank: 0,
+    category: { connect: { id: categoryId } }, ...(sellerId ? { seller: { connect: { id: sellerId } } } : {}),
+  } }));
+});
+// Pushes a product to the top of the shop (above everything ranked so far),
+// or clears its placement back to plain newest-first order.
+router.post('/admin/products/:id/feature', async (req, res) => {
+  const { top } = z.object({ top: z.boolean() }).parse(req.body);
+  const max = top ? (await db.product.aggregate({ _max: { featuredRank: true } }))._max.featuredRank || 0 : 0;
+  res.json(await db.product.update({ where: { id: req.params.id }, data: { featuredRank: top ? max + 1 : 0 } }));
+});
+// The admin can seed a review on any product -- a launch review, a migrated
+// one -- under a shown name, with the same star/photo fields a customer gets.
+router.post('/admin/products/:id/reviews', async (req, res) => {
+  const data = adminReviewSchema.parse(req.body);
+  requireThat(await db.product.findUnique({ where: { id: req.params.id } }), 404, 'Product not found');
+  res.status(201).json(await db.review.create({ data: { ...data, productId: req.params.id } }));
+});
 // The return window is set here, once per category: "anything in Grocery
 // can be returned for 2 hours".
 const categorySchema = z.object({
@@ -660,6 +688,16 @@ router.post('/admin/sellers/:id/impersonate', async (req, res) => {
   requireThat(seller && !seller.deleted, 404, 'Seller not found');
   res.json({ token: tokenFor('SELLER', seller) });
 });
+// A fine for a late or mishandled order: it adds to the seller's running
+// penalty total (shown on their own earnings) and tells them why.
+router.post('/admin/sellers/:id/penalty', async (req, res) => {
+  const { amountPaise, reason } = z.object({ amountPaise: z.number().int().min(1).max(10000000), reason: z.string().trim().min(1).max(300) }).parse(req.body);
+  const seller = await db.seller.findUnique({ where: { id: req.params.id } });
+  requireThat(seller && !seller.deleted, 404, 'Seller not found');
+  const updated = await db.seller.update({ where: { id: req.params.id }, data: { penaltyPaise: { increment: amountPaise } } });
+  await notify('SELLER', 'PENALTY', 'A penalty was applied', `NTSA applied a penalty of ₹${(amountPaise / 100).toFixed(2)}: ${reason}. Your total penalties are now ₹${(updated.penaltyPaise / 100).toFixed(2)}.`, null);
+  res.json({ penaltyPaise: updated.penaltyPaise });
+});
 router.get('/admin/refunds', async (req, res) => res.json(await db.refund.findMany({ include: { orderItem: { include: { order: true } } }, orderBy: { createdAt: 'desc' }, take: 200 })));
 router.patch('/admin/refunds/:id', async (req, res) => {
   const { status } = z.object({ status: z.enum(['APPROVED', 'REJECTED']) }).parse(req.body);
@@ -687,6 +725,14 @@ router.delete('/seller/products/:id', seller, async (req, res) => {
   const changed = await db.product.updateMany({ where: { id: req.params.id, sellerId: req.actor.id }, data: { active: false } });
   requireThat(changed.count === 1, 404, 'Product not found');
   res.status(204).end();
+});
+// A seller can copy one of their own listings; the copy stays hidden and in
+// their shop, never jumping placement (that's the admin's to set).
+router.post('/seller/products/:id/duplicate', seller, async (req, res) => {
+  const src = await db.product.findFirst({ where: { id: req.params.id, sellerId: req.actor.id } });
+  requireThat(src, 404, 'Product not found');
+  const { id, createdAt, categoryId, sellerId, ...p } = src;
+  res.status(201).json(await db.product.create({ data: { ...p, name: `${p.name} (copy)`, active: false, featuredRank: 0, category: { connect: { id: categoryId } }, seller: { connect: { id: req.actor.id } } } }));
 });
 // The seller's sales: one row per order line of theirs, with just enough of
 // the order to fulfil it. Another seller's lines in the same order are not
@@ -738,7 +784,7 @@ router.post('/seller/orders/:id/cancel', seller, async (req, res) => {
 // What the shop has earned: cancelled orders don't count, and money is only
 // counted as earned once the order is delivered. `earnedPaise` is net, after
 // NTSA's commission -- `commissionPaise` is the other half of that split.
-async function sellerSummaryFor(sellerId, commissionPercent) {
+async function sellerSummaryFor(sellerId, commissionPercent, penaltyPaise = 0) {
   const items = await db.orderItem.findMany({ where: { sellerId }, include: { order: { select: { status: true } } } });
   const live = items.filter(i => i.order.status !== 'CANCELLED');
   const value = rows => rows.reduce((sum, i) => sum + i.unitPaise * i.quantity, 0);
@@ -752,11 +798,13 @@ async function sellerSummaryFor(sellerId, commissionPercent) {
     salesPaise: value(live),
     commissionPercent,
     commissionPaise,
-    earnedPaise: deliveredGrossPaise - commissionPaise,
+    // After NTSA's cut and any penalties the admin has docked.
+    earnedPaise: deliveredGrossPaise - commissionPaise - penaltyPaise,
+    penaltyPaise,
     awaitingPaise: value(live.filter(i => i.order.status !== 'DELIVERED')),
     cancelledPaise: value(items.filter(i => i.order.status === 'CANCELLED')),
   };
 }
-router.get('/seller/summary', seller, async (req, res) => res.json(await sellerSummaryFor(req.actor.id, req.actor.account.commissionPercent)));
+router.get('/seller/summary', seller, async (req, res) => res.json(await sellerSummaryFor(req.actor.id, req.actor.account.commissionPercent, req.actor.account.penaltyPaise)));
 // Photos for the seller's own products, watermarked like every other one.
 router.post('/seller/images', seller, multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => res.status(201).json(await uploadImage(req.file, { watermark: true })));

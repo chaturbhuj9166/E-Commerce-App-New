@@ -169,7 +169,7 @@ try {
     ['Electronics', 'electronics', 48, true], ['Fashion', 'fashion', 24, false], ['Grocery', 'grocery', 2, false], ['Beauty', 'beauty', 2, false],
     ['Home & Kitchen', 'home_kitchen', 24, false], ['Mobiles', 'mobiles', 24, true], ['Appliances', 'appliances', 48, true], ['Furniture', 'furniture', 168, true],
     ['Toys & Games', 'toys', 24, false], ['Sports', 'sports', 48, false], ['Books', 'books', 24, false], ['Health', 'health', 24, false],
-    ['Lawn & Garden', 'lawn_garden', 48, false],
+    ['Lawn & Garden', 'lawn_garden', 48, false], ['Loans', 'loans', 0, false],
   ];
   for (const [name, icon, refundWindowHours, allowsUsedStock] of categories) {
     await db.category.upsert({ where: { name }, update: { refundWindowHours, allowsUsedStock }, create: { name, icon, refundWindowHours, allowsUsedStock } });

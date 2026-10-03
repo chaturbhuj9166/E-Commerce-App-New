@@ -97,6 +97,9 @@ model Seller {
   // seller (not a single store-wide rate) so a negotiated deal is just a
   // different number here, not a special case anywhere else.
   commissionPercent Int @default(10)
+  // Money the admin has docked for late or mishandled orders. Shown on the
+  // seller's own earnings, and added to by the admin with a reason.
+  penaltyPaise Int @default(0)
   enabled Boolean @default(true)
   deleted Boolean @default(false)
   sessionVersion Int @default(0)
@@ -258,6 +261,12 @@ model Product {
   pricePaise Int
   wholesalePaise Int
   mrpPaise Int?
+  // What the same thing sells for elsewhere, shown next to our price so a
+  // shopper sees the saving. Optional; purely informational.
+  marketPricePaise Int?
+  // Higher shows first in the shop. The admin nudges a product up or down;
+  // ties fall back to newest-first. 0 for everything until the admin ranks it.
+  featuredRank Int @default(0)
   stock Int
   categoryId String
   // Whose stock this is. NTSA's own products have no seller; a shop that
@@ -395,13 +404,18 @@ model Refund {
 }
 model Review {
   id String @id @default(cuid())
-  userId String
+  // A real customer's review is tied to their account (one per product). An
+  // admin-seeded review has no user and carries the name to show instead --
+  // Postgres treats the null userId as distinct, so many can sit on one
+  // product without tripping the one-per-customer rule.
+  userId String?
+  authorName String?
   productId String
   rating Int
   comment String
   images String[]
   createdAt DateTime @default(now())
-  user User @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
   product Product @relation(fields: [productId], references: [id])
   @@unique([userId, productId])
   @@map("reviews")
