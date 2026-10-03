@@ -572,15 +572,19 @@ function Editor({ type, data, categories, busy, onSubmit }) {
   // Options (sizes / storage / ...) and their optional per-option prices, in rupees while editing.
   const [showCondition, setShowCondition] = useState(!!data?.condition && data.condition !== 'NEW');
   const [condition, setCondition] = useState(data?.condition || 'NEW');
-  // A refurbished/used item can be listed in grades (Fair/Good/Superb) the
-  // shopper picks between, each its own price. The grades ride on the generic
-  // option slot, just labelled "Condition" -- see the seller panel for why.
+  // Refurbished/used grades are their own axis, priced like colours (an extra
+  // over the base) -- so a product keeps its capacity option AND its colours
+  // when it's marked refurbished, and the grade just adds its extra on top.
   const gradeMode = showCondition && condition !== 'NEW';
   const [sizes, setSizes] = useState(data?.sizes?.join(', ') || '');
   const [sizePrices, setSizePrices] = useState(() => Object.fromEntries(Object.entries(data?.sizePrices || {}).map(([k, v]) => [k, { retail: v.pricePaise / 100, wholesale: v.wholesalePaise / 100, mrp: v.mrpPaise ? v.mrpPaise / 100 : '' }])));
   const sizeList = sizes.split(',').map(x => x.trim()).filter(Boolean);
   const setSizePrice = (size, key, value) => setSizePrices(p => ({ ...p, [size]: { ...p[size], [key]: value } }));
-  const toggleGrade = g => setSizes(prev => {
+  const [grades, setGrades] = useState(data?.conditionGrades?.join(', ') || '');
+  const gradeList = grades.split(',').map(x => x.trim()).filter(Boolean);
+  const [gradeExtras, setGradeExtras] = useState(() => Object.fromEntries(Object.entries(data?.conditionGradeExtraPaise || {}).map(([k, v]) => [k, v / 100])));
+  const setGradeExtra = (g, value) => setGradeExtras(p => ({ ...p, [g]: value }));
+  const toggleGrade = g => setGrades(prev => {
     const picked = prev.split(',').map(x => x.trim()).filter(Boolean);
     const next = picked.includes(g) ? picked.filter(x => x !== g) : [...picked, g];
     return GRADES.filter(x => next.includes(x)).join(', ');
@@ -615,7 +619,7 @@ function Editor({ type, data, categories, busy, onSubmit }) {
   };
   // The per-option / per-grade price grid; placed in the options block for a
   // normal product, or right under the grade tick-boxes for a graded one.
-  const priceTable = sizeList.length > 0 ? <Field label={gradeMode ? 'Price per grade — Fair cheapest, Superb dearest. Type what it costs extra and the prices fill in, or write them yourself.' : 'Price per option — a bigger option should cost more. Type what it costs extra and the prices fill in, or write them yourself.'}>
+  const priceTable = sizeList.length > 0 ? <Field label="Price per option — a bigger option should cost more. Type what it costs extra and the prices fill in, or write them yourself.">
     <div className="attribute-rows">
       {sizeList.map(s => <div className="option-price-row" key={s}>
         <strong>{s}</strong>
@@ -626,9 +630,9 @@ function Editor({ type, data, categories, busy, onSubmit }) {
       </div>)}
     </div>
     {sizeList.some(s => String(sizePrices[s]?.retail ?? '').trim()) && sizeList.some(s => !String(sizePrices[s]?.retail ?? '').trim())
-      ? <small className="danger-text">Price every {gradeMode ? 'grade' : 'option'}, or clear them all — a half-filled list is refused.</small>
+      ? <small className="danger-text">Price every option, or clear them all — a half-filled list is refused.</small>
       : sizeList.every(s => !String(sizePrices[s]?.retail ?? '').trim())
-        ? <small>Every {gradeMode ? 'grade' : 'option'} costs the same right now. Is the better one really the same price?</small>
+        ? <small>Every option costs the same right now. Is the bigger one really the same price?</small>
         : null}
   </Field> : null;
   return <form className="editor" onSubmit={e => { e.preventDefault(); setError(''); const f = Object.fromEntries(new FormData(e.target)); try {
@@ -641,7 +645,7 @@ function Editor({ type, data, categories, busy, onSubmit }) {
         if (!String(o.wholesale ?? '').trim()) throw new Error(`Enter a wholesale price for ${s}, or clear its retail price`);
         return [s, { pricePaise: paise(o.retail), wholesalePaise: paise(o.wholesale), mrpPaise: String(o.mrp ?? '').trim() ? paise(o.mrp) : null }];
       }));
-      onSubmit({ name: f.name, description: f.description, sku: f.sku?.trim() || null, pricePaise: paise(f.retail), wholesalePaise: paise(f.wholesale), mrpPaise: f.mrp ? paise(f.mrp) : null, marketPricePaise: f.market ? paise(f.market) : null, stock: Number(f.stock), categoryId: f.categoryId, images: images.split('\n').map(x => x.trim()).filter(Boolean), colors: f.colors.split(',').map(x => x.trim()).filter(Boolean), sizes: sizeList, sizeLabel: gradeMode ? 'Condition' : (f.sizeLabel?.trim() || 'Size'), sizePrices: Object.keys(optionPrices).length ? optionPrices : null, colorImages: Object.keys(colorImagesOut).length ? colorImagesOut : null, colorExtraPaise: Object.keys(colorExtraPaise).length ? colorExtraPaise : null, attributes: cleanAttributes, deal: f.deal === 'on', condition, conditionNote: f.conditionNote?.trim() || null, audience: f.audience });
+      onSubmit({ name: f.name, description: f.description, sku: f.sku?.trim() || null, pricePaise: paise(f.retail), wholesalePaise: paise(f.wholesale), mrpPaise: f.mrp ? paise(f.mrp) : null, marketPricePaise: f.market ? paise(f.market) : null, stock: Number(f.stock), categoryId: f.categoryId, images: images.split('\n').map(x => x.trim()).filter(Boolean), colors: f.colors.split(',').map(x => x.trim()).filter(Boolean), sizes: sizeList, sizeLabel: f.sizeLabel?.trim() || 'Size', sizePrices: Object.keys(optionPrices).length ? optionPrices : null, colorImages: Object.keys(colorImagesOut).length ? colorImagesOut : null, colorExtraPaise: Object.keys(colorExtraPaise).length ? colorExtraPaise : null, conditionGrades: gradeMode ? gradeList : [], conditionGradeExtraPaise: gradeMode ? (() => { const m = Object.fromEntries(gradeList.filter(g => Number(gradeExtras[g]) > 0).map(g => [g, paise(gradeExtras[g])])); return Object.keys(m).length ? m : null; })() : null, attributes: cleanAttributes, deal: f.deal === 'on', condition, conditionNote: f.conditionNote?.trim() || null, audience: f.audience });
     }
     else if (type === 'Categories') onSubmit({ name: f.name, icon: data?.icon || 'shopping_bag', refundWindowHours: Number(f.refundWindowHours), allowsUsedStock: f.allowsUsedStock === 'on' });
     // Cleared optional fields are sent as null so an edit actually removes them.
@@ -667,7 +671,7 @@ function Editor({ type, data, categories, busy, onSubmit }) {
       <p className="muted">0 means no returns. Saving this updates every product in the category; orders already placed keep the window they were bought under.</p>
     </>}
     {['Products', 'Wholesale products'].includes(type) && <><Field label="Description"><textarea name="description" defaultValue={data?.description} required maxLength={5000} onChange={e => checkSuggestion(e.target.form)}/></Field><Field label="SKU — your own stock code, optional" name="sku" defaultValue={data?.sku || ''} maxLength={60} placeholder="e.g. NTSA-SHT-005"/><div className="form-grid"><Field label="Retail price (₹)" name="retail" type="number" min="0.01" step="0.01" defaultValue={data ? data.pricePaise / 100 : ''} required/><Field label="Wholesale price (₹)" name="wholesale" type="number" min="0.01" step="0.01" defaultValue={data ? data.wholesalePaise / 100 : ''} required/><Field label="MRP (₹) — optional, shows a strikethrough discount" name="mrp" type="number" min="0.01" step="0.01" defaultValue={data?.mrpPaise ? data.mrpPaise / 100 : ''}/><Field label="Market price (₹) — optional, what it sells for elsewhere" name="market" type="number" min="0.01" step="0.01" defaultValue={data?.marketPricePaise ? data.marketPricePaise / 100 : ''}/><Field label="Stock quantity" name="stock" type="number" min="0" step="1" defaultValue={data?.stock ?? 0} required/><p className="muted">Returns are allowed for as long as the chosen category says. Change that on the Categories page.</p></div><Field label="Category"><select name="categoryId" value={categoryId} onChange={e => setCategoryId(e.target.value)} required><option value="" disabled>Select a category</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
-    {suggestion && suggestion.id !== categoryId && <p className="muted" style={{ marginTop: -10 }}>This sounds like it belongs in <strong>{suggestion.name}</strong>. <button type="button" className="text-button" style={{ display: 'inline', padding: 0 }} onClick={() => { setCategoryId(suggestion.id); setSuggestion(null); }}>Use this category</button></p>}<div className="form-grid"><Field label="Colors — comma separated, optional" name="colors" value={colors} onChange={e => setColors(e.target.value)} placeholder="Black, White, Blue"/>{!gradeMode && <Field label="Options (sizes, storage…) — comma separated, optional" name="sizes" value={sizes} onChange={e => setSizes(e.target.value)} placeholder="6, 7, 8  or  128GB, 256GB"/>}</div>
+    {suggestion && suggestion.id !== categoryId && <p className="muted" style={{ marginTop: -10 }}>This sounds like it belongs in <strong>{suggestion.name}</strong>. <button type="button" className="text-button" style={{ display: 'inline', padding: 0 }} onClick={() => { setCategoryId(suggestion.id); setSuggestion(null); }}>Use this category</button></p>}<div className="form-grid"><Field label="Colors — comma separated, optional" name="colors" value={colors} onChange={e => setColors(e.target.value)} placeholder="Black, White, Blue"/><Field label="Options (sizes, storage…) — comma separated, optional" name="sizes" value={sizes} onChange={e => setSizes(e.target.value)} placeholder="6, 7, 8  or  128GB, 256GB"/></div>
       {colorList.length > 0 && <Field label="Colour price difference — optional. What a colour costs on top of the price above; leave blank when it costs the same.">
         <div className="attribute-rows">
           {colorList.map(c => <div className="option-price-row" key={c}>
@@ -686,7 +690,7 @@ function Editor({ type, data, categories, busy, onSubmit }) {
           </div>)}
         </div>
       </Field>}
-      {!gradeMode && sizeList.length > 0 && <>
+      {sizeList.length > 0 && <>
         <Field label="Option name shown to shoppers" name="sizeLabel" defaultValue={data?.sizeLabel || 'Size'} maxLength={30} placeholder="Size, Storage, RAM…" required/>
         {priceTable}
       </>}<Field label="Image URLs — one per line, up to 5"><textarea value={images} onChange={e => setImages(e.target.value)} placeholder="https://…"/></Field><Field label={uploading ? 'Uploading…' : 'Or upload a photo (max 5 MB) — the NTSA logo is stamped on automatically'} type="file" accept="image/png,image/jpeg,image/webp" disabled={uploading} onChange={async e => { if (!e.target.files[0]) return; setUploading(true); try { if (images.split('\n').filter(Boolean).length >= 5) throw new Error('Maximum five images'); const form = new FormData(); form.append('image', e.target.files[0]); const r = await api('/admin/images', { method: 'POST', body: form }); setImages(v => [v, r.url].filter(Boolean).join('\n')); } catch (err) { setError(err.message); } finally { setUploading(false); } }}/>
@@ -704,7 +708,7 @@ function Editor({ type, data, categories, busy, onSubmit }) {
       {/* Hidden behind a button: most products are plain new stock. */}
       {!allowsUsedStock && !showCondition ? null : !showCondition ? <button type="button" className="button secondary" onClick={() => setShowCondition(true)}>Not brand-new stock? (refurbished / open box)</button> : <>
         <Field label="Condition"><select name="condition" value={condition} onChange={e => setCondition(e.target.value)}><option value="NEW">New</option><option value="REFURBISHED">Refurbished</option><option value="OPEN_BOX">Open box — unused, box opened</option><option value="USED">Used</option></select></Field>
-        {gradeMode && <><Field label="Condition grades — tick the ones you're selling. The shopper picks one and pays that grade's price."><div className="grade-picker">{GRADES.map(g => <label key={g} className="grade-chip"><input type="checkbox" checked={sizeList.includes(g)} onChange={() => toggleGrade(g)}/>{g}</label>)}</div></Field>{priceTable}</>}
+        {gradeMode && <><Field label="Condition grades — tick the ones you're selling. The shopper picks one; Fair is the base price, better grades cost extra."><div className="grade-picker">{GRADES.map(g => <label key={g} className="grade-chip"><input type="checkbox" checked={gradeList.includes(g)} onChange={() => toggleGrade(g)}/>{g}</label>)}</div></Field>{gradeList.length > 0 && <Field label="Grade price difference — what each grade costs on top of the base price. Leave the cheapest (usually Fair) blank."><div className="attribute-rows">{gradeList.map(g => <div className="option-price-row" key={g}><strong>{g}</strong><input type="number" min="0" step="0.01" placeholder="+ Extra ₹" aria-label={`${g} extra over the base price`} value={gradeExtras[g] ?? ''} onChange={e => setGradeExtra(g, e.target.value)}/></div>)}</div></Field>}</>}
         <Field label="Condition note — shown to the shopper (optional)" name="conditionNote" defaultValue={data?.conditionNote || ''} maxLength={200} placeholder="e.g. Box opened for testing, product unused"/>
       </>}</>}
     {type === 'Banners' && <>

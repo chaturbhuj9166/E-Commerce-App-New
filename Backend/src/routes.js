@@ -138,24 +138,24 @@ router.get('/wallet', customer, async (req, res) => res.json(await db.wallet.fin
 // Each cart line is one product + size + color; unitPaise/mrpPaise are that
 // option's price so the app doesn't have to work it out.
 router.get('/cart', customer, async (req, res) => {
-  const items = await db.cartItem.findMany({ where: { userId: req.actor.id }, include: { product: { select: { id: true, name: true, pricePaise: true, wholesalePaise: true, mrpPaise: true, stock: true, active: true, images: true, sizes: true, colors: true, sizeLabel: true, sizePrices: true, colorExtraPaise: true, category: true } } } });
+  const items = await db.cartItem.findMany({ where: { userId: req.actor.id }, include: { product: { select: { id: true, name: true, pricePaise: true, wholesalePaise: true, mrpPaise: true, stock: true, active: true, images: true, sizes: true, colors: true, sizeLabel: true, sizePrices: true, colorExtraPaise: true, conditionGrades: true, conditionGradeExtraPaise: true, category: true } } } });
   res.json(items.map(({ product: { wholesalePaise, sizePrices, ...product }, ...item }) => {
-    const { pricePaise, mrpPaise } = priceFor({ ...product, wholesalePaise, sizePrices }, item.size, item.color);
+    const { pricePaise, mrpPaise } = priceFor({ ...product, wholesalePaise, sizePrices }, item.size, item.color, item.grade);
     return { ...item, unitPaise: pricePaise, mrpPaise, product: { ...product, sizePrices: publicSizePrices(sizePrices) } };
   }));
 });
-const cartKey = z.object({ size: z.string().trim().max(30).optional(), color: z.string().trim().max(30).optional() });
+const cartKey = z.object({ size: z.string().trim().max(30).optional(), color: z.string().trim().max(30).optional(), grade: z.string().trim().max(30).optional() });
 router.put('/cart/:id', customer, async (req, res) => {
   const { quantity, ...pick } = cartKey.extend({ quantity: z.number().int().min(1).max(10000) }).parse(req.body);
   const p = await db.product.findFirst({ where: { id: req.params.id, active: true } });
   requireThat(p && p.stock >= quantity, 400, 'Product unavailable or insufficient stock');
-  const { size, color } = variantFor(p, pick.size, pick.color);
-  const key = { userId: req.actor.id, productId: p.id, size, color };
-  res.json(await db.cartItem.upsert({ where: { userId_productId_size_color: key }, update: { quantity }, create: { ...key, quantity } }));
+  const { size, color, grade } = variantFor(p, pick.size, pick.color, pick.grade);
+  const key = { userId: req.actor.id, productId: p.id, size, color, grade };
+  res.json(await db.cartItem.upsert({ where: { userId_productId_size_color_grade: key }, update: { quantity }, create: { ...key, quantity } }));
 });
 router.delete('/cart/:id', customer, async (req, res) => {
-  const { size = '', color = '' } = cartKey.parse(req.query);
-  await db.cartItem.deleteMany({ where: { userId: req.actor.id, productId: req.params.id, size, color } }); res.status(204).end();
+  const { size = '', color = '', grade = '' } = cartKey.parse(req.query);
+  await db.cartItem.deleteMany({ where: { userId: req.actor.id, productId: req.params.id, size, color, grade } }); res.status(204).end();
 });
 router.get('/wishlist', customer, async (req, res) => res.json(await db.wishlist.findMany({ where: { userId: req.actor.id }, include: { product: { select: { id: true, name: true, pricePaise: true, images: true, stock: true, active: true, sizes: true, colors: true } } } })));
 router.put('/wishlist/:id', customer, async (req, res) => {
@@ -544,7 +544,7 @@ router.get('/admin/products', async (req, res) => {
 // allows, copied on so orders and the app keep reading it off the product.
 const productData = async body => {
   const data = productSchema.parse(body);
-  for (const key of ['colorImages', 'sizePrices', 'colorExtraPaise']) if (data[key] === null) data[key] = Prisma.DbNull;
+  for (const key of ['colorImages', 'sizePrices', 'colorExtraPaise', 'conditionGradeExtraPaise']) if (data[key] === null) data[key] = Prisma.DbNull;
   const category = await db.category.findUnique({ where: { id: data.categoryId } });
   requireThat(category, 400, 'Choose a category for this product');
   requireThat(data.condition === 'NEW' || category.allowsUsedStock, 400, category.name + ' does not sell refurbished or open-box stock. Tick that on the category first.');

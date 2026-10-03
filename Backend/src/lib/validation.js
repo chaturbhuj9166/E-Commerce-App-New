@@ -26,6 +26,9 @@ export const productSchema = z.object({ name: text, description: z.string().trim
   colorImages: z.record(z.string(), imageUrlSchema).nullable().optional(),
   // What a color adds to the price, e.g. { "Red": 5000 } for 50 rupees more.
   colorExtraPaise: z.record(z.string(), z.number().int().min(0).max(MAX_MONEY)).nullable().optional(),
+  // Refurbished/used grades and what each adds to the price, same shape as colours.
+  conditionGrades: optionList,
+  conditionGradeExtraPaise: z.record(z.string(), z.number().int().min(0).max(MAX_MONEY)).nullable().optional(),
   // Free-form extra specs, e.g. [{ label: "Capacity", value: "20L" }] -- for
   // anything that doesn't fit a fixed field.
   attributes: z.array(z.object({ label: z.string().trim().min(1).max(50), value: z.string().trim().min(1).max(200) })).max(20).default([]),
@@ -42,6 +45,7 @@ export const productSchema = z.object({ name: text, description: z.string().trim
   .refine(v => !v.mrpPaise || v.mrpPaise >= v.pricePaise, 'MRP cannot be lower than the selling price')
   .refine(v => Object.keys(v.sizePrices ?? {}).every(k => v.sizes.includes(k)), 'Option prices must match one of the listed options')
   .refine(v => Object.keys(v.colorExtraPaise ?? {}).every(k => v.colors.includes(k)), 'A color price difference must match one of the listed colors')
+  .refine(v => Object.keys(v.conditionGradeExtraPaise ?? {}).every(k => v.conditionGrades.includes(k)), 'A grade price difference must match one of the listed grades')
   // A bag of 10kg atta priced like the 5kg one is almost always a slip, so
   // an option either has its own price or is deliberately marked as costing
   // the same -- it cannot be left half-filled.
@@ -175,8 +179,8 @@ export const couponSchema = z.object({
   active: z.boolean().default(true),
 }).refine(v => v.discountType !== 'PERCENT' || v.value <= 100, 'A percent discount cannot exceed 100');
 export const checkoutSchema = z.object({
-  items: z.array(z.object({ productId: text, quantity: z.number().int().min(1).max(10000), size: z.string().trim().max(30).optional(), color: z.string().trim().max(30).optional() })).min(1).max(100)
-    .refine(items => new Set(items.map(i => `${i.productId}|${i.size ?? ''}|${i.color ?? ''}`)).size === items.length, 'Duplicate products are not allowed'),
+  items: z.array(z.object({ productId: text, quantity: z.number().int().min(1).max(10000), size: z.string().trim().max(30).optional(), color: z.string().trim().max(30).optional(), grade: z.string().trim().max(30).optional() })).min(1).max(100)
+    .refine(items => new Set(items.map(i => `${i.productId}|${i.size ?? ''}|${i.color ?? ''}|${i.grade ?? ''}`)).size === items.length, 'Duplicate products are not allowed'),
   addressId: text.optional(), address: addressSchema.optional(),
   paymentMethod: z.enum(['COD', 'WALLET', 'RAZORPAY', 'DEMO']),
   couponCode: couponCode.optional(),

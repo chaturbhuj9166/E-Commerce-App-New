@@ -305,6 +305,13 @@ model Product {
   // that cost the same as the rest say nothing here.
   colorExtraPaise Json?
   colors String[]
+  // Refurbished/used grades a shopper picks between, e.g. ["Fair","Good",
+  // "Superb"], priced like colours: each grade adds its extra on top of the
+  // base price (Fair usually 0), in conditionGradeExtraPaise e.g.
+  // {"Good": 300000, "Superb": 600000}. Independent of sizes and colours, so
+  // a phone can have a capacity AND a colour AND a condition grade at once.
+  conditionGrades String[]
+  conditionGradeExtraPaise Json?
   // Free-form extra specs an admin can add per product, e.g.
   // [{"label": "Capacity", "value": "20L"}, {"label": "Material", "value": "Nylon"}] --
   // for details that don't fit any fixed field (a bag's capacity, a phone's
@@ -392,6 +399,7 @@ model OrderItem {
   // The variant the shopper picked, so the right size/color gets packed.
   size String?
   color String?
+  grade String?
   // Copied from the product when the order is placed, so a seller's sales
   // stay theirs even if the product is edited or removed later.
   sellerId String?
@@ -471,9 +479,10 @@ model CartItem {
   // the same shoe are separate cart lines.
   size String @default("")
   color String @default("")
+  grade String @default("")
   quantity Int
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
-  @@id([userId, productId, size, color])
+  @@id([userId, productId, size, color, grade])
   @@map("cart_items")
 }

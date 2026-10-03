@@ -56,11 +56,11 @@ export async function checkout(actor, input) {
       const p = products.find(p => p.id === i.productId);
       requireThat(p && p.stock >= i.quantity, 409, 'A product is unavailable or has insufficient stock');
       // Customers and wholesale buyers alike must pick every option.
-      const { size, color } = variantFor(p, i.size, i.color);
-      const price = priceFor(p, size, color);
+      const { size, color, grade } = variantFor(p, i.size, i.color, i.grade);
+      const price = priceFor(p, size, color, grade);
       // sellerId is copied on so the sale stays with that shop even if the
       // product is edited or taken down later.
-      return { productId: p.id, sellerId: p.sellerId, quantity: i.quantity, name: p.name, size: size || null, color: color || null, unitPaise: actor.role === 'VENDOR' ? price.wholesalePaise : price.pricePaise, refundWindowHours: p.refundWindowHours };
+      return { productId: p.id, sellerId: p.sellerId, quantity: i.quantity, name: p.name, size: size || null, color: color || null, grade: grade || null, unitPaise: actor.role === 'VENDOR' ? price.wholesalePaise : price.pricePaise, refundWindowHours: p.refundWindowHours };
     });
     const subtotalPaise = totalFor(items);
     if (actor.role === 'VENDOR') {
@@ -98,7 +98,7 @@ export async function checkout(actor, input) {
       items: { create: items },
     }, include: orderInclude });
     // Ordered items leave the customer's saved cart in the same transaction.
-    if (actor.role === 'CUSTOMER') await tx.cartItem.deleteMany({ where: { userId: actor.id, OR: items.map(i => ({ productId: i.productId, size: i.size ?? '', color: i.color ?? '' })) } });
+    if (actor.role === 'CUSTOMER') await tx.cartItem.deleteMany({ where: { userId: actor.id, OR: items.map(i => ({ productId: i.productId, size: i.size ?? '', color: i.color ?? '', grade: i.grade ?? '' })) } });
     if (data.paymentMethod === 'WALLET') {
       const wallet = await tx.wallet.findUnique({ where: { userId: actor.id } });
       requireThat(wallet, 400, 'Wallet not found');
