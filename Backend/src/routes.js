@@ -415,6 +415,43 @@ router.delete('/admin/reviews/:id', async (req, res) => { await db.review.delete
 // Collected vs pending splits out COD orders that haven't reached the
 // customer yet -- that cash isn't in hand until it is, unlike an online
 // payment, which is captured before the order is ever PLACED.
+// One place to see every seller's whole picture: their products, how many
+// times each was ordered, what they've sold, and how often it came back as a
+// refund. Built from the order lines that carry a sellerId.
+router.get('/admin/seller-insights', async (req, res) => {
+  const [sellers, products, items] = await Promise.all([
+    db.seller.findMany({ where: { deleted: false }, orderBy: { createdAt: 'desc' } }),
+    db.product.findMany({ where: { sellerId: { not: null }, active: true }, select: { id: true, name: true, images: true, stock: true, pricePaise: true, sellerId: true } }),
+    db.orderItem.findMany({ where: { sellerId: { not: null } }, select: { sellerId: true, productId: true, orderId: true, name: true, quantity: true, unitPaise: true, order: { select: { status: true } }, refund: { select: { status: true } } } }),
+  ]);
+  // Start every active product at zero so a listing with no sales still shows.
+  const prodMap = new Map();
+  for (const p of products) prodMap.set(p.id, { productId: p.id, sellerId: p.sellerId, name: p.name, image: p.images[0] ?? null, stock: p.stock, timesOrdered: 0, units: 0, revenuePaise: 0, refunds: 0, active: true });
+  for (const it of items) {
+    if (!prodMap.has(it.productId)) prodMap.set(it.productId, { productId: it.productId, sellerId: it.sellerId, name: it.name, image: null, stock: null, timesOrdered: 0, units: 0, revenuePaise: 0, refunds: 0, active: false });
+    const row = prodMap.get(it.productId);
+    const cancelled = it.order.status === 'CANCELLED';
+    if (!cancelled) { row.timesOrdered += 1; row.units += it.quantity; row.revenuePaise += it.quantity * it.unitPaise; }
+    if (it.refund) row.refunds += 1;
+  }
+  const byProduct = [...prodMap.values()];
+  const result = sellers.map(s => {
+    const prods = byProduct.filter(p => p.sellerId === s.id).sort((a, b) => b.units - a.units || b.timesOrdered - a.timesOrdered);
+    const live = items.filter(i => i.sellerId === s.id && i.order.status !== 'CANCELLED');
+    return {
+      id: s.id, shopName: s.shopName, ownerName: s.ownerName, commissionPercent: s.commissionPercent, penaltyPaise: s.penaltyPaise, enabled: s.enabled,
+      productCount: prods.filter(p => p.active).length,
+      orders: new Set(live.map(i => i.orderId)).size,
+      orderLines: live.length,
+      unitsSold: live.reduce((n, i) => n + i.quantity, 0),
+      revenuePaise: live.reduce((n, i) => n + i.quantity * i.unitPaise, 0),
+      refunds: items.filter(i => i.sellerId === s.id && i.refund).length,
+      refundsApproved: items.filter(i => i.sellerId === s.id && i.refund?.status === 'APPROVED').length,
+      products: prods,
+    };
+  });
+  res.json(result);
+});
 router.get('/admin/reports', async (req, res) => {
   const { days: rawDays } = z.object({ days: z.coerce.number().int().min(1).max(365).optional() }).parse(req.query);
   const days = rawDays ?? 30;

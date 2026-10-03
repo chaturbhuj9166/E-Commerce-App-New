@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LayoutDashboard, Package, Shapes, Users, User, ShoppingBag, RotateCcw, LogOut, Search, Plus, ArrowUpRight, ChevronRight, Check, Menu, X, Truck, ShieldCheck, Wallet, Store, Image, Tag, Eye, EyeOff, Bell, ClipboardList, UserPlus, BadgeCheck, UserCog, MapPin, Paperclip, Settings as SettingsIcon, FileText, BarChart3, Star } from 'lucide-react';
+import { LayoutDashboard, Package, Shapes, Users, User, ShoppingBag, RotateCcw, LogOut, Search, Plus, ArrowUpRight, ChevronRight, Check, Menu, X, Truck, ShieldCheck, Wallet, Store, Image, Tag, Eye, EyeOff, Bell, ClipboardList, UserPlus, BadgeCheck, UserCog, MapPin, Paperclip, Settings as SettingsIcon, FileText, BarChart3, Star, TrendingUp } from 'lucide-react';
 import { api, money, paise, openInvoice, suggestCategory, SELLER_PANEL_URL } from './api';
 import { Button, Field, PasswordField, Badge, Empty, Modal, Stat, ProductImage, CONDITION_LABEL } from './ui';
 import { WholesaleProductsPage, AudienceField } from './pages/wholesale-products';
 import { OverviewPage } from './pages/dashboard';
 import { CustomersPage } from './pages/customers';
 import { ReviewsPage } from './pages/reviews';
+import { SellerInsightsPage } from './pages/seller-insights';
 import { ShipmentsPage } from './pages/shipments';
 import { ReportsPage } from './pages/reports';
 import { OrderTable } from './pages/shared';
@@ -34,7 +35,7 @@ function App() {
   // Approved sellers' own accounts -- separate from `applications`, which
   // is the sign-up request each one started as.
   const [sellers, setSellers] = useState([]);
-  const [hiddenProducts, setHiddenProducts] = useState([]), [reviews, setReviews] = useState([]);
+  const [hiddenProducts, setHiddenProducts] = useState([]), [reviews, setReviews] = useState([]), [insights, setInsights] = useState([]);
   // Overview and Reports share the same revenue/order-mix figures, so one
   // load keeps them in sync instead of each page fetching its own copy.
   const [reports, setReports] = useState(null), [reportsDays, setReportsDays] = useState(30), [loadingReports, setLoadingReports] = useState(false);
@@ -64,9 +65,9 @@ function App() {
       setProducts(p); setCategories(c); setOrders(o);
       if (account.role === 'ADMIN') setWholesaleProducts(await api('/admin/products?audience=WHOLESALE'));
       if (account.role === 'ADMIN') {
-        const [v, r, b, cp, st, apps, notes, queue, pins, stats, rules, cfg, custs, rep, sls, hidden, revs] = await Promise.all([api('/admin/vendors'), api('/admin/refunds'), api('/admin/banners'), api('/admin/coupons'), api('/admin/staff'), api('/admin/seller-applications'), api('/notifications'), api('/packing/orders'), api('/admin/blocked-pincodes'), api('/admin/pincode-stats'), api('/admin/delivery-rules'), api('/admin/settings'), api('/admin/customers'), api(`/admin/reports?days=${reportsDays}`), api('/admin/sellers'), api('/admin/products?hidden=true'), api('/admin/reviews')]);
+        const [v, r, b, cp, st, apps, notes, queue, pins, stats, rules, cfg, custs, rep, sls, hidden, revs, ins] = await Promise.all([api('/admin/vendors'), api('/admin/refunds'), api('/admin/banners'), api('/admin/coupons'), api('/admin/staff'), api('/admin/seller-applications'), api('/notifications'), api('/packing/orders'), api('/admin/blocked-pincodes'), api('/admin/pincode-stats'), api('/admin/delivery-rules'), api('/admin/settings'), api('/admin/customers'), api(`/admin/reports?days=${reportsDays}`), api('/admin/sellers'), api('/admin/products?hidden=true'), api('/admin/reviews'), api('/admin/seller-insights')]);
         setVendors(v); setRefunds(r); setBanners(b); setCoupons(cp); setStaff(st); setApplications(apps); setNotifications(notes); setToPack(queue); setBlockedPins(pins); setPinStats(stats); setDeliveryRules(rules); setSettings(cfg);
-        setCustomers(custs); setReports(rep); setSellers(sls); setHiddenProducts(hidden); setReviews(revs);
+        setCustomers(custs); setReports(rep); setSellers(sls); setHiddenProducts(hidden); setReviews(revs); setInsights(ins);
       }
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   }
@@ -138,7 +139,7 @@ function App() {
   if (!session) return <Login onLogin={(token, loginRole) => { sessionStorage.setItem('ntsa-token', token); setPage(loginRole === 'PACKING' ? 'To pack' : loginRole === 'SALES' ? 'Add seller' : 'Overview'); setSession(token); }}/ >;
   const nav = isPacking ? [['To pack', ClipboardList], ['Packed', Check]]
     : isSales ? [['Add seller', UserPlus], ['My sellers', Store]]
-    : isAdmin ? [['Overview', LayoutDashboard], ['Products', Package], ['Wholesale products', Store], ['Categories', Shapes], ['Orders', ShoppingBag], ['Customers', User], ['Reviews', Star], ['Vendors', Users], ['To pack', ClipboardList], ['Shipments', Truck], ['Banners', Image], ['Coupons', Tag], ['Reports', BarChart3], ['Sellers', BadgeCheck], ['Refunds', RotateCcw], ['Delivery areas', MapPin], ['Staff', UserCog], ['Settings', SettingsIcon]]
+    : isAdmin ? [['Overview', LayoutDashboard], ['Products', Package], ['Wholesale products', Store], ['Categories', Shapes], ['Orders', ShoppingBag], ['Customers', User], ['Reviews', Star], ['Vendors', Users], ['To pack', ClipboardList], ['Shipments', Truck], ['Banners', Image], ['Coupons', Tag], ['Reports', BarChart3], ['Sellers', BadgeCheck], ['Seller insights', TrendingUp], ['Refunds', RotateCcw], ['Delivery areas', MapPin], ['Staff', UserCog], ['Settings', SettingsIcon]]
     : [['Overview', LayoutDashboard], ['Wholesale catalog', Store], ['Orders', ShoppingBag]];
   const pendingApplications = applications.filter(a => a.status === 'PENDING').length;
   const shown = products.filter(p => `${p.name} ${p.category?.name} ${p.seller?.shopName || ''}`.toLowerCase().includes(query.toLowerCase()));
@@ -175,6 +176,7 @@ function App() {
           <div className="overview-grid"><section className="panel"><div className="panel-heading"><div><h2>Recent orders</h2><p>Your latest customer activity</p></div><button className="text-button" onClick={() => go('Orders')}>View all <ArrowUpRight size={15}/></button></div><OrderTable orders={orders.slice(0, 5)} onOpen={o => setModal({ type: 'Order', data: o })}/></section><section className="panel stock-panel"><div className="panel-heading"><div><h2>Stock watch</h2><p>A quick look at your inventory</p></div><Package size={20}/></div>{products.slice().sort((a, b) => a.stock - b.stock).slice(0, 4).map(p => <div className="stock-row" key={p.id}><ProductImage product={p}/><div><strong>{p.name}</strong><small>{p.category?.name}</small></div><Badge>{`${p.stock} left`}</Badge></div>)}{!products.length && <Empty/>}</section></div>
           </>}
           {page === 'Customers' && <CustomersPage customers={customers} query={query} setQuery={setQuery} busy={busy} onBlock={(c, blocked) => action(() => api(`/admin/customers/${c.id}`, { method: 'PATCH', body: { blocked } }), blocked ? `${c.name || 'Customer'} blocked` : `${c.name || 'Customer'} unblocked`)}/>}
+          {page === 'Seller insights' && <SellerInsightsPage insights={insights} query={query} setQuery={setQuery} openSellerDashboard={openSellerDashboard}/>}
           {page === 'Reviews' && <ReviewsPage reviews={reviews} query={query} setQuery={setQuery} busy={busy} onAdd={() => setModal({ type: 'AdminReview', data: null })} onRemove={r => setModal({ type: 'Delete', data: { path: `/admin/reviews/${r.id}`, name: `${r.authorName || r.user?.name || 'Customer'}'s review of ${r.product?.name}` } })}/>}
           {page === 'Shipments' && <ShipmentsPage orders={orders}/>}
           {page === 'Reports' && <ReportsPage reports={reports} reportsDays={reportsDays} setReportsDays={loadReports} loadingReports={loadingReports}/>}
