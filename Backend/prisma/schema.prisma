@@ -31,6 +31,9 @@ model User {
   phone String?
   photoUrl String?
   fcmToken String?
+  // Set by the admin for fraud/abuse; a blocked customer can't sign in or use
+  // an existing session.
+  blocked Boolean @default(false)
   createdAt DateTime @default(now())
   addresses Address[]
   orders Order[]

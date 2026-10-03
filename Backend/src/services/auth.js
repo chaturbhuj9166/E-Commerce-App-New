@@ -18,7 +18,8 @@ export async function auth(req, res, next) {
     // PACKING and SALES are admin-panel staff, so they live in the admin table.
     const model = { CUSTOMER: db.user, ADMIN: db.admin, PACKING: db.admin, SALES: db.admin, VENDOR: db.vendor, SELLER: db.seller }[claims.role];
     const account = model && await model.findUnique({ where: { id: claims.sub } });
-    const blocked = account && ((claims.role === 'VENDOR' || claims.role === 'SELLER') && (!account.enabled || account.deleted))
+    const blocked = account && (claims.role === 'CUSTOMER' && account.blocked)
+      || account && ((claims.role === 'VENDOR' || claims.role === 'SELLER') && (!account.enabled || account.deleted))
       || (['ADMIN', 'PACKING', 'SALES'].includes(claims.role) && (!account?.enabled || account.role !== claims.role));
     if (!account || (claims.role !== 'CUSTOMER' && account.sessionVersion !== claims.version) || blocked) throw new HttpError(401, 'Account is unavailable');
     req.actor = { id: account.id, role: claims.role, account }; next();

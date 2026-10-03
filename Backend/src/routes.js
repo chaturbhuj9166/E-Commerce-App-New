@@ -26,6 +26,7 @@ const safeStaff = a => { const { passwordHash, sessionVersion, ...safe } = a; re
 const notify = (audience, type, title, body, entityId) => db.notification.create({ data: { audience, type, title, body, entityId } });
 async function customerSession(firebase) {
   const user = await db.user.upsert({ where: { firebaseUid: firebase.uid }, update: {}, create: { firebaseUid: firebase.uid, name: firebase.name || '', email: firebase.email, phone: firebase.phone_number, wallet: { create: {} } } });
+  requireThat(!user.blocked, 403, 'This account has been blocked. Please contact NTSA support.');
   return { token: tokenFor('CUSTOMER', user), role: 'CUSTOMER', user };
 }
 // One login endpoint for every panel. Sellers and wholesale partners are
@@ -382,7 +383,7 @@ router.get('/admin/pincode-stats', async (req, res) => {
 // Shoppers, with what they've actually bought -- for the Customers page.
 router.get('/admin/customers', async (req, res) => {
   const rows = await db.$queryRaw`
-    SELECT u.id, u.name, u.phone, u.email, u."createdAt",
+    SELECT u.id, u.name, u.phone, u.email, u.blocked, u."createdAt",
            COUNT(o.id) FILTER (WHERE o.status != 'CANCELLED')::int AS "orderCount",
            COALESCE(SUM(o."totalPaise") FILTER (WHERE o.status != 'CANCELLED'), 0)::int AS "totalSpentPaise",
            MAX(o."createdAt") AS "lastOrderAt"
@@ -393,6 +394,18 @@ router.get('/admin/customers', async (req, res) => {
     LIMIT 500`;
   res.json(rows);
 });
+router.patch('/admin/customers/:id', async (req, res) => {
+  const { blocked } = z.object({ blocked: z.boolean() }).parse(req.body);
+  const user = await db.user.update({ where: { id: req.params.id }, data: { blocked } });
+  res.json({ id: user.id, blocked: user.blocked });
+});
+// Reviews are the customer's own words, but a fake or abusive one is the
+// admin's to take down.
+router.get('/admin/reviews', async (req, res) => res.json(await db.review.findMany({
+  include: { user: { select: { name: true, phone: true } }, product: { select: { name: true, images: true, seller: { select: { shopName: true } } } } },
+  orderBy: { createdAt: 'desc' }, take: 300,
+})));
+router.delete('/admin/reviews/:id', async (req, res) => { await db.review.delete({ where: { id: req.params.id } }); res.status(204).end(); });
 // Revenue, order mix and top sellers for the dashboard charts and the
 // Reports page. `days` is how far back to look; the same window one period
 // earlier gives the trend arrows a "vs last period" to compare against.
@@ -483,8 +496,9 @@ router.post('/admin/seller-applications/:id/reject', async (req, res) => {
 router.get('/admin/products', async (req, res) => {
   // 'Products' asks for the shop's own list, 'Wholesale products' for the
   // dealer-only one; without the filter the panel gets everything.
-  const { audience } = z.object({ audience: z.enum(['RETAIL', 'WHOLESALE', 'BOTH']).optional() }).parse(req.query);
-  const where = { active: true, ...(audience === 'RETAIL' ? { audience: { in: ['RETAIL', 'BOTH'] } } : audience === 'WHOLESALE' ? { audience: { in: ['WHOLESALE', 'BOTH'] } } : {}) };
+  // `hidden=true` lists the products taken off the shop, so one can be put back.
+  const { audience, hidden } = z.object({ audience: z.enum(['RETAIL', 'WHOLESALE', 'BOTH']).optional(), hidden: z.enum(['true', 'false']).optional() }).parse(req.query);
+  const where = { active: hidden !== 'true', ...(audience === 'RETAIL' ? { audience: { in: ['RETAIL', 'BOTH'] } } : audience === 'WHOLESALE' ? { audience: { in: ['WHOLESALE', 'BOTH'] } } : {}) };
   res.json(await db.product.findMany({ where, include: { category: true, seller: { select: { shopName: true } } }, orderBy: { createdAt: 'desc' } }));
 });
 // Prisma won't take a bare null for a Json column; DbNull clears it. The
@@ -501,6 +515,7 @@ const productData = async body => {
 router.post('/admin/products', async (req, res) => res.status(201).json(await db.product.create({ data: await productData(req.body) })));
 router.put('/admin/products/:id', async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: await productData(req.body) })));
 router.delete('/admin/products/:id', async (req, res) => { await db.product.update({ where: { id: req.params.id }, data: { active: false } }); res.status(204).end(); });
+router.post('/admin/products/:id/restore', async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: { active: true } })));
 // The return window is set here, once per category: "anything in Grocery
 // can be returned for 2 hours".
 const categorySchema = z.object({
@@ -596,6 +611,15 @@ router.post('/admin/orders/:id/cancel', async (req, res) => {
 router.post('/admin/orders/:id/deliver', loginLimiter, async (req, res) => {
   const { otp } = z.object({ otp: z.string().regex(/^\d{6}$/) }).parse(req.body);
   res.json(await deliver(req.params.id, otp));
+});
+// When a seller is late, the admin can tick their line off for them so the
+// order isn't stuck waiting.
+router.post('/admin/order-items/:itemId/pack', async (req, res) => {
+  const item = await db.orderItem.findUnique({ where: { id: req.params.itemId }, include: { order: { select: { status: true } } } });
+  requireThat(item, 404, 'Order item not found');
+  requireThat(item.order.status === 'PLACED', 400, 'This order is not waiting to be packed');
+  requireThat(!item.packedAt, 409, 'Already marked packed');
+  res.json(await db.orderItem.update({ where: { id: item.id }, data: { packedAt: new Date() } }));
 });
 // Sellers the admin has approved: their logins are handed out here, so
 // they are enabled, disabled and reset here too.
