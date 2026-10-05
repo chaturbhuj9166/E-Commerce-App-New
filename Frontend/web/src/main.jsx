@@ -507,7 +507,11 @@ function SettingsPage({ settings, busy, action }) {
   const [logoUrl, setLogoUrl] = useState(settings?.logoUrl || '');
   const [uploading, setUploading] = useState(false), [error, setError] = useState('');
   const [cols, setCols] = useState(() => settings?.invoiceColumns?.length ? settings.invoiceColumns : DEFAULT_INVOICE_COLUMNS);
-  const setCol = (key, patch) => setCols(cs => cs.map(c => c.key === key ? { ...c, ...patch } : c));
+  const setColAt = (i, patch) => setCols(cs => cs.map((c, idx) => idx === i ? { ...c, ...patch } : c));
+  const removeColAt = i => setCols(cs => cs.filter((_, idx) => idx !== i));
+  const moveColAt = (i, dir) => setCols(cs => { const j = i + dir; if (j < 0 || j >= cs.length) return cs; const n = [...cs]; [n[i], n[j]] = [n[j], n[i]]; return n; });
+  const addCustomCol = () => setCols(cs => [...cs, { key: `custom:${Math.random().toString(36).slice(2, 8)}`, label: 'New column', show: true, source: { type: 'attribute', attributeLabel: '' } }]);
+  const isBuiltIn = key => ['item', 'variant', 'hsn', 'qty', 'rate', 'amount'].includes(key);
   useEffect(() => { setLogoUrl(settings?.logoUrl || ''); setCols(settings?.invoiceColumns?.length ? settings.invoiceColumns : DEFAULT_INVOICE_COLUMNS); }, [settings]);
   if (!settings) return <section className="panel"><Empty text="Loading your settings…"/></section>;
   return <section className="panel">
@@ -520,7 +524,7 @@ function SettingsPage({ settings, busy, action }) {
         companyGSTIN: f.companyGSTIN?.trim() || null, companyPhone: f.companyPhone?.trim() || null,
         companyEmail: f.companyEmail?.trim() || null, logoUrl: logoUrl || null,
         invoiceTerms: f.invoiceTerms?.trim() || null, invoiceBankDetails: f.invoiceBankDetails?.trim() || null,
-        invoiceColumns: cols.map(c => ({ key: c.key, label: c.label.trim() || c.key, show: c.key === 'item' || c.key === 'amount' ? true : !!c.show })),
+        invoiceColumns: cols.map(c => ({ key: c.key, label: c.label.trim() || c.key, show: c.key === 'item' || c.key === 'amount' ? true : !!c.show, ...(isBuiltIn(c.key) ? {} : { source: c.source?.type === 'constant' ? { type: 'constant', value: (c.source.value || '').trim() } : { type: 'attribute', attributeLabel: (c.source?.attributeLabel || '').trim() } }) })),
       } }), 'Invoice settings saved');
     }}>
       <Field label="Company name" name="companyName" defaultValue={settings.companyName} required maxLength={150}/>
@@ -538,13 +542,25 @@ function SettingsPage({ settings, busy, action }) {
       }}/>
       {logoUrl && <img src={logoUrl} alt="Logo preview" style={{ height: 56, marginBottom: 14, borderRadius: 8, border: '1px solid #e5ebef' }} onError={e => { e.currentTarget.style.display = 'none'; }}/>}
       <h3 style={{ margin: '14px 0 6px' }}>Invoice columns</h3>
-      <p className="muted" style={{ marginBottom: 10 }}>Tick which columns print on the bill, and rename them if you like. Item and Amount always show; Variant prints as a small line under the item.</p>
-      <div className="attribute-rows" style={{ marginBottom: 18 }}>
-        {cols.map(c => <div key={c.key} className="invoice-col-row">
-          <label className="checkbox" style={{ margin: 0 }}><input type="checkbox" checked={c.key === 'item' || c.key === 'amount' ? true : !!c.show} disabled={c.key === 'item' || c.key === 'amount'} onChange={e => setCol(c.key, { show: e.target.checked })}/></label>
-          <input value={c.label} maxLength={24} onChange={e => setCol(c.key, { label: e.target.value })} aria-label={`${c.key} column label`}/>
-          <small className="muted">{c.key === 'hsn' ? 'from each product’s HSN code' : c.key === 'variant' ? 'size / colour / condition' : ''}</small>
+      <p className="muted" style={{ marginBottom: 10 }}>Build the bill's table however you like. Tick what shows, rename anything, drag the order with the arrows, and add your own columns — each pulling its value from a product detail or a fixed value. Item and Amount always show; Variant prints as a small line under the item.</p>
+      <div style={{ marginBottom: 12 }}>
+        {cols.map((c, i) => <div key={c.key} className="col-builder-row">
+          <div className="col-move"><button type="button" className="icon-button" aria-label="Move up" disabled={i === 0} onClick={() => moveColAt(i, -1)}>↑</button><button type="button" className="icon-button" aria-label="Move down" disabled={i === cols.length - 1} onClick={() => moveColAt(i, 1)}>↓</button></div>
+          <label className="checkbox" style={{ margin: 0 }}><input type="checkbox" checked={c.key === 'item' || c.key === 'amount' ? true : !!c.show} disabled={c.key === 'item' || c.key === 'amount'} onChange={e => setColAt(i, { show: e.target.checked })}/></label>
+          <input className="col-label" value={c.label} maxLength={24} onChange={e => setColAt(i, { label: e.target.value })} aria-label="Column name"/>
+          {isBuiltIn(c.key)
+            ? <small className="muted col-source">{{ item: 'the product name', variant: 'size / colour / condition', hsn: 'each product’s HSN code', qty: 'quantity ordered', rate: 'unit price', amount: 'line total' }[c.key] || ''}</small>
+            : <div className="col-source custom"><select value={c.source?.type || 'attribute'} onChange={e => setColAt(i, { source: e.target.value === 'constant' ? { type: 'constant', value: c.source?.value || '' } : { type: 'attribute', attributeLabel: c.source?.attributeLabel || '' } })}><option value="attribute">From product detail</option><option value="constant">Same value for all</option></select>{c.source?.type === 'constant' ? <input placeholder="e.g. Made in India" value={c.source?.value || ''} maxLength={60} onChange={e => setColAt(i, { source: { type: 'constant', value: e.target.value } })}/> : <input placeholder="Detail name, e.g. Warranty" value={c.source?.attributeLabel || ''} maxLength={50} onChange={e => setColAt(i, { source: { type: 'attribute', attributeLabel: e.target.value } })}/>}</div>}
+          {!isBuiltIn(c.key) && <button type="button" className="icon-button danger-text" aria-label="Remove column" onClick={() => removeColAt(i)}><X size={15}/></button>}
         </div>)}
+      </div>
+      <button type="button" className="button secondary" style={{ marginBottom: 18 }} onClick={addCustomCol}><Plus size={15}/>Add a column</button>
+      <h3 style={{ margin: '4px 0 6px' }}>Live preview</h3>
+      <div className="bill-preview">
+        <table><thead><tr>{cols.filter(c => c.key === 'item' || c.key === 'amount' ? true : (c.show && c.key !== 'variant')).map(c => <th key={c.key} style={{ textAlign: c.key === 'item' ? 'left' : 'right' }}>{c.label}</th>)}</tr></thead>
+          <tbody><tr>{cols.filter(c => c.key === 'item' || c.key === 'amount' ? true : (c.show && c.key !== 'variant')).map(c => <td key={c.key} style={{ textAlign: c.key === 'item' ? 'left' : 'right' }}>{{ item: 'Sample product', hsn: '8517', qty: '1', rate: '₹999.00', amount: '₹999.00' }[c.key] ?? (c.source?.type === 'constant' ? (c.source.value || '—') : (c.source?.attributeLabel ? `«${c.source.attributeLabel}»` : '—'))}</td>)}</tr></tbody>
+        </table>
+        {cols.some(c => c.key === 'variant' && c.show) && <small className="muted" style={{ padding: '0 10px 8px' }}>…with a “128GB · Black” variant line under each item.</small>}
       </div>
       <Field label="Terms & conditions — printed at the bottom of every invoice"><textarea name="invoiceTerms" defaultValue={settings.invoiceTerms || ''} maxLength={1500} rows={2} placeholder="e.g. Goods once sold will only be taken back under the return policy."/></Field>
       <Field label="Bank / payment details — printed at the bottom of every invoice"><textarea name="invoiceBankDetails" defaultValue={settings.invoiceBankDetails || ''} maxLength={600} rows={2} placeholder="e.g. HDFC Bank · A/C 1234567890 · IFSC HDFC0001234"/></Field>

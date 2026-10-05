@@ -107,40 +107,53 @@ export async function streamInvoice(order, settings, res) {
   y += 14;
 
   // ---- items table (columns are the admin's to shape) ----
-  // `item` and `amount` always print; the admin may hide or rename the rest,
-  // and `variant` is a sub-line under the item name rather than its own column.
-  const colCfg = new Map((Array.isArray(s.invoiceColumns) ? s.invoiceColumns : DEFAULT_COLUMNS).map(c => [c.key, c]));
-  const shows = key => key === 'item' || key === 'amount' ? true : (colCfg.get(key)?.show ?? DEFAULT_COLUMNS.find(c => c.key === key).show);
-  const label = key => colCfg.get(key)?.label || DEFAULT_COLUMNS.find(c => c.key === key).label;
-  const numWidth = { hsn: 60, qty: 40, rate: 70, amount: 72 };
-  const numericKeys = ['hsn', 'qty', 'rate', 'amount'].filter(shows);
-  // Lay the numeric columns out right-to-left, amount at the far right.
-  const colX = {};
-  let x = right;
-  for (const k of numericKeys.slice().reverse()) { x -= numWidth[k]; colX[k] = x; }
-  const itemWidth = Math.min(...numericKeys.map(k => colX[k])) - left - 8;
-  const cell = (key, text, { header = false } = {}) => doc.text(text, colX[key], y, { width: numWidth[key] - 6, align: 'right' });
+  // The admin's column list drives everything: built-ins (item/variant/hsn/
+  // qty/rate/amount) and any number of custom columns, each pulling its value
+  // from a named product detail or a fixed constant. `item` always starts the
+  // row and `variant` prints as a sub-line; every other shown column is a cell
+  // laid out left-to-right after the item, in the admin's order.
+  const configured = Array.isArray(s.invoiceColumns) && s.invoiceColumns.length ? s.invoiceColumns : DEFAULT_COLUMNS;
+  const cols = configured.filter(c => c.key === 'item' || c.key === 'amount' ? true : c.show);
+  const itemCol = cols.find(c => c.key === 'item') || { key: 'item', label: 'Item' };
+  const showVariant = cols.some(c => c.key === 'variant');
+  // The cells to the right of the item name, in order (everything but item/variant).
+  const cells = cols.filter(c => c.key !== 'item' && c.key !== 'variant');
+  const widthFor = c => c.key === 'qty' ? 42 : c.key === 'amount' || c.key === 'rate' ? 74 : 68;
+  const cellsWidth = cells.reduce((w, c) => w + widthFor(c), 0);
+  const itemWidth = Math.max(110, pageWidth - cellsWidth - 8);
+  // Each cell's x: start after the item column, left to right.
+  let cx = left + itemWidth + 8;
+  const cellX = cells.map(c => { const at = cx; cx += widthFor(c); return at; });
+  const valueFor = (c, item) => {
+    switch (c.key) {
+      case 'hsn': return item.product?.hsn || '—';
+      case 'qty': return String(item.quantity);
+      case 'rate': return money(item.unitPaise);
+      case 'amount': return money(item.unitPaise * item.quantity);
+      default: {
+        if (c.source?.type === 'constant') return c.source.value || '—';
+        if (c.source?.type === 'attribute') return (item.product?.attributes || []).find(a => a.label === c.source.attributeLabel)?.value || '—';
+        return '—';
+      }
+    }
+  };
 
   doc.font('Helvetica-Bold').fontSize(9).fillColor(NAVY);
-  doc.text(label('item'), left, y, { width: itemWidth });
-  for (const k of numericKeys) cell(k, label(k), { header: true });
+  doc.text(itemCol.label || 'Item', left, y, { width: itemWidth });
+  cells.forEach((c, i) => doc.text(c.label, cellX[i], y, { width: widthFor(c) - 6, align: 'right' }));
   y += 16;
   doc.moveTo(left, y).lineTo(right, y).strokeColor(BORDER).stroke();
   y += 8;
 
   let subtotalPaise = 0;
   for (const item of order.items) {
-    const lineTotal = item.unitPaise * item.quantity;
-    subtotalPaise += lineTotal;
+    subtotalPaise += item.unitPaise * item.quantity;
     const variant = [item.size, item.color, item.grade].filter(Boolean).join(' · ');
     doc.font('Helvetica').fontSize(9.5).fillColor(TEXT);
     doc.text(item.name, left, y, { width: itemWidth });
-    if (shows('hsn')) cell('hsn', item.product?.hsn || '—');
-    if (shows('qty')) cell('qty', String(item.quantity));
-    if (shows('rate')) cell('rate', money(item.unitPaise));
-    cell('amount', money(lineTotal));
+    cells.forEach((c, i) => doc.text(valueFor(c, item), cellX[i], y, { width: widthFor(c) - 6, align: 'right' }));
     let rowBottom = doc.y;
-    if (shows('variant') && variant) {
+    if (showVariant && variant) {
       doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(variant, left, doc.y, { width: itemWidth });
       rowBottom = Math.max(rowBottom, doc.y);
     }

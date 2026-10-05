@@ -201,7 +201,15 @@ export const settingsSchema = z.object({
   invoiceBankDetails: z.string().trim().max(600).nullable().optional(),
   // Which item-table columns show and what each is called. `item` and `amount`
   // are always shown; the rest can be toggled and renamed.
-  invoiceColumns: z.array(z.object({ key: z.enum(['item', 'variant', 'hsn', 'qty', 'rate', 'amount']), label: z.string().trim().min(1).max(24), show: z.boolean() })).max(6).nullable().optional(),
+  // Built-in columns (item/variant/hsn/qty/rate/amount) plus any number of
+  // custom ones. A custom column has a `source`: its value comes from a named
+  // product detail (attribute) or is the same constant on every line.
+  invoiceColumns: z.array(z.object({
+    key: z.string().trim().min(1).max(60),
+    label: z.string().trim().min(1).max(24),
+    show: z.boolean(),
+    source: z.object({ type: z.enum(['attribute', 'constant']), attributeLabel: z.string().trim().max(50).optional(), value: z.string().trim().max(60).optional() }).nullable().optional(),
+  })).max(14).nullable().optional(),
 });
 // The custom charge/discount lines on one order's bill. A negative amount is a
 // discount; the label is what prints.
