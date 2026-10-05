@@ -98,7 +98,12 @@ router.get('/products', async (req, res) => {
   const where = { active: true, audience: { in: ['RETAIL', 'BOTH'] }, categoryId: q.categoryId, deal: q.deal ? q.deal === 'true' : undefined,
     ...(q.inStock === 'true' ? { stock: { gt: 0 } } : {}),
     ...(q.minPrice != null || q.maxPrice != null ? { pricePaise: { ...(q.minPrice != null ? { gte: q.minPrice * 100 } : {}), ...(q.maxPrice != null ? { lte: q.maxPrice * 100 } : {}) } } : {}),
-    ...(q.search ? { OR: [{ name: { contains: q.search, mode: 'insensitive' } }, { description: { contains: q.search, mode: 'insensitive' } }] } : {}) };
+    // A shop on holiday is hidden from the storefront until it's back. Kept in
+    // AND with the search OR so the two OR-groups don't collide.
+    AND: [
+      { OR: [{ sellerId: null }, { seller: { onHoliday: false } }] },
+      ...(q.search ? [{ OR: [{ name: { contains: q.search, mode: 'insensitive' } }, { description: { contains: q.search, mode: 'insensitive' } }] }] : []),
+    ] };
   // Price and recency sort cleanly at the database; rating, discount and
   // popularity need the review aggregate, so those are ordered in memory below.
   const dbOrder = { price_asc: [{ pricePaise: 'asc' }], price_desc: [{ pricePaise: 'desc' }], newest: [{ createdAt: 'desc' }] }[q.sort] || [{ featuredRank: 'desc' }, { createdAt: 'desc' }];
@@ -113,7 +118,7 @@ router.get('/products', async (req, res) => {
   res.json(rows);
 });
 router.get('/products/:id', async (req, res) => {
-  const p = await db.product.findFirst({ where: { id: req.params.id, active: true, audience: { in: ['RETAIL', 'BOTH'] } }, include: { category: true, reviews: { select: { rating: true, comment: true, images: true, createdAt: true, authorName: true, user: { select: { name: true } } }, take: 100, orderBy: { createdAt: 'desc' } } } });
+  const p = await db.product.findFirst({ where: { id: req.params.id, active: true, audience: { in: ['RETAIL', 'BOTH'] }, OR: [{ sellerId: null }, { seller: { onHoliday: false } }] }, include: { category: true, reviews: { select: { rating: true, comment: true, images: true, createdAt: true, authorName: true, user: { select: { name: true } } }, take: 100, orderBy: { createdAt: 'desc' } } } });
   requireThat(p, 404, 'Product not found'); const { wholesalePaise, ...safe } = p;
   // A review shows the customer's name, or the name the admin gave a seeded one.
   safe.reviews = safe.reviews.map(({ user, authorName, ...r }) => ({ ...r, authorName: user?.name || authorName || 'Customer' }));
@@ -901,6 +906,14 @@ async function sellerSummaryFor(sellerId, commissionPercent, penaltyPaise = 0) {
   };
 }
 router.get('/seller/summary', seller, async (req, res) => res.json(await sellerSummaryFor(req.actor.id, req.actor.account.commissionPercent, req.actor.account.penaltyPaise)));
+// Going on holiday hides the shop's products from the storefront; coming back
+// shows them again. The admin is told either way.
+router.post('/seller/holiday', seller, async (req, res) => {
+  const { onHoliday } = z.object({ onHoliday: z.boolean() }).parse(req.body);
+  const updated = await db.seller.update({ where: { id: req.actor.id }, data: { onHoliday } });
+  await notify('ADMIN', 'SELLER_HOLIDAY', onHoliday ? 'Seller on holiday' : 'Seller back from holiday', `${req.actor.account.shopName} is ${onHoliday ? 'now on holiday — their products are hidden from the shop' : 'back and their products are live again'}.`, req.actor.id);
+  res.json({ onHoliday: updated.onHoliday });
+});
 // Every penalty the admin has docked this shop, with the reason, so the
 // seller knows exactly what each deduction on their earnings was for.
 router.get('/seller/penalties', seller, async (req, res) => res.json(await db.sellerPenalty.findMany({ where: { sellerId: req.actor.id }, orderBy: { createdAt: 'desc' } })));

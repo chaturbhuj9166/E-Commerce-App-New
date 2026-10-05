@@ -82,7 +82,7 @@ function App() {
       <div className="brand"><img className="brand-logo" src="/ntsa_logo.png" alt="NTSA"/></div>
       <div className="workspace-label">SELLER WORKSPACE</div>
       <nav>{nav.map(([name, Icon]) => <button key={name} className={page === name ? 'nav-item active' : 'nav-item'} onClick={() => go(name)}><Icon size={19}/><span>{name}</span>{name === 'My orders' && orders.length > 0 && <small>{orders.length}</small>}{name === 'To pack' && toPack.length > 0 && <small>{toPack.length}</small>}</button>)}</nav>
-      <div className="sidebar-note"><ShieldCheck size={24}/><strong>Your shop on NTSA.</strong><p>Add what you sell, and watch the orders come in.</p></div>
+      <div className="sidebar-note"><ShieldCheck size={24}/><strong>{me?.onHoliday ? 'You are on holiday.' : 'Your shop on NTSA.'}</strong><p>{me?.onHoliday ? 'Your products are hidden from shoppers until you come back.' : 'Going away? Put your shop on hold so no new orders come in.'}</p><button className="text-button" style={{ color: me?.onHoliday ? '#ffb45d' : '#86a4b5', marginTop: 10 }} disabled={busy} onClick={() => action(() => api('/seller/holiday', { method: 'POST', body: { onHoliday: !me?.onHoliday } }), me?.onHoliday ? 'Welcome back — your shop is live' : 'Your shop is on holiday')}>{me?.onHoliday ? 'End holiday & go live' : 'Go on holiday'}</button></div>
       <button className="nav-item signout" onClick={logout}><LogOut size={18}/>Sign out</button>
     </aside>
     <div className="main">
@@ -103,6 +103,7 @@ function App() {
           </div>
           {page === 'My products' && <Button onClick={() => setModal({ data: null })}><Plus size={17}/>Add product</Button>}
         </div>
+        {me?.onHoliday && <div className="holiday-banner"><Truck size={18}/><span><strong>You're on holiday.</strong> Your products are hidden from shoppers. Existing orders still need to be packed and delivered.</span><Button disabled={busy} onClick={() => action(() => api('/seller/holiday', { method: 'POST', body: { onHoliday: false } }), 'Welcome back — your shop is live')}>End holiday</Button></div>}
         {error && <div role="alert" className="alert">{error}<button onClick={() => setError('')} aria-label="Dismiss">✕</button></div>}
         {loading && !me ? <Empty text="Loading your shop…"/> : <>
 

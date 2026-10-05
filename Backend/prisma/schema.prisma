@@ -100,6 +100,9 @@ model Seller {
   // Money the admin has docked for late or mishandled orders. Shown on the
   // seller's own earnings, and added to by the admin with a reason.
   penaltyPaise Int @default(0)
+  // Vacation mode: while on, the shop hides this seller's products (existing
+  // orders are unaffected) and the admin can see they're away.
+  onHoliday Boolean @default(false)
   enabled Boolean @default(true)
   deleted Boolean @default(false)
   sessionVersion Int @default(0)

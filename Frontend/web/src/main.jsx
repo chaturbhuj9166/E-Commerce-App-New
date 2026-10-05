@@ -230,7 +230,7 @@ function App() {
                 <td>{s.commissionPercent}%</td>
                 <td>{s.penaltyPaise ? <span className="danger-text">{money(s.penaltyPaise)}</span> : <small className="muted">—</small>}</td>
                 <td>{s.gstVerified || s.aadharVerified ? <small style={{ color: '#418568', fontWeight: 600 }}>{[s.gstVerified && 'GST ✓', s.aadharVerified && 'Aadhaar ✓'].filter(Boolean).join(' · ')}</small> : <small className="muted">Not verified</small>}</td>
-                <td><Badge>{s.enabled ? 'Active' : 'Disabled'}</Badge></td>
+                <td><Badge>{s.enabled ? 'Active' : 'Disabled'}</Badge>{s.onHoliday && <small style={{ color: '#ad7937', fontWeight: 600 }}>On holiday</small>}</td>
                 <td><div className="row-actions">
                   <button onClick={() => openSellerDashboard(s)}>View dashboard</button>
                   <button onClick={() => { go('Products'); setQuery(s.shopName); }}>View products</button>
@@ -315,7 +315,7 @@ function App() {
               {staff.map(s => <tr key={s.id}>
                 <td><strong>{s.name || '—'}</strong><small>{s.email}</small></td>
                 <td><Badge>{{ ADMIN: 'Admin', PACKING: 'Packing team', SALES: 'Sales team' }[s.role]}</Badge></td>
-                <td><Badge>{s.enabled ? 'Active' : 'Disabled'}</Badge></td>
+                <td><Badge>{s.enabled ? 'Active' : 'Disabled'}</Badge>{s.onHoliday && <small style={{ color: '#ad7937', fontWeight: 600 }}>On holiday</small>}</td>
                 <td><small>{new Date(s.createdAt).toLocaleDateString('en-IN')}</small></td>
                 <td><div className="row-actions">
                   <button onClick={() => setModal({ type: 'StaffEdit', data: s })}>Edit</button>
