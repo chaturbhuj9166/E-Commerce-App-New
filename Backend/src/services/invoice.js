@@ -7,6 +7,17 @@ const money = paise => `Rs. ${((paise || 0) / 100).toLocaleString('en-IN', { min
 // so an invoice never comes out blank.
 const DEFAULT_SETTINGS = { companyName: 'NTSA', companyAddress: '', companyGSTIN: null, companyPhone: null, companyEmail: null, logoUrl: null };
 
+// The invoice's item columns before the admin changes anything. `item` and
+// `amount` always print; `variant` is a sub-line under the item name.
+export const DEFAULT_COLUMNS = [
+  { key: 'item', label: 'Item', show: true },
+  { key: 'variant', label: 'Variant', show: true },
+  { key: 'hsn', label: 'HSN', show: false },
+  { key: 'qty', label: 'Qty', show: true },
+  { key: 'rate', label: 'Rate', show: true },
+  { key: 'amount', label: 'Amount', show: true },
+];
+
 const NAVY = '#062c41';
 const TEXT = '#173b4b';
 const MUTED = '#6f7f88';
@@ -95,13 +106,24 @@ export async function streamInvoice(order, settings, res) {
   doc.moveTo(left, y).lineTo(right, y).strokeColor(BORDER).stroke();
   y += 14;
 
-  // ---- items table ----
-  const col = { name: left, qty: right - 200, rate: right - 140, amount: right - 70 };
+  // ---- items table (columns are the admin's to shape) ----
+  // `item` and `amount` always print; the admin may hide or rename the rest,
+  // and `variant` is a sub-line under the item name rather than its own column.
+  const colCfg = new Map((Array.isArray(s.invoiceColumns) ? s.invoiceColumns : DEFAULT_COLUMNS).map(c => [c.key, c]));
+  const shows = key => key === 'item' || key === 'amount' ? true : (colCfg.get(key)?.show ?? DEFAULT_COLUMNS.find(c => c.key === key).show);
+  const label = key => colCfg.get(key)?.label || DEFAULT_COLUMNS.find(c => c.key === key).label;
+  const numWidth = { hsn: 60, qty: 40, rate: 70, amount: 72 };
+  const numericKeys = ['hsn', 'qty', 'rate', 'amount'].filter(shows);
+  // Lay the numeric columns out right-to-left, amount at the far right.
+  const colX = {};
+  let x = right;
+  for (const k of numericKeys.slice().reverse()) { x -= numWidth[k]; colX[k] = x; }
+  const itemWidth = Math.min(...numericKeys.map(k => colX[k])) - left - 8;
+  const cell = (key, text, { header = false } = {}) => doc.text(text, colX[key], y, { width: numWidth[key] - 6, align: 'right' });
+
   doc.font('Helvetica-Bold').fontSize(9).fillColor(NAVY);
-  doc.text('Item', col.name, y, { width: col.qty - col.name - 8 });
-  doc.text('Qty', col.qty, y, { width: col.rate - col.qty - 8, align: 'right' });
-  doc.text('Rate', col.rate, y, { width: col.amount - col.rate - 8, align: 'right' });
-  doc.text('Amount', col.amount, y, { width: right - col.amount, align: 'right' });
+  doc.text(label('item'), left, y, { width: itemWidth });
+  for (const k of numericKeys) cell(k, label(k), { header: true });
   y += 16;
   doc.moveTo(left, y).lineTo(right, y).strokeColor(BORDER).stroke();
   y += 8;
@@ -110,15 +132,16 @@ export async function streamInvoice(order, settings, res) {
   for (const item of order.items) {
     const lineTotal = item.unitPaise * item.quantity;
     subtotalPaise += lineTotal;
-    const variant = [item.size, item.color].filter(Boolean).join(' · ');
+    const variant = [item.size, item.color, item.grade].filter(Boolean).join(' · ');
     doc.font('Helvetica').fontSize(9.5).fillColor(TEXT);
-    doc.text(item.name, col.name, y, { width: col.qty - col.name - 8 });
-    doc.text(String(item.quantity), col.qty, y, { width: col.rate - col.qty - 8, align: 'right' });
-    doc.text(money(item.unitPaise), col.rate, y, { width: col.amount - col.rate - 8, align: 'right' });
-    doc.text(money(lineTotal), col.amount, y, { width: right - col.amount, align: 'right' });
+    doc.text(item.name, left, y, { width: itemWidth });
+    if (shows('hsn')) cell('hsn', item.product?.hsn || '—');
+    if (shows('qty')) cell('qty', String(item.quantity));
+    if (shows('rate')) cell('rate', money(item.unitPaise));
+    cell('amount', money(lineTotal));
     let rowBottom = doc.y;
-    if (variant) {
-      doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(variant, col.name, doc.y, { width: col.qty - col.name - 8 });
+    if (shows('variant') && variant) {
+      doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(variant, left, doc.y, { width: itemWidth });
       rowBottom = Math.max(rowBottom, doc.y);
     }
     y = rowBottom + 10;
@@ -126,23 +149,38 @@ export async function streamInvoice(order, settings, res) {
   doc.moveTo(left, y).lineTo(right, y).strokeColor(BORDER).stroke();
   y += 10;
 
-  // ---- totals ----
+  // ---- totals (with the admin's custom charges/discounts) ----
   const labelX = right - 220, valueWidth = 220;
-  const totalsRow = (label, value, { bold = false, color = TEXT } = {}) => {
+  const totalsRow = (lbl, value, { bold = false, color = TEXT } = {}) => {
     doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(bold ? 11 : 9.5).fillColor(color);
-    doc.text(label, labelX, y, { width: 120 });
+    doc.text(lbl, labelX, y, { width: 130 });
     doc.text(value, right - valueWidth, y, { width: valueWidth, align: 'right' });
     y += bold ? 16 : 14;
   };
   totalsRow('Subtotal', money(subtotalPaise));
   if (order.discountPaise > 0) totalsRow(`Discount${order.couponCode ? ` (${order.couponCode})` : ''}`, `-${money(order.discountPaise)}`, { color: GREEN });
   totalsRow('Delivery', order.deliveryPaise > 0 ? money(order.deliveryPaise) : 'Free', { color: order.deliveryPaise > 0 ? TEXT : GREEN });
+  const extras = Array.isArray(order.invoiceExtras) ? order.invoiceExtras : [];
+  let extrasSum = 0;
+  for (const e of extras) {
+    extrasSum += e.amountPaise;
+    totalsRow(e.label, `${e.amountPaise < 0 ? '-' : ''}${money(Math.abs(e.amountPaise))}`, { color: e.amountPaise < 0 ? GREEN : TEXT });
+  }
   y += 2;
   doc.moveTo(labelX, y).lineTo(right, y).strokeColor(BORDER).stroke();
   y += 6;
-  totalsRow('Total', money(order.totalPaise), { bold: true, color: NAVY });
-  y += 20;
+  totalsRow('Total', money(order.totalPaise + extrasSum), { bold: true, color: NAVY });
+  y += 18;
 
+  // ---- footer: terms and bank details the admin set, then the standard note ----
+  if (s.invoiceBankDetails) {
+    doc.font('Helvetica-Bold').fontSize(8.5).fillColor(NAVY).text('Payment details', left, y, { width: pageWidth }); y = doc.y + 1;
+    doc.font('Helvetica').fontSize(8.5).fillColor(MUTED).text(s.invoiceBankDetails, left, y, { width: pageWidth }); y = doc.y + 8;
+  }
+  if (s.invoiceTerms) {
+    doc.font('Helvetica-Bold').fontSize(8.5).fillColor(NAVY).text('Terms & conditions', left, y, { width: pageWidth }); y = doc.y + 1;
+    doc.font('Helvetica').fontSize(8.5).fillColor(MUTED).text(s.invoiceTerms, left, y, { width: pageWidth }); y = doc.y + 8;
+  }
   doc.font('Helvetica').fontSize(8.5).fillColor(MUTED)
     .text('Thank you for shopping with us. This is a computer-generated invoice and needs no signature.', left, y, { width: pageWidth });
 

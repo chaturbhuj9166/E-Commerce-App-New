@@ -147,6 +147,12 @@ model Settings {
   companyPhone String?
   companyEmail String?
   logoUrl String?
+  // The bill, made the admin's to shape: a footer of terms and bank details
+  // printed on every invoice, and which item-table columns show and what
+  // they're called (defaults applied when null).
+  invoiceTerms String?
+  invoiceBankDetails String?
+  invoiceColumns Json?
   updatedAt DateTime @updatedAt
   @@map("settings")
 }
@@ -275,6 +281,9 @@ model Product {
   // A shop's own stock-keeping code, e.g. "NTSA-SHT-005". Optional and set
   // by whoever lists the product; never generated or enforced by NTSA.
   sku String?
+  // The tax HSN/SAC code, printed in the invoice's HSN column when the admin
+  // turns that column on. Optional.
+  hsn String?
   pricePaise Int
   wholesalePaise Int
   mrpPaise Int?
@@ -384,6 +393,11 @@ model Order {
   deliveryOtpHash String?
   deliveryOtpExpiresAt DateTime?
   deliveryOtpAttempts Int @default(0)
+  // Extra charge or discount lines the admin has added to this one's bill,
+  // e.g. [{"label":"Handling","amountPaise":2000},{"label":"Goodwill","amountPaise":-5000}].
+  // They print on the invoice and adjust the printed total; the amount paid
+  // (totalPaise) is untouched.
+  invoiceExtras Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user User? @relation(fields: [userId], references: [id])

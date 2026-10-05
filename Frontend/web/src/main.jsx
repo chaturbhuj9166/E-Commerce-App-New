@@ -15,6 +15,16 @@ import './style.css';
 
 // The refurbished/used grades a shopper can be offered, cheapest intent first.
 const GRADES = ['Fair', 'Good', 'Superb'];
+// The invoice's item columns before the admin changes anything -- mirrors the
+// backend default. `item` and `amount` always print; `variant` is a sub-line.
+const DEFAULT_INVOICE_COLUMNS = [
+  { key: 'item', label: 'Item', show: true },
+  { key: 'variant', label: 'Variant', show: true },
+  { key: 'hsn', label: 'HSN', show: false },
+  { key: 'qty', label: 'Qty', show: true },
+  { key: 'rate', label: 'Rate', show: true },
+  { key: 'amount', label: 'Amount', show: true },
+];
 
 function App() {
   const [session, setSession] = useState(() => sessionStorage.getItem('ntsa-token'));
@@ -354,7 +364,7 @@ function App() {
       {modal.type === 'Penalty' && <PenaltyManager seller={modal.data} busy={busy} onApply={(amount, reason, done) => action(async () => { await api(`/admin/sellers/${modal.data.id}/penalty`, { method: 'POST', body: { amountPaise: paise(amount), reason } }); done(); }, 'Penalty applied')} onRemove={(id, done) => action(async () => { await api(`/admin/sellers/${modal.data.id}/penalties/${id}`, { method: 'DELETE' }); done(); }, 'Penalty removed')}/>}
       {modal.type === 'AdminReview' && <AdminReviewForm products={products} busy={busy} onSubmit={({ productId, body }) => action(async () => { await api(`/admin/products/${productId}/reviews`, { method: 'POST', body }); setModal(null); }, 'Review added')}/>}
       {modal.type === 'Messages' && <VendorMessages vendor={modal.data}/>}
-      {modal.type === 'Order' && <OrderDetails order={orders.find(o => o.id === modal.data.id) || modal.data} admin={isAdmin} busy={busy} action={action} next={next} onCancel={reason => action(async () => { await api(`${isAdmin ? '/admin' : ''}/orders/${modal.data.id}/cancel`, { method: 'POST', body: { reason } }); setModal(null); }, 'Order cancelled, stock put back')} onSetDelivery={isAdmin ? ((body, done) => action(async () => { await api(`/admin/orders/${modal.data.id}/delivery`, { method: 'PATCH', body }); done(); }, 'Delivery details saved')) : null}/>}
+      {modal.type === 'Order' && <OrderDetails order={orders.find(o => o.id === modal.data.id) || modal.data} admin={isAdmin} busy={busy} action={action} next={next} onCancel={reason => action(async () => { await api(`${isAdmin ? '/admin' : ''}/orders/${modal.data.id}/cancel`, { method: 'POST', body: { reason } }); setModal(null); }, 'Order cancelled, stock put back')} onSetDelivery={isAdmin ? ((body, done) => action(async () => { await api(`/admin/orders/${modal.data.id}/delivery`, { method: 'PATCH', body }); done(); }, 'Delivery details saved')) : null} onSetExtras={isAdmin ? ((extras, done) => action(async () => { await api(`/admin/orders/${modal.data.id}/invoice-extras`, { method: 'PATCH', body: { extras } }); done(); }, 'Bill updated')) : null}/>}
       {modal.type === 'Checkout' && <WholesaleCheckout items={cartItems} total={cartTotal} limits={me?.limits} busy={busy} onSubmit={body => action(async () => { await api('/orders', { method: 'POST', body }); setCart({}); setModal(null); go('Orders'); }, 'Wholesale order placed')}/>}
     </Modal>}
   </div>;
@@ -447,7 +457,9 @@ function PackSlip({ order, busy, admin, onPackItem, onPacked }) {
 function SettingsPage({ settings, busy, action }) {
   const [logoUrl, setLogoUrl] = useState(settings?.logoUrl || '');
   const [uploading, setUploading] = useState(false), [error, setError] = useState('');
-  useEffect(() => { setLogoUrl(settings?.logoUrl || ''); }, [settings]);
+  const [cols, setCols] = useState(() => settings?.invoiceColumns?.length ? settings.invoiceColumns : DEFAULT_INVOICE_COLUMNS);
+  const setCol = (key, patch) => setCols(cs => cs.map(c => c.key === key ? { ...c, ...patch } : c));
+  useEffect(() => { setLogoUrl(settings?.logoUrl || ''); setCols(settings?.invoiceColumns?.length ? settings.invoiceColumns : DEFAULT_INVOICE_COLUMNS); }, [settings]);
   if (!settings) return <section className="panel"><Empty text="Loading your settings…"/></section>;
   return <section className="panel">
     <div className="panel-heading"><div><h2>Company details</h2><p>Printed on every invoice — the customer's, the wholesale partner's, and the packing slip.</p></div></div>
@@ -458,7 +470,9 @@ function SettingsPage({ settings, busy, action }) {
         companyName: f.companyName, companyAddress: f.companyAddress || '',
         companyGSTIN: f.companyGSTIN?.trim() || null, companyPhone: f.companyPhone?.trim() || null,
         companyEmail: f.companyEmail?.trim() || null, logoUrl: logoUrl || null,
-      } }), 'Company details saved');
+        invoiceTerms: f.invoiceTerms?.trim() || null, invoiceBankDetails: f.invoiceBankDetails?.trim() || null,
+        invoiceColumns: cols.map(c => ({ key: c.key, label: c.label.trim() || c.key, show: c.key === 'item' || c.key === 'amount' ? true : !!c.show })),
+      } }), 'Invoice settings saved');
     }}>
       <Field label="Company name" name="companyName" defaultValue={settings.companyName} required maxLength={150}/>
       <Field label="Address"><textarea name="companyAddress" defaultValue={settings.companyAddress || ''} maxLength={500} rows={2} placeholder="Shop / office address, printed on every invoice"/></Field>
@@ -474,8 +488,19 @@ function SettingsPage({ settings, busy, action }) {
         catch (err) { setError(err.message); } finally { setUploading(false); }
       }}/>
       {logoUrl && <img src={logoUrl} alt="Logo preview" style={{ height: 56, marginBottom: 14, borderRadius: 8, border: '1px solid #e5ebef' }} onError={e => { e.currentTarget.style.display = 'none'; }}/>}
+      <h3 style={{ margin: '14px 0 6px' }}>Invoice columns</h3>
+      <p className="muted" style={{ marginBottom: 10 }}>Tick which columns print on the bill, and rename them if you like. Item and Amount always show; Variant prints as a small line under the item.</p>
+      <div className="attribute-rows" style={{ marginBottom: 18 }}>
+        {cols.map(c => <div key={c.key} className="invoice-col-row">
+          <label className="checkbox" style={{ margin: 0 }}><input type="checkbox" checked={c.key === 'item' || c.key === 'amount' ? true : !!c.show} disabled={c.key === 'item' || c.key === 'amount'} onChange={e => setCol(c.key, { show: e.target.checked })}/></label>
+          <input value={c.label} maxLength={24} onChange={e => setCol(c.key, { label: e.target.value })} aria-label={`${c.key} column label`}/>
+          <small className="muted">{c.key === 'hsn' ? 'from each product’s HSN code' : c.key === 'variant' ? 'size / colour / condition' : ''}</small>
+        </div>)}
+      </div>
+      <Field label="Terms & conditions — printed at the bottom of every invoice"><textarea name="invoiceTerms" defaultValue={settings.invoiceTerms || ''} maxLength={1500} rows={2} placeholder="e.g. Goods once sold will only be taken back under the return policy."/></Field>
+      <Field label="Bank / payment details — printed at the bottom of every invoice"><textarea name="invoiceBankDetails" defaultValue={settings.invoiceBankDetails || ''} maxLength={600} rows={2} placeholder="e.g. HDFC Bank · A/C 1234567890 · IFSC HDFC0001234"/></Field>
       {error && <div role="alert" className="alert">{error}</div>}
-      <Button disabled={busy || uploading}>Save company details</Button>
+      <Button disabled={busy || uploading}>Save invoice settings</Button>
     </form>
   </section>;
 }
@@ -645,7 +670,7 @@ function Editor({ type, data, categories, busy, onSubmit }) {
         if (!String(o.wholesale ?? '').trim()) throw new Error(`Enter a wholesale price for ${s}, or clear its retail price`);
         return [s, { pricePaise: paise(o.retail), wholesalePaise: paise(o.wholesale), mrpPaise: String(o.mrp ?? '').trim() ? paise(o.mrp) : null }];
       }));
-      onSubmit({ name: f.name, description: f.description, sku: f.sku?.trim() || null, pricePaise: paise(f.retail), wholesalePaise: paise(f.wholesale), mrpPaise: f.mrp ? paise(f.mrp) : null, marketPricePaise: f.market ? paise(f.market) : null, stock: Number(f.stock), categoryId: f.categoryId, images: images.split('\n').map(x => x.trim()).filter(Boolean), colors: f.colors.split(',').map(x => x.trim()).filter(Boolean), sizes: sizeList, sizeLabel: f.sizeLabel?.trim() || 'Size', sizePrices: Object.keys(optionPrices).length ? optionPrices : null, colorImages: Object.keys(colorImagesOut).length ? colorImagesOut : null, colorExtraPaise: Object.keys(colorExtraPaise).length ? colorExtraPaise : null, conditionGrades: gradeMode ? gradeList : [], conditionGradeExtraPaise: gradeMode ? (() => { const m = Object.fromEntries(gradeList.filter(g => Number(gradeExtras[g]) > 0).map(g => [g, paise(gradeExtras[g])])); return Object.keys(m).length ? m : null; })() : null, attributes: cleanAttributes, deal: f.deal === 'on', condition, conditionNote: f.conditionNote?.trim() || null, audience: f.audience });
+      onSubmit({ name: f.name, description: f.description, sku: f.sku?.trim() || null, hsn: f.hsn?.trim() || null, pricePaise: paise(f.retail), wholesalePaise: paise(f.wholesale), mrpPaise: f.mrp ? paise(f.mrp) : null, marketPricePaise: f.market ? paise(f.market) : null, stock: Number(f.stock), categoryId: f.categoryId, images: images.split('\n').map(x => x.trim()).filter(Boolean), colors: f.colors.split(',').map(x => x.trim()).filter(Boolean), sizes: sizeList, sizeLabel: f.sizeLabel?.trim() || 'Size', sizePrices: Object.keys(optionPrices).length ? optionPrices : null, colorImages: Object.keys(colorImagesOut).length ? colorImagesOut : null, colorExtraPaise: Object.keys(colorExtraPaise).length ? colorExtraPaise : null, conditionGrades: gradeMode ? gradeList : [], conditionGradeExtraPaise: gradeMode ? (() => { const m = Object.fromEntries(gradeList.filter(g => Number(gradeExtras[g]) > 0).map(g => [g, paise(gradeExtras[g])])); return Object.keys(m).length ? m : null; })() : null, attributes: cleanAttributes, deal: f.deal === 'on', condition, conditionNote: f.conditionNote?.trim() || null, audience: f.audience });
     }
     else if (type === 'Categories') onSubmit({ name: f.name, icon: data?.icon || 'shopping_bag', refundWindowHours: Number(f.refundWindowHours), allowsUsedStock: f.allowsUsedStock === 'on' });
     // Cleared optional fields are sent as null so an edit actually removes them.
@@ -670,7 +695,7 @@ function Editor({ type, data, categories, busy, onSubmit }) {
       <label className="checkbox"><input type="checkbox" name="allowsUsedStock" defaultChecked={data?.allowsUsedStock}/>Allow refurbished / open-box stock here</label>
       <p className="muted">0 means no returns. Saving this updates every product in the category; orders already placed keep the window they were bought under.</p>
     </>}
-    {['Products', 'Wholesale products'].includes(type) && <><Field label="Description"><textarea name="description" defaultValue={data?.description} required maxLength={5000} onChange={e => checkSuggestion(e.target.form)}/></Field><Field label="SKU — your own stock code, optional" name="sku" defaultValue={data?.sku || ''} maxLength={60} placeholder="e.g. NTSA-SHT-005"/><div className="form-grid"><Field label="Retail price (₹)" name="retail" type="number" min="0.01" step="0.01" defaultValue={data ? data.pricePaise / 100 : ''} required/><Field label="Wholesale price (₹)" name="wholesale" type="number" min="0.01" step="0.01" defaultValue={data ? data.wholesalePaise / 100 : ''} required/><Field label="MRP (₹) — optional, shows a strikethrough discount" name="mrp" type="number" min="0.01" step="0.01" defaultValue={data?.mrpPaise ? data.mrpPaise / 100 : ''}/><Field label="Market price (₹) — optional, what it sells for elsewhere" name="market" type="number" min="0.01" step="0.01" defaultValue={data?.marketPricePaise ? data.marketPricePaise / 100 : ''}/><Field label="Stock quantity" name="stock" type="number" min="0" step="1" defaultValue={data?.stock ?? 0} required/><p className="muted">Returns are allowed for as long as the chosen category says. Change that on the Categories page.</p></div><Field label="Category"><select name="categoryId" value={categoryId} onChange={e => setCategoryId(e.target.value)} required><option value="" disabled>Select a category</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+    {['Products', 'Wholesale products'].includes(type) && <><Field label="Description"><textarea name="description" defaultValue={data?.description} required maxLength={5000} onChange={e => checkSuggestion(e.target.form)}/></Field><div className="form-grid"><Field label="SKU — your own stock code, optional" name="sku" defaultValue={data?.sku || ''} maxLength={60} placeholder="e.g. NTSA-SHT-005"/><Field label="HSN / SAC code — optional, prints on the tax invoice" name="hsn" defaultValue={data?.hsn || ''} maxLength={20} placeholder="e.g. 8517"/></div><div className="form-grid"><Field label="Retail price (₹)" name="retail" type="number" min="0.01" step="0.01" defaultValue={data ? data.pricePaise / 100 : ''} required/><Field label="Wholesale price (₹)" name="wholesale" type="number" min="0.01" step="0.01" defaultValue={data ? data.wholesalePaise / 100 : ''} required/><Field label="MRP (₹) — optional, shows a strikethrough discount" name="mrp" type="number" min="0.01" step="0.01" defaultValue={data?.mrpPaise ? data.mrpPaise / 100 : ''}/><Field label="Market price (₹) — optional, what it sells for elsewhere" name="market" type="number" min="0.01" step="0.01" defaultValue={data?.marketPricePaise ? data.marketPricePaise / 100 : ''}/><Field label="Stock quantity" name="stock" type="number" min="0" step="1" defaultValue={data?.stock ?? 0} required/><p className="muted">Returns are allowed for as long as the chosen category says. Change that on the Categories page.</p></div><Field label="Category"><select name="categoryId" value={categoryId} onChange={e => setCategoryId(e.target.value)} required><option value="" disabled>Select a category</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
     {suggestion && suggestion.id !== categoryId && <p className="muted" style={{ marginTop: -10 }}>This sounds like it belongs in <strong>{suggestion.name}</strong>. <button type="button" className="text-button" style={{ display: 'inline', padding: 0 }} onClick={() => { setCategoryId(suggestion.id); setSuggestion(null); }}>Use this category</button></p>}<div className="form-grid"><Field label="Colors — comma separated, optional" name="colors" value={colors} onChange={e => setColors(e.target.value)} placeholder="Black, White, Blue"/><Field label="Options (sizes, storage…) — comma separated, optional" name="sizes" value={sizes} onChange={e => setSizes(e.target.value)} placeholder="6, 7, 8  or  128GB, 256GB"/></div>
       {colorList.length > 0 && <Field label="Colour price difference — optional. What a colour costs on top of the price above; leave blank when it costs the same.">
         <div className="attribute-rows">
@@ -834,9 +859,10 @@ function Attachment({ url }) {
     ? <video src={url} controls preload="metadata"/>
     : <a href={url} target="_blank" rel="noreferrer"><img src={url} alt="Attachment"/></a>;
 }
-function OrderDetails({ order, admin, busy, action, next, onCancel, onSetDelivery }) {
+function OrderDetails({ order, admin, busy, action, next, onCancel, onSetDelivery, onSetExtras }) {
   const [otp, setOtp] = useState(''), [code, setCode] = useState(''), [cancelling, setCancelling] = useState(false), [editingDelivery, setEditingDelivery] = useState(false);
   const [invoiceBusy, setInvoiceBusy] = useState(false), [invoiceError, setInvoiceError] = useState('');
+  const [editingBill, setEditingBill] = useState(false), [extras, setExtras] = useState(() => (order.invoiceExtras || []).map(e => ({ label: e.label, amount: e.amountPaise / 100 })));
   async function viewBill() {
     setInvoiceBusy(true); setInvoiceError('');
     try { await openInvoice(order.id); } catch (e) { setInvoiceError(e.message); } finally { setInvoiceBusy(false); }
@@ -846,8 +872,18 @@ function OrderDetails({ order, admin, busy, action, next, onCancel, onSetDeliver
   const cancellable = onCancel && !['DELIVERED', 'CANCELLED'].includes(order.status) && (admin || ['PENDING_PAYMENT', 'PLACED'].includes(order.status));
   const localDate = v => v ? new Date(v).toISOString().slice(0, 10) : '';
   return <div className="order-detail"><div className="detail-summary"><strong>#{order.id.slice(-8).toUpperCase()}</strong><Badge>{order.status}</Badge></div>
-    <div style={{ margin: '2px 0 16px' }}><Button secondary disabled={invoiceBusy} onClick={viewBill}><FileText size={15}/>{invoiceBusy ? 'Opening…' : 'View / download bill'}</Button></div>
+    <div style={{ margin: '2px 0 16px', display: 'flex', gap: 10, flexWrap: 'wrap' }}><Button secondary disabled={invoiceBusy} onClick={viewBill}><FileText size={15}/>{invoiceBusy ? 'Opening…' : 'View / download bill'}</Button>{admin && onSetExtras && order.status !== 'CANCELLED' && <Button secondary onClick={() => setEditingBill(v => !v)}><Plus size={15}/>Edit the bill</Button>}</div>
     {invoiceError && <div className="alert" role="alert">{invoiceError}</div>}
+    {admin && onSetExtras && editingBill && <div className="editor" style={{ marginBottom: 16, padding: 14, background: '#fafbfc', borderRadius: 10 }}>
+      <p className="muted" style={{ marginBottom: 8 }}>Add charges or discounts to this bill. Use a minus for a discount (e.g. −50). The letterhead, columns and terms are set once on the Settings page.</p>
+      <div className="attribute-rows">{extras.map((e, i) => <div className="attribute-row" key={i}>
+        <input placeholder="Label (e.g. Handling)" value={e.label} maxLength={40} onChange={ev => setExtras(xs => xs.map((x, idx) => idx === i ? { ...x, label: ev.target.value } : x))}/>
+        <input type="number" step="0.01" placeholder="Amount ₹ (− for discount)" value={e.amount} onChange={ev => setExtras(xs => xs.map((x, idx) => idx === i ? { ...x, amount: ev.target.value } : x))}/>
+        <button type="button" className="icon-button" aria-label="Remove line" onClick={() => setExtras(xs => xs.filter((_, idx) => idx !== i))}><X size={16}/></button>
+      </div>)}</div>
+      <button type="button" className="button secondary" style={{ marginTop: 8 }} onClick={() => setExtras(xs => [...xs, { label: '', amount: '' }])}><Plus size={15}/>Add a line</button>
+      <div style={{ marginTop: 12 }}><Button disabled={busy} onClick={() => onSetExtras(extras.filter(e => e.label.trim() && String(e.amount).trim()).map(e => ({ label: e.label.trim(), amountPaise: Math.round(Number(e.amount) * 100) })), () => setEditingBill(false))}>Save bill changes</Button></div>
+    </div>}
     {order.items.map(i => <div key={i.id} className="line-item"><div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>{i.image ? <img className="product-image" src={i.image} alt={i.name}/> : <div className="product-image placeholder"><Package size={18}/></div>}<div><strong>{i.name}</strong>{(i.size || i.color) && <small className="variant">{[i.size && `Size / option: ${i.size}`, i.color && `Color: ${i.color}`].filter(Boolean).join(' · ')}</small>}<small>{i.quantity} × {money(i.unitPaise)} · {i.refundWindowHours}h refund window</small><small>{i.sellerName ? `Sold by ${i.sellerName}` : 'NTSA’s own stock'}</small></div></div><strong>{money(i.unitPaise * i.quantity)}</strong></div>)}<div className="line-item"><strong>Total · {order.paymentMethod}</strong><strong>{money(order.totalPaise)}</strong></div><h3>Delivery address</h3><p>{order.address.name} · {order.address.phone}<br/>{order.address.line1}, {order.address.city}, {order.address.state} {order.address.postalCode}</p>{order.deliveredAt && <p>Delivered: {new Date(order.deliveredAt).toLocaleString()}</p>}
     {(order.deliveryPartner || order.expectedDeliveryAt) && order.status !== 'CANCELLED' && <p className="muted">{order.deliveryPartner && <>Delivery partner: <strong>{order.deliveryPartner}</strong></>}{order.deliveryPartner && order.expectedDeliveryAt && <br/>}{order.expectedDeliveryAt && <>Expected by: <strong>{new Date(order.expectedDeliveryAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</strong></>}</p>}
     {admin && onSetDelivery && !['DELIVERED', 'CANCELLED'].includes(order.status) && (editingDelivery

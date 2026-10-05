@@ -6,7 +6,7 @@ import { randomInt } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { db, atomic } from './db.js';
 import { config } from './config.js';
-import { z, productSchema, addressSchema, vendorCreateSchema, vendorUpdateSchema, vendorPasswordSchema, vendorMessageSchema, bannerSchema, reviewSchema, adminReviewSchema, couponSchema, staffCreateSchema, staffUpdateSchema, sellerApplicationSchema, sellerApproveSchema, sellerUpdateSchema, blockedPincodeSchema, deliveryRuleSchema, settingsSchema } from './lib/validation.js';
+import { z, productSchema, addressSchema, vendorCreateSchema, vendorUpdateSchema, vendorPasswordSchema, vendorMessageSchema, bannerSchema, reviewSchema, adminReviewSchema, couponSchema, staffCreateSchema, staffUpdateSchema, sellerApplicationSchema, sellerApproveSchema, sellerUpdateSchema, blockedPincodeSchema, deliveryRuleSchema, settingsSchema, invoiceExtrasSchema } from './lib/validation.js';
 import { requireThat } from './lib/rules.js';
 import { variantFor, priceFor, publicSizePrices } from './lib/variants.js';
 import { auth, roles, tokenFor } from './services/auth.js';
@@ -341,7 +341,14 @@ router.use('/admin', admin);
 router.get('/admin/settings', async (req, res) => res.json(await getSettings() ?? { id: 'singleton', companyName: 'NTSA', companyAddress: '', companyGSTIN: null, companyPhone: null, companyEmail: null, logoUrl: null }));
 router.put('/admin/settings', async (req, res) => {
   const data = settingsSchema.parse(req.body);
+  if (data.invoiceColumns === null) data.invoiceColumns = Prisma.DbNull;
   res.json(await db.settings.upsert({ where: { id: 'singleton' }, update: data, create: { id: 'singleton', ...data } }));
+});
+// The admin's custom charge/discount lines on one order's bill.
+router.patch('/admin/orders/:id/invoice-extras', async (req, res) => {
+  const { extras } = invoiceExtrasSchema.parse(req.body);
+  const order = await db.order.update({ where: { id: req.params.id }, data: { invoiceExtras: extras.length ? extras : Prisma.DbNull }, include: orderInclude });
+  res.json(publicOrder(order));
 });
 // Panel staff accounts (packing / sales). The admin hands out the logins.
 router.get('/admin/staff', async (req, res) => res.json((await db.admin.findMany({ orderBy: { createdAt: 'asc' } })).map(safeStaff)));

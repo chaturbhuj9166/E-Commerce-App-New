@@ -11,7 +11,7 @@ import { notifyOrder } from './firebase.js';
 // they're looking at, and what it actually looks like. The product itself
 // might since be edited or removed; this is a live join, not a snapshot,
 // so a since-changed photo is what shows (same as the name already works).
-export const orderInclude = { items: { include: { refund: true, seller: { select: { shopName: true } }, product: { select: { images: true } } } } };
+export const orderInclude = { items: { include: { refund: true, seller: { select: { shopName: true } }, product: { select: { images: true, hsn: true } } } } };
 export const ownerWhere = actor => actor.role === 'ADMIN' ? {} : actor.role === 'CUSTOMER' ? { userId: actor.id } : { vendorId: actor.id };
 export function publicOrder(order) {
   const { deliveryOtpHash, deliveryOtpExpiresAt, deliveryOtpAttempts, ...safe } = order;

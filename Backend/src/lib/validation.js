@@ -14,6 +14,7 @@ export const productSchema = z.object({ name: text, description: z.string().trim
   // Optional fields also accept null so an edit can clear them (undefined
   // would leave the stored value unchanged).
   sku: z.string().trim().max(60).nullable().optional(),
+  hsn: z.string().trim().max(20).nullable().optional(),
   mrpPaise: money.nullable().optional(), marketPricePaise: money.nullable().optional(), featuredRank: z.number().int().min(0).max(1000000).optional(),
   stock: z.number().int().min(0).max(1000000), categoryId: text,
   images: z.array(imageUrlSchema).max(5),
@@ -196,4 +197,12 @@ export const settingsSchema = z.object({
   companyPhone: z.string().regex(/^\+?[0-9]{10,15}$/).nullable().optional(),
   companyEmail: z.string().trim().toLowerCase().email().max(200).nullable().optional(),
   logoUrl: imageUrlSchema.nullable().optional(),
+  invoiceTerms: z.string().trim().max(1500).nullable().optional(),
+  invoiceBankDetails: z.string().trim().max(600).nullable().optional(),
+  // Which item-table columns show and what each is called. `item` and `amount`
+  // are always shown; the rest can be toggled and renamed.
+  invoiceColumns: z.array(z.object({ key: z.enum(['item', 'variant', 'hsn', 'qty', 'rate', 'amount']), label: z.string().trim().min(1).max(24), show: z.boolean() })).max(6).nullable().optional(),
 });
+// The custom charge/discount lines on one order's bill. A negative amount is a
+// discount; the label is what prints.
+export const invoiceExtrasSchema = z.object({ extras: z.array(z.object({ label: z.string().trim().min(1).max(40), amountPaise: z.number().int().min(-10000000).max(10000000) })).max(12) });
