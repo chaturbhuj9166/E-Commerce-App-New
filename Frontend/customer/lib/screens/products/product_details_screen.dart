@@ -10,6 +10,7 @@ import '../../providers/wishlist_provider.dart';
 import '../../widgets/app_network_image.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/price_tag.dart';
+import '../../widgets/product_card.dart';
 import '../../widgets/rating_stars.dart';
 import '../cart/cart_screen.dart';
 import 'write_review_screen.dart';
@@ -25,6 +26,8 @@ class ProductDetailsScreen extends StatefulWidget {
 
 class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   Product? _product;
+  // Other in-stock products in the same category -- the "You may also like" strip.
+  List<Product> _related = [];
   int _activeImage = 0;
   String? _selectedColor;
   String? _selectedSize;
@@ -83,6 +86,60 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       if (_activeImage >= p.images.length) _activeImage = 0;
       if (firstLoad) _showColorImage = true;
     });
+    if (firstLoad) _loadRelated(p);
+  }
+
+  /// Same-category suggestions, fetched once. Best-effort: a failure just
+  /// leaves the strip hidden.
+  Future<void> _loadRelated(Product p) async {
+    final categoryId = p.category?.id;
+    if (categoryId == null) return;
+    try {
+      final found = await context.read<ShopProvider>().searchProducts('', categoryId: categoryId);
+      if (!mounted) return;
+      setState(() => _related = found.where((r) => r.id != p.id && r.stock > 0).take(10).toList());
+    } catch (_) {
+      // No strip rather than an error on the product page.
+    }
+  }
+
+  void _openProduct(String id) =>
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductDetailsScreen(productId: id)));
+
+  /// Horizontal strip of same-category products, styled like the cart's
+  /// "You may also like".
+  Widget _relatedStrip(List<Product> products) {
+    final wishlist = context.watch<WishlistProvider>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('You may also like', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 240,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: products.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 10),
+            itemBuilder: (context, i) {
+              final p = products[i];
+              return SizedBox(
+                width: 158,
+                child: ProductCard(
+                  product: p,
+                  wished: wishlist.contains(p.id),
+                  onTap: () => _openProduct(p.id),
+                  onWishlist: () async {
+                    final error = await context.read<WishlistProvider>().toggleOrReport(p.id);
+                    if (error != null && mounted) ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text(error)));
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _toggleWishlist(String id) async {
@@ -397,6 +454,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                       ],
                                     ),
                                   )),
+                              if (_related.isNotEmpty) ...[
+                                const SizedBox(height: 16),
+                                const Divider(),
+                                const SizedBox(height: 10),
+                                _relatedStrip(_related),
+                              ],
                               const SizedBox(height: 20),
                             ],
                           ),

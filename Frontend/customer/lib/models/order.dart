@@ -1,7 +1,10 @@
 class OrderItem {
-  OrderItem({this.id = '', required this.name, required this.quantity, required this.unitPaise, this.refundEligible = false, this.refundStatus, this.size, this.color, this.grade});
+  OrderItem({this.id = '', this.productId, required this.name, required this.quantity, required this.unitPaise, this.refundEligible = false, this.refundStatus, this.size, this.color, this.grade});
 
   final String id;
+  /// The product this line was bought from; lets "Buy again" re-add it. May be
+  /// absent on older orders, so reorder skips lines without it.
+  final String? productId;
   final String name;
   final String? size;
   final String? color;
@@ -15,6 +18,7 @@ class OrderItem {
 
   factory OrderItem.fromJson(Map<String, dynamic> json) => OrderItem(
         id: json['id']?.toString() ?? '',
+        productId: (json['productId'] as String?)?.isNotEmpty == true ? json['productId'] as String : null,
         name: json['name'] as String,
         quantity: (json['quantity'] as num).toInt(),
         unitPaise: (json['unitPaise'] as num).toInt(),

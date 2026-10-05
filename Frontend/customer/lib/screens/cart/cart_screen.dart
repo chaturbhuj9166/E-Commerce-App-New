@@ -4,6 +4,7 @@ import '../../core/app_colors.dart';
 import '../../models/cart_item.dart';
 import '../../models/product.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/saved_for_later_provider.dart';
 import '../../providers/shop_provider.dart';
 import '../../providers/wishlist_provider.dart';
 import '../../widgets/app_network_image.dart';
@@ -56,6 +57,47 @@ class _CartScreenState extends State<CartScreen> {
     return pool.take(10).toList();
   }
 
+  /// Parks a cart line in the local "Saved for later" list and drops it from
+  /// the cart. The save is only kept if the cart actually let go of the line.
+  Future<void> _saveForLater(CartItem item) async {
+    final cart = context.read<CartProvider>();
+    final saved = context.read<SavedForLaterProvider>();
+    try {
+      await cart.remove(item.product.id, size: item.size, color: item.color, grade: item.grade);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      return;
+    }
+    await saved.save(SavedItem(
+      productId: item.product.id,
+      name: item.product.name,
+      image: item.product.image,
+      pricePaise: item.unitPaise,
+      mrpPaise: item.mrpPaise,
+      size: item.size,
+      color: item.color,
+      grade: item.grade,
+      sizeLabel: item.product.sizeLabel,
+      quantity: item.quantity,
+    ));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved for later')));
+  }
+
+  /// Puts a saved line back into the cart; only removes it from the saved list
+  /// once the cart accepts it (it may now be out of stock).
+  Future<void> _moveToCart(SavedItem item) async {
+    final cart = context.read<CartProvider>();
+    final saved = context.read<SavedForLaterProvider>();
+    try {
+      await cart.add(item.productId, size: item.size, color: item.color, grade: item.grade, quantity: item.quantity);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      return;
+    }
+    await saved.remove(item);
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Moved to cart')));
+  }
+
   void _openProduct(String id) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductDetailsScreen(productId: id))).then((_) {
         if (mounted) context.read<CartProvider>().load();
       });
@@ -68,6 +110,7 @@ class _CartScreenState extends State<CartScreen> {
   Widget build(BuildContext context) {
     final cart = context.watch<CartProvider>();
     final shop = context.watch<ShopProvider>();
+    final saved = context.watch<SavedForLaterProvider>().items;
     final recommended = _recommendations(cart.items, shop);
     return Scaffold(
       appBar: AppBar(automaticallyImplyLeading: !widget.embedded, title: Text('My Cart (${cart.items.length})')),
@@ -75,7 +118,7 @@ class _CartScreenState extends State<CartScreen> {
         child: cart.loading && cart.items.isEmpty
             ? const Center(child: CircularProgressIndicator())
             : cart.items.isEmpty
-                ? _emptyCart(cart, shop)
+                ? _emptyCart(cart, shop, saved)
                 : Column(
                     children: [
                       Expanded(
@@ -87,6 +130,10 @@ class _CartScreenState extends State<CartScreen> {
                               for (final item in cart.items) ...[_itemTile(item, cart), const SizedBox(height: 10)],
                               const SizedBox(height: 6),
                               _priceDetails(cart),
+                              if (saved.isNotEmpty) ...[
+                                const SizedBox(height: 22),
+                                _savedSection(saved),
+                              ],
                               if (recommended.isNotEmpty) ...[
                                 const SizedBox(height: 22),
                                 _recommendedStrip('You may also like', recommended),
@@ -102,7 +149,7 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
-  Widget _emptyCart(CartProvider cart, ShopProvider shop) {
+  Widget _emptyCart(CartProvider cart, ShopProvider shop, List<SavedItem> saved) {
     // Two different strips so an empty cart still has plenty to browse.
     final deals = shop.deals.where((p) => p.stock > 0).take(10).toList();
     final dealIds = deals.map((p) => p.id).toSet();
@@ -131,6 +178,10 @@ class _CartScreenState extends State<CartScreen> {
           ],
           const SizedBox(height: 18),
           Center(child: SizedBox(width: 200, child: PrimaryButton(label: 'Start Shopping', orange: true, onPressed: _startShopping))),
+          if (saved.isNotEmpty) ...[
+            const SizedBox(height: 30),
+            _savedSection(saved),
+          ],
           if (deals.isNotEmpty) ...[
             const SizedBox(height: 30),
             _recommendedStrip('Deals of the Day', deals),
@@ -201,6 +252,15 @@ class _CartScreenState extends State<CartScreen> {
                         ],
                       ),
                     ],
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap, foregroundColor: AppColors.textSecondary),
+                        onPressed: cart.loading ? null : () => _saveForLater(item),
+                        icon: const Icon(Icons.bookmark_border_rounded, size: 16),
+                        label: const Text('Save for later', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -271,6 +331,67 @@ class _CartScreenState extends State<CartScreen> {
           ],
         ),
       );
+
+  /// The on-device "Saved for later" list: a vertical stack of lines the
+  /// shopper can move back into the cart or drop.
+  Widget _savedSection(List<SavedItem> saved) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Saved for later (${saved.length})', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+        const SizedBox(height: 10),
+        for (final item in saved) ...[_savedTile(item), const SizedBox(height: 10)],
+      ],
+    );
+  }
+
+  Widget _savedTile(SavedItem item) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: item.image.isEmpty
+                ? Container(width: 72, height: 72, color: AppColors.background, child: const Icon(Icons.image_outlined))
+                : AppNetworkImage(item.image, width: 72, height: 72),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
+                const SizedBox(height: 4),
+                if (item.variantText.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(item.variantText, style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
+                  ),
+                PriceTag(pricePaise: item.pricePaise, mrpPaise: item.mrpPaise, size: 14),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap, foregroundColor: AppColors.orange),
+                    onPressed: () => _moveToCart(item),
+                    icon: const Icon(Icons.add_shopping_cart_rounded, size: 16),
+                    label: const Text('Move to cart', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: Icon(Icons.delete_outline, color: AppColors.textMuted),
+            onPressed: () => context.read<SavedForLaterProvider>().remove(item),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _recommendedStrip(String title, List<Product> products) {
     final wishlist = context.watch<WishlistProvider>();

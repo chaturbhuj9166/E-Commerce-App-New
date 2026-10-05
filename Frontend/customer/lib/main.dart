@@ -4,6 +4,7 @@ import 'core/api_client.dart';
 import 'core/app_theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/cart_provider.dart';
+import 'providers/saved_for_later_provider.dart';
 import 'providers/shop_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/vendor_provider.dart';
@@ -51,6 +52,7 @@ class NtsaApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ShopProvider()),
         ChangeNotifierProvider(create: (_) => CartProvider()),
+        ChangeNotifierProvider(create: (_) => SavedForLaterProvider()..restore()),
         ChangeNotifierProvider(create: (_) => WishlistProvider()),
         ChangeNotifierProvider(create: (_) => VendorProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()..restore()),

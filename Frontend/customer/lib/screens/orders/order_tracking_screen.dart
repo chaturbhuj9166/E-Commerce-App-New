@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
 import '../../models/order.dart';
+import '../../providers/cart_provider.dart';
 import '../../widgets/price_tag.dart';
 import '../../widgets/primary_button.dart';
+import '../cart/cart_screen.dart';
 
 class OrderTrackingScreen extends StatefulWidget {
   const OrderTrackingScreen({super.key, required this.orderId});
@@ -21,6 +24,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   bool _otpBusy = false;
   bool _cancelling = false;
   bool _invoiceBusy = false;
+  bool _reordering = false;
   final Set<String> _refunding = {};
 
   static const _stepLabels = {
@@ -116,6 +120,42 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     }
   }
 
+  /// Re-adds every line of a delivered order back to the cart, then offers to
+  /// jump there. Lines without a product id (older orders) are skipped.
+  Future<void> _buyAgain(Order order) async {
+    final lines = order.items.where((i) => i.productId != null).toList();
+    if (lines.isEmpty) {
+      _snack('These items are no longer available to reorder');
+      return;
+    }
+    setState(() => _reordering = true);
+    final cart = context.read<CartProvider>();
+    var added = 0;
+    try {
+      for (final item in lines) {
+        try {
+          await cart.add(item.productId!, size: item.size, color: item.color, grade: item.grade, quantity: item.quantity);
+          added++;
+        } catch (_) {
+          // An out-of-stock or removed product just doesn't make it back in.
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _reordering = false);
+    }
+    if (!mounted) return;
+    if (added == 0) {
+      _snack('Could not add these items — they may be out of stock');
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(added == lines.length ? 'Added to cart' : 'Added $added of ${lines.length} items to cart'),
+        action: SnackBarAction(label: 'View cart', onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CartScreen()))),
+      ),
+    );
+  }
+
   Future<void> _requestRefund(OrderItem item) async {
     final reason = await showDialog<String>(context: context, builder: (_) => _RefundDialog(itemName: item.name));
     if (reason == null || !mounted) return;
@@ -200,6 +240,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
                       child: PrimaryButton(label: 'Get delivery OTP', orange: true, loading: _otpBusy, onPressed: _getDeliveryOtp),
+                    ),
+                  if (order.status == 'DELIVERED')
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+                      child: PrimaryButton(label: 'Buy again', orange: true, loading: _reordering, onPressed: _reordering ? null : () => _buyAgain(order)),
                     ),
                   if (_canCancel(order))
                     Padding(
