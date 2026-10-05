@@ -141,3 +141,5 @@
 [data-theme="dark"] .support-msg.from-support{background:#15332a;border-color:#1f5141}
 [data-theme="dark"] .support-msg p{color:#cdd7e6}
 [data-theme="dark"] .support-reply textarea{background:#0e1626;border-color:#28344d;color:#e6ebf2}
+.holiday-tag{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:20px;background:#fff3e0;color:#b4690e;font-size:11px;font-weight:600;vertical-align:middle}
+[data-theme="dark"] .holiday-tag{background:#3a2a12;color:#ffb45d}

@@ -7,6 +7,15 @@ import './style.css';
 
 // The refurbished/used grades a shopper can be offered, cheapest intent first.
 const GRADES = ['Fair', 'Good', 'Superb'];
+const DAY = 86400000;
+const fmtDay = d => new Date(d).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+// From a seller's holiday start, the date they've said they'll be back, and
+// the date their products drop off if they're not (a fixed 3-day grace).
+function holidayDates(me) {
+  if (!me?.holidayStart) return null;
+  const start = new Date(me.holidayStart).getTime();
+  return { backBy: fmtDay(start + (me.holidayDays || 0) * DAY), hideOn: fmtDay(start + 3 * DAY) };
+}
 
 /// The seller panel: its own site, signed into with the username and
 /// password the NTSA admin hands out. A shop only ever sees its own stock
@@ -31,6 +40,7 @@ function App() {
   const [error, setError] = useState(''), [toast, setToast] = useState(''), [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false), [modal, setModal] = useState(null), [query, setQuery] = useState(''), [mobileNav, setMobileNav] = useState(false);
   const [cancelOrderId, setCancelOrderId] = useState(null);
+  const [holidayOpen, setHolidayOpen] = useState(false), [holidayDays, setHolidayDays] = useState(2);
 
   function logout() { sessionStorage.removeItem('ntsa-token'); setSession(null); setMe(null); setModal(null); setError(''); }
   async function load() {
@@ -83,7 +93,7 @@ function App() {
       <div className="brand"><img className="brand-logo" src="/ntsa_logo.png" alt="NTSA"/></div>
       <div className="workspace-label">SELLER WORKSPACE</div>
       <nav>{nav.map(([name, Icon]) => <button key={name} className={page === name ? 'nav-item active' : 'nav-item'} onClick={() => go(name)}><Icon size={19}/><span>{name}</span>{name === 'My orders' && orders.length > 0 && <small>{orders.length}</small>}{name === 'To pack' && toPack.length > 0 && <small>{toPack.length}</small>}{name === 'Support' && openTickets > 0 && <small>{openTickets}</small>}</button>)}</nav>
-      <div className="sidebar-note"><ShieldCheck size={24}/><strong>{me?.onHoliday ? 'You are on holiday.' : 'Your shop on NTSA.'}</strong><p>{me?.onHoliday ? 'Your products are hidden from shoppers until you come back.' : 'Going away? Put your shop on hold so no new orders come in.'}</p><button className="text-button" style={{ color: me?.onHoliday ? '#ffb45d' : '#86a4b5', marginTop: 10 }} disabled={busy} onClick={() => action(() => api('/seller/holiday', { method: 'POST', body: { onHoliday: !me?.onHoliday } }), me?.onHoliday ? 'Welcome back — your shop is live' : 'Your shop is on holiday')}>{me?.onHoliday ? 'End holiday & go live' : 'Go on holiday'}</button></div>
+      <div className="sidebar-note"><ShieldCheck size={24}/><strong>{me?.onHoliday ? 'You are on holiday.' : 'Your shop on NTSA.'}</strong><p>{me?.onHoliday ? 'Deliveries are quoted a little later. Come back within 3 days or your products hide from shoppers.' : 'Going away? Put your shop on hold so deliveries are quoted later.'}</p><button className="text-button" style={{ color: me?.onHoliday ? '#ffb45d' : '#86a4b5', marginTop: 10 }} disabled={busy} onClick={() => me?.onHoliday ? action(() => api('/seller/holiday', { method: 'POST', body: { onHoliday: false } }), 'Welcome back — your shop is live') : setHolidayOpen(true)}>{me?.onHoliday ? 'End holiday & go live' : 'Go on holiday'}</button></div>
       <button className="nav-item signout" onClick={logout}><LogOut size={18}/>Sign out</button>
     </aside>
     <div className="main">
@@ -104,7 +114,7 @@ function App() {
           </div>
           {page === 'My products' && <Button onClick={() => setModal({ data: null })}><Plus size={17}/>Add product</Button>}
         </div>
-        {me?.onHoliday && <div className="holiday-banner"><Truck size={18}/><span><strong>You're on holiday.</strong> Your products are hidden from shoppers. Existing orders still need to be packed and delivered.</span><Button disabled={busy} onClick={() => action(() => api('/seller/holiday', { method: 'POST', body: { onHoliday: false } }), 'Welcome back — your shop is live')}>End holiday</Button></div>}
+        {me?.onHoliday && <div className="holiday-banner"><Truck size={18}/><span><strong>You're on holiday{holidayDates(me) ? ` — back by ${holidayDates(me).backBy}` : ''}.</strong> Deliveries on your products are quoted {me.holidayDays} day{me.holidayDays === 1 ? '' : 's'} later. {holidayDates(me) ? `Come back by ${holidayDates(me).hideOn} or your products hide from shoppers.` : 'Come back within 3 days or your products hide from shoppers.'} Existing orders still need to be packed and delivered.</span><Button disabled={busy} onClick={() => action(() => api('/seller/holiday', { method: 'POST', body: { onHoliday: false } }), 'Welcome back — your shop is live')}>End holiday</Button></div>}
         {error && <div role="alert" className="alert">{error}<button onClick={() => setError('')} aria-label="Dismiss">✕</button></div>}
         {loading && !me ? <Empty text="Loading your shop…"/> : <>
 
@@ -245,6 +255,14 @@ function App() {
       }}>
         <Field label="Why is this order being cancelled?"><textarea name="reason" required maxLength={300} rows={2} placeholder="e.g. Out of stock"/></Field>
         <div style={{ display: 'flex', gap: 10 }}><Button secondary type="button" onClick={() => setCancelOrderId(null)}>Keep order</Button><Button disabled={busy}>Cancel this order</Button></div>
+      </form>
+    </Modal>}
+    {holidayOpen && <Modal title="Go on holiday" close={() => !busy && setHolidayOpen(false)}>
+      {error && <div role="alert" className="alert">{error}</div>}
+      <p className="muted">While you're away, deliveries on your products are quoted this many days later. If you don't come back within 3 days, your products hide from shoppers until you do.</p>
+      <form className="editor" onSubmit={e => { e.preventDefault(); action(async () => { await api('/seller/holiday', { method: 'POST', body: { onHoliday: true, days: holidayDays } }); setHolidayOpen(false); }, 'Your shop is on holiday'); }}>
+        <Field label="How many days?" type="number" min="1" max="30" value={holidayDays} onChange={e => setHolidayDays(Math.max(1, Math.min(30, Number(e.target.value) || 1)))}/>
+        <div style={{ display: 'flex', gap: 10 }}><Button secondary type="button" onClick={() => setHolidayOpen(false)}>Cancel</Button><Button disabled={busy}>Start holiday</Button></div>
       </form>
     </Modal>}
   </div>;

@@ -7,7 +7,7 @@ import { Prisma } from '@prisma/client';
 import { db, atomic } from './db.js';
 import { config } from './config.js';
 import { z, productSchema, addressSchema, vendorCreateSchema, vendorUpdateSchema, vendorPasswordSchema, vendorMessageSchema, bannerSchema, reviewSchema, adminReviewSchema, couponSchema, staffCreateSchema, staffUpdateSchema, sellerApplicationSchema, sellerApproveSchema, sellerUpdateSchema, blockedPincodeSchema, deliveryRuleSchema, settingsSchema, invoiceExtrasSchema } from './lib/validation.js';
-import { requireThat } from './lib/rules.js';
+import { requireThat, holidayGraceCutoff } from './lib/rules.js';
 import { variantFor, priceFor, publicSizePrices } from './lib/variants.js';
 import { auth, roles, tokenFor } from './services/auth.js';
 import { verifyCustomer } from './services/firebase.js';
@@ -83,6 +83,10 @@ router.post('/auth/demo', loginLimiter, async (req, res) => {
 });
 router.get('/categories', async (req, res) => res.json(await db.category.findMany({ orderBy: { name: 'asc' } })));
 router.get('/banners', async (req, res) => res.json(await db.banner.findMany({ where: { active: true }, orderBy: { sortOrder: 'asc' } })));
+// A product is on the storefront if it's NTSA's own, its seller isn't away,
+// or its seller only just went away (within the 3-day grace). Past the grace,
+// an unreturned seller's products drop off until they come back.
+const onSaleSellerOr = () => [{ sellerId: null }, { seller: { onHoliday: false } }, { seller: { onHoliday: true, holidayStart: { gt: holidayGraceCutoff() } } }];
 router.get('/products', async (req, res) => {
   const q = z.object({
     categoryId: z.string().optional(), search: z.string().max(100).optional(), deal: z.enum(['true', 'false']).optional(),
@@ -101,7 +105,7 @@ router.get('/products', async (req, res) => {
     // A shop on holiday is hidden from the storefront until it's back. Kept in
     // AND with the search OR so the two OR-groups don't collide.
     AND: [
-      { OR: [{ sellerId: null }, { seller: { onHoliday: false } }] },
+      { OR: onSaleSellerOr() },
       ...(q.search ? [{ OR: [{ name: { contains: q.search, mode: 'insensitive' } }, { description: { contains: q.search, mode: 'insensitive' } }] }] : []),
     ] };
   // Price and recency sort cleanly at the database; rating, discount and
@@ -118,7 +122,7 @@ router.get('/products', async (req, res) => {
   res.json(rows);
 });
 router.get('/products/:id', async (req, res) => {
-  const p = await db.product.findFirst({ where: { id: req.params.id, active: true, audience: { in: ['RETAIL', 'BOTH'] }, OR: [{ sellerId: null }, { seller: { onHoliday: false } }] }, include: { category: true, reviews: { select: { rating: true, comment: true, images: true, createdAt: true, authorName: true, user: { select: { name: true } } }, take: 100, orderBy: { createdAt: 'desc' } } } });
+  const p = await db.product.findFirst({ where: { id: req.params.id, active: true, audience: { in: ['RETAIL', 'BOTH'] }, OR: onSaleSellerOr() }, include: { category: true, reviews: { select: { rating: true, comment: true, images: true, createdAt: true, authorName: true, user: { select: { name: true } } }, take: 100, orderBy: { createdAt: 'desc' } } } });
   requireThat(p, 404, 'Product not found'); const { wholesalePaise, ...safe } = p;
   // A review shows the customer's name, or the name the admin gave a seeded one.
   safe.reviews = safe.reviews.map(({ user, authorName, ...r }) => ({ ...r, authorName: user?.name || authorName || 'Customer' }));
@@ -619,7 +623,7 @@ router.post('/support/tickets/:id/resolve', support, async (req, res) => res.jso
 router.post('/support/tickets/:id/reopen', support, async (req, res) => res.json(await db.supportTicket.update({ where: { id: req.params.id }, data: { status: 'OPEN' } })));
 // The support team can also take a seller's product off the shop (or put it
 // back) when something's wrong with it.
-router.get('/support/products', support, async (req, res) => res.json(await db.product.findMany({ where: { sellerId: { not: null } }, include: { category: { select: { name: true } }, seller: { select: { shopName: true } } }, orderBy: { createdAt: 'desc' }, take: 300 })));
+router.get('/support/products', support, async (req, res) => res.json(await db.product.findMany({ where: { sellerId: { not: null } }, include: { category: { select: { name: true } }, seller: { select: { shopName: true, onHoliday: true, holidayStart: true, holidayDays: true } } }, orderBy: { createdAt: 'desc' }, take: 300 })));
 router.post('/support/products/:id/hide', support, async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: { active: false } })));
 router.post('/support/products/:id/restore', support, async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: { active: true } })));
 // A fresh copy to tweak -- same stock, a "(copy)" name, and hidden until the
@@ -954,13 +958,23 @@ async function sellerSummaryFor(sellerId, commissionPercent, penaltyPaise = 0) {
   };
 }
 router.get('/seller/summary', seller, async (req, res) => res.json(await sellerSummaryFor(req.actor.id, req.actor.account.commissionPercent, req.actor.account.penaltyPaise)));
-// Going on holiday hides the shop's products from the storefront; coming back
-// shows them again. The admin is told either way.
+// Going on holiday pushes this shop's delivery promises back by the number of
+// days taken, and -- if the seller doesn't come back within 3 days -- drops
+// their products off the storefront. Coming back puts everything live again.
+// The admin and the support team are told either way.
 router.post('/seller/holiday', seller, async (req, res) => {
-  const { onHoliday } = z.object({ onHoliday: z.boolean() }).parse(req.body);
-  const updated = await db.seller.update({ where: { id: req.actor.id }, data: { onHoliday } });
-  await notify('ADMIN', 'SELLER_HOLIDAY', onHoliday ? 'Seller on holiday' : 'Seller back from holiday', `${req.actor.account.shopName} is ${onHoliday ? 'now on holiday — their products are hidden from the shop' : 'back and their products are live again'}.`, req.actor.id);
-  res.json({ onHoliday: updated.onHoliday });
+  const { onHoliday, days } = z.object({ onHoliday: z.boolean(), days: z.number().int().min(1).max(30).optional() }).parse(req.body);
+  const updated = await db.seller.update({ where: { id: req.actor.id }, data: onHoliday
+    ? { onHoliday: true, holidayStart: new Date(), holidayDays: days ?? 2 }
+    : { onHoliday: false, holidayStart: null } });
+  const n = updated.holidayDays;
+  const title = onHoliday ? 'Seller on holiday' : 'Seller back from holiday';
+  const body = onHoliday
+    ? `${req.actor.account.shopName} is on holiday for ${n} day${n === 1 ? '' : 's'} — deliveries are quoted ${n} day${n === 1 ? '' : 's'} later, and their products hide if they're not back within 3 days.`
+    : `${req.actor.account.shopName} is back and their products are live again.`;
+  await notify('ADMIN', 'SELLER_HOLIDAY', title, body, req.actor.id);
+  await notify('SUPPORT', 'SELLER_HOLIDAY', title, body, req.actor.id);
+  res.json({ onHoliday: updated.onHoliday, holidayStart: updated.holidayStart, holidayDays: updated.holidayDays });
 });
 // Every penalty the admin has docked this shop, with the reason, so the
 // seller knows exactly what each deduction on their earnings was for.

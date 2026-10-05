@@ -103,9 +103,13 @@ model Seller {
   // Whether the NTSA logo is stamped into this shop's product photos. The
   // admin controls it per seller from the Product label page.
   watermark Boolean @default(true)
-  // Vacation mode: while on, the shop hides this seller's products (existing
-  // orders are unaffected) and the admin can see they're away.
+  // Vacation mode. While on, deliveries for this shop's products are quoted
+  // a few days later (by holidayDays), and if the seller hasn't come back
+  // within 3 days their products drop off the storefront. The admin and the
+  // support team can see who's away. Existing orders are unaffected.
   onHoliday Boolean @default(false)
+  holidayStart DateTime?
+  holidayDays Int @default(2)
   enabled Boolean @default(true)
   deleted Boolean @default(false)
   sessionVersion Int @default(0)

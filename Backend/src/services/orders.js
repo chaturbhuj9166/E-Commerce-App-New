@@ -1,7 +1,7 @@
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { db, atomic } from '../db.js';
 import { config } from '../config.js';
-import { checkLimits, deadline, eligible, nextStatus, requireThat, totalFor, MAX_MONEY } from '../lib/rules.js';
+import { checkLimits, deadline, eligible, nextStatus, requireThat, totalFor, MAX_MONEY, holidayExtraDays } from '../lib/rules.js';
 import { checkoutSchema } from '../lib/validation.js';
 import { variantFor, priceFor } from '../lib/variants.js';
 import { notifyOrder } from './firebase.js';
@@ -30,6 +30,8 @@ export async function deliveryChargeFor(goodsPaise, client = db) {
   const rules = await client.deliveryRule.findMany({ where: { belowPaise: { gt: goodsPaise } }, orderBy: { belowPaise: 'asc' }, take: 1 });
   return rules[0]?.chargePaise ?? 0;
 }
+// The baseline delivery estimate quoted at checkout, before any holiday delay.
+const STANDARD_DELIVERY_DAYS = 7;
 export async function checkout(actor, input) {
   const data = checkoutSchema.parse(input);
   requireThat(data.paymentMethod !== 'DEMO' || config.DEMO_MODE, 400, 'Demo payments are disabled');
@@ -91,10 +93,17 @@ export async function checkout(actor, input) {
       const changed = await tx.product.updateMany({ where: { id: item.productId, active: true, stock: { gte: item.quantity } }, data: { stock: { decrement: item.quantity } } });
       requireThat(changed.count === 1, 409, 'Stock changed; please try again');
     }
+    // A standard delivery promise, pushed back if any item's seller is on
+    // holiday -- a 2-day holiday turns a 7-day estimate into 9. The admin can
+    // still override the exact date later.
+    const sellerIds = [...new Set(items.map(i => i.sellerId).filter(Boolean))];
+    const holidaySellers = sellerIds.length ? await tx.seller.findMany({ where: { id: { in: sellerIds } }, select: { onHoliday: true, holidayStart: true, holidayDays: true } }) : [];
+    const extraDays = holidaySellers.reduce((max, s) => Math.max(max, holidayExtraDays(s)), 0);
+    const expectedDeliveryAt = new Date(Date.now() + (STANDARD_DELIVERY_DAYS + extraDays) * 86400000);
     const order = await tx.order.create({ data: {
       ...ownerWhere(actor), address: JSON.parse(JSON.stringify(address)), checkoutKey: data.checkoutKey,
       paymentMethod: data.paymentMethod, totalPaise, deliveryPaise, discountPaise, couponCode: discountPaise > 0 ? data.couponCode : null,
-      status: data.paymentMethod === 'RAZORPAY' ? 'PENDING_PAYMENT' : 'PLACED',
+      status: data.paymentMethod === 'RAZORPAY' ? 'PENDING_PAYMENT' : 'PLACED', expectedDeliveryAt,
       items: { create: items },
     }, include: orderInclude });
     // Ordered items leave the customer's saved cart in the same transaction.

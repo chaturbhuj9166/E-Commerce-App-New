@@ -491,7 +491,7 @@ function ProductLabelPage({ sellers, settings, query, setQuery, busy, onToggleSe
       <tbody>
         {(!q || 'ntsa own stock'.includes(q)) && <tr><td><strong>NTSA (own stock)</strong><small>Products with no seller</small></td><td>—</td><td><Toggle on={settings?.watermarkOwn !== false} onChange={onToggleOwn}/></td></tr>}
         {shown.map(s => <tr key={s.id}>
-          <td><strong>{s.shopName}</strong><small>{s.ownerName}</small></td>
+          <td><strong>{s.shopName}</strong>{s.onHoliday && <span className="holiday-tag">On holiday{s.holidayDays ? ` · ${s.holidayDays}d` : ''}</span>}<small>{s.ownerName}</small></td>
           <td>{s._count?.products ?? 0}</td>
           <td><Toggle on={s.watermark !== false} onChange={v => onToggleSeller(s, v)}/></td>
         </tr>)}
@@ -565,7 +565,7 @@ function SupportProductsPage({ products, query, setQuery, busy, onHide, onRestor
       <tbody>
         {shown.map(p => <tr key={p.id}>
           <td><div className="product-cell"><ProductImage product={p}/><div><strong>{p.name}</strong><small>{p.category?.name}</small></div></div></td>
-          <td>{p.seller?.shopName || 'NTSA'}</td>
+          <td>{p.seller?.shopName || 'NTSA'}{p.seller?.onHoliday && <span className="holiday-tag">On holiday</span>}</td>
           <td>{money(p.pricePaise)}</td>
           <td><Badge>{p.active === false ? 'Disabled' : 'Active'}</Badge></td>
           <td>{p.active === false ? <button className="text-button" disabled={busy} onClick={() => onRestore(p)}>Restore</button> : <button className="danger-text" disabled={busy} onClick={() => onHide(p)}>Hide</button>}</td>
