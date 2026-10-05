@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LayoutDashboard, Package, Shapes, Users, User, ShoppingBag, RotateCcw, LogOut, Search, Plus, ArrowUpRight, ChevronRight, Check, Menu, X, Truck, ShieldCheck, Wallet, Store, Image, Tag, Eye, EyeOff, Bell, ClipboardList, UserPlus, BadgeCheck, UserCog, MapPin, Paperclip, Settings as SettingsIcon, FileText, BarChart3, Star, TrendingUp } from 'lucide-react';
+import { LayoutDashboard, Package, Shapes, Users, User, ShoppingBag, RotateCcw, LogOut, Search, Plus, ArrowUpRight, ChevronRight, Check, Menu, X, Truck, ShieldCheck, Wallet, Store, Image, Tag, Eye, EyeOff, Bell, ClipboardList, UserPlus, BadgeCheck, UserCog, MapPin, Paperclip, Settings as SettingsIcon, FileText, BarChart3, Star, TrendingUp, Stamp } from 'lucide-react';
 import { api, money, paise, openInvoice, suggestCategory, SELLER_PANEL_URL } from './api';
 import { Button, Field, PasswordField, Badge, Empty, Modal, Stat, ProductImage, CONDITION_LABEL } from './ui';
 import { WholesaleProductsPage, AudienceField } from './pages/wholesale-products';
@@ -156,7 +156,7 @@ function App() {
   if (!session) return <Login onLogin={(token, loginRole) => { sessionStorage.setItem('ntsa-token', token); setPage(loginRole === 'PACKING' ? 'To pack' : loginRole === 'SALES' ? 'Add seller' : 'Overview'); setSession(token); }}/ >;
   const nav = isPacking ? [['To pack', ClipboardList], ['Packed', Check]]
     : isSales ? [['Add seller', UserPlus], ['My sellers', Store]]
-    : isAdmin ? [['Overview', LayoutDashboard], ['Products', Package], ['Wholesale products', Store], ['Categories', Shapes], ['Orders', ShoppingBag], ['Customers', User], ['Reviews', Star], ['Vendors', Users], ['To pack', ClipboardList], ['Shipments', Truck], ['Banners', Image], ['Coupons', Tag], ['Reports', BarChart3], ['Sellers', BadgeCheck], ['Seller insights', TrendingUp], ['Refunds', RotateCcw], ['Delivery areas', MapPin], ['Staff', UserCog], ['Invoice', FileText], ['Settings', SettingsIcon]]
+    : isAdmin ? [['Overview', LayoutDashboard], ['Products', Package], ['Wholesale products', Store], ['Categories', Shapes], ['Orders', ShoppingBag], ['Customers', User], ['Reviews', Star], ['Vendors', Users], ['To pack', ClipboardList], ['Shipments', Truck], ['Banners', Image], ['Coupons', Tag], ['Reports', BarChart3], ['Sellers', BadgeCheck], ['Seller insights', TrendingUp], ['Product label', Stamp], ['Refunds', RotateCcw], ['Delivery areas', MapPin], ['Staff', UserCog], ['Invoice', FileText], ['Settings', SettingsIcon]]
     : [['Overview', LayoutDashboard], ['Wholesale catalog', Store], ['Orders', ShoppingBag], ['Messages', Paperclip]];
   const pendingApplications = applications.filter(a => a.status === 'PENDING').length;
   const shown = products.filter(p => `${p.name} ${p.category?.name} ${p.seller?.shopName || ''}`.toLowerCase().includes(query.toLowerCase()));
@@ -179,7 +179,7 @@ function App() {
       </div>}
       <span className="online-dot"/><span>{isAdmin ? 'Super Admin' : me?.name || (isPacking ? 'Packing team' : isSales ? 'Sales team' : 'Vendor')}</span><div className="avatar">{isAdmin ? 'SA' : isPacking ? 'PK' : isSales ? 'SL' : 'WV'}</div></div></header>
       <main className="content">
-        <div className="page-heading"><div><div className="eyebrow">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div><h1>{page === 'Overview' ? 'A good day to grow.' : page}</h1><p>{({ Overview: 'Here’s what’s happening with your store today.', Products: 'A little care for every product on your shelf.', Categories: 'Make your collection easy to discover.', Banners: 'Control the Home screen banner without a code change.', Coupons: 'Create and manage discount codes.', Orders: 'From your shelf to their doorstep.', Vendors: 'Build stronger wholesale partnerships.', Customers: 'Everyone who has ever shopped with you.', Shipments: 'What has left the shelf, and where it is now.', Reports: 'Revenue, payments and what is actually selling.', Refunds: 'Thoughtful resolutions. Happier customers.', 'Wholesale catalog': 'Stock up on quality. Save on every order.', 'To pack': 'Everything waiting to be packed and sent.', Packed: 'Packed today and on its way.', 'Add seller': 'Sign up a shop that wants to sell on NTSA.', 'My sellers': 'What you sent for verification.', Sellers: 'Check the details, then hand out their login.', Staff: 'Logins for your packing and sales teams.', 'Delivery areas': 'Delivery charges, and the areas you no longer deliver to.', Invoice: 'Your letterhead, the bill columns, and the terms every invoice is printed with.', Settings: 'Your account, password and how the panel looks.' })[page]}</p></div>
+        <div className="page-heading"><div><div className="eyebrow">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div><h1>{page === 'Overview' ? 'A good day to grow.' : page}</h1><p>{({ Overview: 'Here’s what’s happening with your store today.', Products: 'A little care for every product on your shelf.', Categories: 'Make your collection easy to discover.', Banners: 'Control the Home screen banner without a code change.', Coupons: 'Create and manage discount codes.', Orders: 'From your shelf to their doorstep.', Vendors: 'Build stronger wholesale partnerships.', Customers: 'Everyone who has ever shopped with you.', Shipments: 'What has left the shelf, and where it is now.', Reports: 'Revenue, payments and what is actually selling.', Refunds: 'Thoughtful resolutions. Happier customers.', 'Wholesale catalog': 'Stock up on quality. Save on every order.', 'To pack': 'Everything waiting to be packed and sent.', Packed: 'Packed today and on its way.', 'Add seller': 'Sign up a shop that wants to sell on NTSA.', 'My sellers': 'What you sent for verification.', Sellers: 'Check the details, then hand out their login.', 'Product label': 'Decide whose product photos carry the NTSA logo.', Staff: 'Logins for your packing and sales teams.', 'Delivery areas': 'Delivery charges, and the areas you no longer deliver to.', Invoice: 'Your letterhead, the bill columns, and the terms every invoice is printed with.', Settings: 'Your account, password and how the panel looks.' })[page]}</p></div>
           {isAdmin && ['Products', 'Wholesale products', 'Categories', 'Vendors', 'Banners', 'Coupons'].includes(page) && <Button onClick={() => setModal({ type: page, data: null })}><Plus size={17}/>Add {{ Categories: 'category', Banners: 'banner', Coupons: 'coupon', 'Wholesale products': 'wholesale product' }[page] || page.slice(0, -1).toLowerCase()}</Button>}
           {isAdmin && page === 'Staff' && <Button onClick={() => setModal({ type: 'Staff', data: null })}><Plus size={17}/>Add staff login</Button>}
           {(isPacking || isAdmin) && page === 'To pack' && <Button secondary onClick={load}>Refresh</Button>}
@@ -194,6 +194,7 @@ function App() {
           </>}
           {page === 'Customers' && <CustomersPage customers={customers} query={query} setQuery={setQuery} busy={busy} onBlock={(c, blocked) => action(() => api(`/admin/customers/${c.id}`, { method: 'PATCH', body: { blocked } }), blocked ? `${c.name || 'Customer'} blocked` : `${c.name || 'Customer'} unblocked`)}/>}
           {page === 'Seller insights' && <SellerInsightsPage insights={insights} query={query} setQuery={setQuery} openSellerDashboard={openSellerDashboard}/>}
+          {page === 'Product label' && <ProductLabelPage sellers={sellers} settings={settings} query={query} setQuery={setQuery} busy={busy} onToggleSeller={(s, watermark) => action(() => api(`/admin/sellers/${s.id}`, { method: 'PATCH', body: { watermark } }), `${s.shopName}: logo ${watermark ? 'on' : 'off'}`)} onToggleOwn={watermark => action(() => api('/admin/settings', { method: 'PUT', body: { companyName: settings.companyName, companyAddress: settings.companyAddress || '', companyGSTIN: settings.companyGSTIN || null, companyPhone: settings.companyPhone || null, companyEmail: settings.companyEmail || null, logoUrl: settings.logoUrl || null, invoiceTerms: settings.invoiceTerms || null, invoiceBankDetails: settings.invoiceBankDetails || null, invoiceColumns: settings.invoiceColumns || null, watermarkOwn: watermark } }), `NTSA own stock: logo ${watermark ? 'on' : 'off'}`)}/>}
           {page === 'Reviews' && <ReviewsPage reviews={reviews} query={query} setQuery={setQuery} busy={busy} onAdd={() => setModal({ type: 'AdminReview', data: null })} onRemove={r => setModal({ type: 'Delete', data: { path: `/admin/reviews/${r.id}`, name: `${r.authorName || r.user?.name || 'Customer'}'s review of ${r.product?.name}` } })}/>}
           {page === 'Shipments' && <ShipmentsPage orders={orders}/>}
           {page === 'Reports' && <ReportsPage reports={reports} reportsDays={reportsDays} setReportsDays={loadReports} loadingReports={loadingReports}/>}
@@ -459,6 +460,32 @@ function PackSlip({ order, busy, admin, onPackItem, onPacked }) {
 }
 // The company letterhead every invoice is printed with -- one row, filled
 // in once. Blank fields still produce a working invoice, just a plainer one.
+// Who gets the NTSA logo stamped on their product photos. The switch decides
+// it for future uploads; photos already saved keep whatever they were made
+// with. One row per shop, plus NTSA's own stock.
+function ProductLabelPage({ sellers, settings, query, setQuery, busy, onToggleSeller, onToggleOwn }) {
+  const q = query.toLowerCase();
+  const shown = sellers.filter(s => s.shopName.toLowerCase().includes(q));
+  const Toggle = ({ on, onChange }) => <button type="button" role="switch" aria-checked={on} className={`wm-toggle ${on ? 'on' : ''}`} disabled={busy} onClick={() => onChange(!on)}><span/></button>;
+  return <section className="panel">
+    <div className="panel-heading">
+      <div><h2>Product label <span className="count">{sellers.length}</span></h2><p>Turn the small corner NTSA logo on or off per shop. It applies to photos uploaded from now on.</p></div>
+      <div className="search"><Search size={17}/><input aria-label="Search shops" placeholder="Search shops…" value={query} onChange={e => setQuery(e.target.value)}/></div>
+    </div>
+    <div className="table-scroll"><table>
+      <thead><tr><th>Shop</th><th>Products</th><th>NTSA logo on photos</th></tr></thead>
+      <tbody>
+        {(!q || 'ntsa own stock'.includes(q)) && <tr><td><strong>NTSA (own stock)</strong><small>Products with no seller</small></td><td>—</td><td><Toggle on={settings?.watermarkOwn !== false} onChange={onToggleOwn}/></td></tr>}
+        {shown.map(s => <tr key={s.id}>
+          <td><strong>{s.shopName}</strong><small>{s.ownerName}</small></td>
+          <td>{s._count?.products ?? 0}</td>
+          <td><Toggle on={s.watermark !== false} onChange={v => onToggleSeller(s, v)}/></td>
+        </tr>)}
+      </tbody>
+    </table></div>
+    {!shown.length && !q && <Empty text="No sellers yet"/>}
+  </section>;
+}
 // The real settings: who you are, your password, and how the panel looks.
 function AccountSettingsPage({ me, role, theme, setTheme, busy, action, onPasswordChanged, goStaff }) {
   const [error, setError] = useState('');
@@ -647,6 +674,7 @@ function Login({ onLogin }) {
 }
 function Editor({ type, data, categories, busy, onSubmit }) {
   const [images, setImages] = useState(data?.images?.join('\n') || ''), [uploading, setUploading] = useState(false), [error, setError] = useState('');
+  const [videos, setVideos] = useState(data?.videos || []), [uploadingVideo, setUploadingVideo] = useState(false);
   const [colorImageMap, setColorImageMap] = useState(() => ({ ...(data?.colorImages || {}) }));
   const [uploadingColor, setUploadingColor] = useState(null);
   const uploadColorImage = async (color, file) => {
@@ -735,7 +763,7 @@ function Editor({ type, data, categories, busy, onSubmit }) {
         if (!String(o.wholesale ?? '').trim()) throw new Error(`Enter a wholesale price for ${s}, or clear its retail price`);
         return [s, { pricePaise: paise(o.retail), wholesalePaise: paise(o.wholesale), mrpPaise: String(o.mrp ?? '').trim() ? paise(o.mrp) : null }];
       }));
-      onSubmit({ name: f.name, description: f.description, sku: f.sku?.trim() || null, hsn: f.hsn?.trim() || null, pricePaise: paise(f.retail), wholesalePaise: paise(f.wholesale), mrpPaise: f.mrp ? paise(f.mrp) : null, marketPricePaise: f.market ? paise(f.market) : null, stock: Number(f.stock), categoryId: f.categoryId, images: images.split('\n').map(x => x.trim()).filter(Boolean), colors: f.colors.split(',').map(x => x.trim()).filter(Boolean), sizes: sizeList, sizeLabel: f.sizeLabel?.trim() || 'Size', sizePrices: Object.keys(optionPrices).length ? optionPrices : null, colorImages: Object.keys(colorImagesOut).length ? colorImagesOut : null, colorExtraPaise: Object.keys(colorExtraPaise).length ? colorExtraPaise : null, conditionGrades: gradeMode ? gradeList : [], conditionGradeExtraPaise: gradeMode ? (() => { const m = Object.fromEntries(gradeList.filter(g => Number(gradeExtras[g]) > 0).map(g => [g, paise(gradeExtras[g])])); return Object.keys(m).length ? m : null; })() : null, attributes: cleanAttributes, deal: f.deal === 'on', condition, conditionNote: f.conditionNote?.trim() || null, audience: f.audience });
+      onSubmit({ name: f.name, description: f.description, sku: f.sku?.trim() || null, hsn: f.hsn?.trim() || null, pricePaise: paise(f.retail), wholesalePaise: paise(f.wholesale), mrpPaise: f.mrp ? paise(f.mrp) : null, marketPricePaise: f.market ? paise(f.market) : null, stock: Number(f.stock), categoryId: f.categoryId, images: images.split('\n').map(x => x.trim()).filter(Boolean), videos, colors: f.colors.split(',').map(x => x.trim()).filter(Boolean), sizes: sizeList, sizeLabel: f.sizeLabel?.trim() || 'Size', sizePrices: Object.keys(optionPrices).length ? optionPrices : null, colorImages: Object.keys(colorImagesOut).length ? colorImagesOut : null, colorExtraPaise: Object.keys(colorExtraPaise).length ? colorExtraPaise : null, conditionGrades: gradeMode ? gradeList : [], conditionGradeExtraPaise: gradeMode ? (() => { const m = Object.fromEntries(gradeList.filter(g => Number(gradeExtras[g]) > 0).map(g => [g, paise(gradeExtras[g])])); return Object.keys(m).length ? m : null; })() : null, attributes: cleanAttributes, deal: f.deal === 'on', condition, conditionNote: f.conditionNote?.trim() || null, audience: f.audience });
     }
     else if (type === 'Categories') onSubmit({ name: f.name, icon: data?.icon || 'shopping_bag', refundWindowHours: Number(f.refundWindowHours), allowsUsedStock: f.allowsUsedStock === 'on' });
     // Cleared optional fields are sent as null so an edit actually removes them.
@@ -784,6 +812,10 @@ function Editor({ type, data, categories, busy, onSubmit }) {
         <Field label="Option name shown to shoppers" name="sizeLabel" defaultValue={data?.sizeLabel || 'Size'} maxLength={30} placeholder="Size, Storage, RAM…" required/>
         {priceTable}
       </>}<Field label="Image URLs — one per line, up to 5"><textarea value={images} onChange={e => setImages(e.target.value)} placeholder="https://…"/></Field><Field label={uploading ? 'Uploading…' : 'Or upload a photo (max 5 MB) — the NTSA logo is stamped on automatically'} type="file" accept="image/png,image/jpeg,image/webp" disabled={uploading} onChange={async e => { if (!e.target.files[0]) return; setUploading(true); try { if (images.split('\n').filter(Boolean).length >= 5) throw new Error('Maximum five images'); const form = new FormData(); form.append('image', e.target.files[0]); const r = await api('/admin/images', { method: 'POST', body: form }); setImages(v => [v, r.url].filter(Boolean).join('\n')); } catch (err) { setError(err.message); } finally { setUploading(false); } }}/>
+      <Field label={uploadingVideo ? 'Uploading…' : 'Product videos — up to 3 short clips (3-5s each, max 25 MB)'}>
+        {videos.length > 0 && <div className="video-list">{videos.map((url, i) => <div key={i} className="video-chip"><video src={url} muted playsInline preload="metadata"/><button type="button" className="icon-button danger-text" aria-label="Remove video" onClick={() => setVideos(vs => vs.filter((_, idx) => idx !== i))}><X size={14}/></button></div>)}</div>}
+        {videos.length < 3 && <input type="file" accept="video/mp4,video/webm,video/quicktime" disabled={uploadingVideo} onChange={async e => { if (!e.target.files[0]) return; setUploadingVideo(true); setError(''); try { const form = new FormData(); form.append('video', e.target.files[0]); const r = await api('/admin/videos', { method: 'POST', body: form }); setVideos(vs => [...vs, r.url]); } catch (err) { setError(err.message); } finally { setUploadingVideo(false); e.target.value = ''; } }}/>}
+      </Field>
       <Field label="Additional details — anything that doesn't fit a field above, e.g. a bag's capacity">
         <div className="attribute-rows">
           {attributes.map((row, i) => <div className="attribute-row" key={i}>

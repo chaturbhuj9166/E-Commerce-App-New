@@ -18,6 +18,7 @@ export const productSchema = z.object({ name: text, description: z.string().trim
   mrpPaise: money.nullable().optional(), marketPricePaise: money.nullable().optional(), featuredRank: z.number().int().min(0).max(1000000).optional(),
   stock: z.number().int().min(0).max(1000000), categoryId: text,
   images: z.array(imageUrlSchema).max(5),
+  videos: z.array(imageUrlSchema).max(3).default([]),
   sizes: optionList, colors: optionList,
   // What the size-like option is called in the app, e.g. "Size", "Storage".
   sizeLabel: z.string().trim().min(1).max(30).default('Size'),
@@ -104,6 +105,7 @@ export const sellerUpdateSchema = z.object({
   aadharVerified: z.boolean().optional(),
   commissionPercent: z.number().int().min(0).max(100).optional(),
   penaltyPaise: z.number().int().min(0).max(MAX_MONEY).optional(),
+  watermark: z.boolean().optional(),
 });
 // An admin-posted review: the shown author's name on top of the usual fields.
 export const adminReviewSchema = reviewSchema.extend({ authorName: z.string().trim().min(1).max(60) });
@@ -199,6 +201,7 @@ export const settingsSchema = z.object({
   logoUrl: imageUrlSchema.nullable().optional(),
   invoiceTerms: z.string().trim().max(1500).nullable().optional(),
   invoiceBankDetails: z.string().trim().max(600).nullable().optional(),
+  watermarkOwn: z.boolean().optional(),
   // Which item-table columns show and what each is called. `item` and `amount`
   // are always shown; the rest can be toggled and renamed.
   // Built-in columns (item/variant/hsn/qty/rate/amount) plus any number of

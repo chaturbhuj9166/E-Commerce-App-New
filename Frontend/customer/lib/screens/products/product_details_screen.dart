@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:provider/provider.dart';
+import 'package:video_player/video_player.dart';
 import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
 import '../../models/product.dart';
@@ -252,6 +253,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               ),
                             ),
                           ),
+                        if (p.videos.isNotEmpty)
+                          SizedBox(
+                            height: 180,
+                            child: ListView.separated(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              scrollDirection: Axis.horizontal,
+                              itemCount: p.videos.length,
+                              separatorBuilder: (context, index) => const SizedBox(width: 10),
+                              itemBuilder: (_, i) => _ProductVideo(url: p.videos[i]),
+                            ),
+                          ),
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                           child: Column(
@@ -496,6 +508,101 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 ],
               ),
             ),
+    );
+  }
+}
+
+/// A single tiny product clip that owns its own controller. Tap to play/pause.
+/// Autoplay is off and the clip stays muted; a failed load shows a placeholder
+/// instead of crashing the gallery.
+class _ProductVideo extends StatefulWidget {
+  const _ProductVideo({required this.url});
+
+  final String url;
+
+  @override
+  State<_ProductVideo> createState() => _ProductVideoState();
+}
+
+class _ProductVideoState extends State<_ProductVideo> {
+  VideoPlayerController? _controller;
+  bool _ready = false;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final controller = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    _controller = controller;
+    try {
+      await controller.initialize();
+      await controller.setVolume(0);
+      await controller.setLooping(true);
+      if (!mounted) return;
+      setState(() => _ready = true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _failed = true);
+    }
+  }
+
+  void _toggle() {
+    final c = _controller;
+    if (c == null || !_ready) return;
+    setState(() => c.value.isPlaying ? c.pause() : c.play());
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _controller;
+    final playing = _ready && c != null && c.value.isPlaying;
+    return AspectRatio(
+      aspectRatio: 1,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: GestureDetector(
+          onTap: _toggle,
+          child: Container(
+            color: AppColors.background,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (_ready && c != null)
+                  FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: c.value.size.width,
+                      height: c.value.size.height,
+                      child: VideoPlayer(c),
+                    ),
+                  )
+                else if (_failed)
+                  Icon(Icons.videocam_off_outlined, size: 40, color: AppColors.textMuted)
+                else
+                  const Center(child: CircularProgressIndicator()),
+                if (_ready && !playing)
+                  const Center(
+                    child: CircleAvatar(
+                      radius: 22,
+                      backgroundColor: Colors.black54,
+                      child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 30),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

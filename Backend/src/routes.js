@@ -656,7 +656,13 @@ router.delete('/admin/categories/:id', async (req, res) => {
 });
 // Product photos are stamped with the NTSA logo on the way in; a banner is
 // the shop's own artwork, so the panel sends watermark=false for those.
-router.post('/admin/images', multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => res.status(201).json(await uploadImage(req.file, { watermark: req.body?.watermark !== 'false' })));
+router.post('/admin/images', multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => {
+  // Banners/logos/review photos pass watermark=false explicitly; a product
+  // photo sends nothing and follows the NTSA-own watermark setting.
+  const watermark = req.body?.watermark === 'false' ? false : req.body?.watermark === 'true' ? true : (await getSettings())?.watermarkOwn !== false;
+  res.status(201).json(await uploadImage(req.file, { watermark }));
+});
+router.post('/admin/videos', multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 1 } }).single('video'), async (req, res) => res.status(201).json(await uploadAttachment(req.file)));
 router.get('/admin/banners', async (req, res) => res.json(await db.banner.findMany({ orderBy: { sortOrder: 'asc' } })));
 router.post('/admin/banners', async (req, res) => res.status(201).json(await db.banner.create({ data: bannerSchema.parse(req.body) })));
 router.put('/admin/banners/:id', async (req, res) => res.json(await db.banner.update({ where: { id: req.params.id }, data: bannerSchema.parse(req.body) })));
@@ -935,4 +941,6 @@ router.post('/seller/holiday', seller, async (req, res) => {
 // seller knows exactly what each deduction on their earnings was for.
 router.get('/seller/penalties', seller, async (req, res) => res.json(await db.sellerPenalty.findMany({ where: { sellerId: req.actor.id }, orderBy: { createdAt: 'desc' } })));
 // Photos for the seller's own products, watermarked like every other one.
-router.post('/seller/images', seller, multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => res.status(201).json(await uploadImage(req.file, { watermark: true })));
+router.post('/seller/images', seller, multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => res.status(201).json(await uploadImage(req.file, { watermark: req.actor.account.watermark !== false })));
+// A short product clip (3-5s). Same size cap as the wholesale-chat videos.
+router.post('/seller/videos', seller, multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 1 } }).single('video'), async (req, res) => res.status(201).json(await uploadAttachment(req.file)));

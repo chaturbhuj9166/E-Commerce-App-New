@@ -9,6 +9,7 @@ class Product {
     required this.pricePaise,
     required this.stock,
     required this.images,
+    this.videos = const [],
     required this.deal,
     this.condition = 'NEW',
     this.conditionNote,
@@ -40,6 +41,8 @@ class Product {
   final int? wholesalePaise;
   final int stock;
   final List<String> images;
+  /// Short product clips (3-5s), parsed like [images]. May be empty.
+  final List<String> videos;
   /// Variant choices the shopper must make before buying. [sizes] holds any
   /// size-like option (shoe sizes, phone storage...), named by [sizeLabel].
   /// Stock is shared across variants.
@@ -106,6 +109,7 @@ class Product {
         wholesalePaise: (json['wholesalePaise'] as num?)?.toInt(),
         stock: (json['stock'] as num?)?.toInt() ?? 0,
         images: (json['images'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+        videos: (json['videos'] as List?)?.map((e) => e.toString()).toList() ?? const [],
         colors: (json['colors'] as List?)?.map((e) => e.toString()).toList() ?? const [],
         sizes: (json['sizes'] as List?)?.map((e) => e.toString()).toList() ?? const [],
         sizeLabel: (json['sizeLabel'] as String?) ?? 'Size',

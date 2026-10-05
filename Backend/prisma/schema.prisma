@@ -100,6 +100,9 @@ model Seller {
   // Money the admin has docked for late or mishandled orders. Shown on the
   // seller's own earnings, and added to by the admin with a reason.
   penaltyPaise Int @default(0)
+  // Whether the NTSA logo is stamped into this shop's product photos. The
+  // admin controls it per seller from the Product label page.
+  watermark Boolean @default(true)
   // Vacation mode: while on, the shop hides this seller's products (existing
   // orders are unaffected) and the admin can see they're away.
   onHoliday Boolean @default(false)
@@ -153,6 +156,8 @@ model Settings {
   invoiceTerms String?
   invoiceBankDetails String?
   invoiceColumns Json?
+  // Whether NTSA's own (non-seller) product photos get the logo stamp.
+  watermarkOwn Boolean @default(true)
   updatedAt DateTime @updatedAt
   @@map("settings")
 }
@@ -299,6 +304,8 @@ model Product {
   // sells through NTSA owns the ones it adds from the seller panel.
   sellerId String?
   images String[]
+  // Up to a few short product clips (3-5s), shown alongside the photos.
+  videos String[]
   // Variant options a shopper must pick from when present, e.g. shoe sizes
   // ["6", "7", "8"] or phone storage ["128GB", "256GB"]. sizeLabel names the
   // choice ("Size", "Storage", ...). Stock is shared across options.

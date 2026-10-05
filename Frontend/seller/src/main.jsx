@@ -339,6 +339,7 @@ function Login({ onLogin }) {
 /// wholesale price, no "deal of the day", no choosing who sees it.
 function ProductEditor({ data, categories, busy, onSubmit }) {
   const [images, setImages] = useState(data?.images?.join('\n') || ''), [uploading, setUploading] = useState(false), [error, setError] = useState('');
+  const [videos, setVideos] = useState(data?.videos || []), [uploadingVideo, setUploadingVideo] = useState(false);
   const [categoryId, setCategoryId] = useState(data?.categoryId || '');
   const [showCondition, setShowCondition] = useState(!!data?.condition && data.condition !== 'NEW');
   const [condition, setCondition] = useState(data?.condition || 'NEW');
@@ -422,7 +423,7 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
         pricePaise: paise(f.retail), wholesalePaise: paise(f.retail),
         mrpPaise: f.mrp ? paise(f.mrp) : null, marketPricePaise: f.market ? paise(f.market) : null,
         stock: Number(f.stock), categoryId: f.categoryId,
-        images: images.split('\n').map(x => x.trim()).filter(Boolean),
+        images: images.split('\n').map(x => x.trim()).filter(Boolean), videos,
         colors: colorList,
         sizes: sizeList, sizeLabel: f.sizeLabel?.trim() || 'Size',
         sizePrices: Object.keys(optionPrices).length ? optionPrices : null,
@@ -491,6 +492,10 @@ function ProductEditor({ data, categories, busy, onSubmit }) {
         setImages(v => [v, r.url].filter(Boolean).join('\n'));
       } catch (err) { setError(err.message); } finally { setUploading(false); }
     }}/>
+    <Field label={uploadingVideo ? 'Uploading…' : 'Product videos — up to 3 short clips (3-5s each, max 25 MB)'}>
+      {videos.length > 0 && <div className="video-list">{videos.map((url, i) => <div key={i} className="video-chip"><video src={url} muted playsInline preload="metadata"/><button type="button" className="icon-button danger-text" aria-label="Remove video" onClick={() => setVideos(vs => vs.filter((_, idx) => idx !== i))}><X size={14}/></button></div>)}</div>}
+      {videos.length < 3 && <input type="file" accept="video/mp4,video/webm,video/quicktime" disabled={uploadingVideo} onChange={async e => { if (!e.target.files[0]) return; setUploadingVideo(true); setError(''); try { const form = new FormData(); form.append('video', e.target.files[0]); const r = await api('/seller/videos', { method: 'POST', body: form }); setVideos(vs => [...vs, r.url]); } catch (err) { setError(err.message); } finally { setUploadingVideo(false); e.target.value = ''; } }}/>}
+    </Field>
     {!allowsUsedStock && !showCondition ? null : !showCondition
       ? <button type="button" className="button secondary" onClick={() => setShowCondition(true)}>Not brand-new stock? (refurbished / open box)</button>
       : <>
