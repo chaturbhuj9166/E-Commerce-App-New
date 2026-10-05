@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LayoutDashboard, Package, ShoppingBag, LogOut, Plus, ArrowUpRight, ChevronRight, Check, Menu, ShieldCheck, Wallet, Store, Search, BadgeCheck, Truck, Image, X, Percent, PackageCheck, BarChart3, PieChart } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, LogOut, Plus, ArrowUpRight, ChevronRight, Check, Menu, ShieldCheck, Wallet, Store, Search, BadgeCheck, Truck, Image, X, Percent, PackageCheck, BarChart3, PieChart, LifeBuoy } from 'lucide-react';
 import { api, money, paise, suggestCategory } from './api';
 import { Button, Field, PasswordField, Badge, Empty, Modal, Stat, ProductImage, CONDITION_LABEL } from './ui';
 import './style.css';
@@ -26,7 +26,7 @@ function App() {
     }
     return sessionStorage.getItem('ntsa-token');
   });
-  const [me, setMe] = useState(null), [page, setPage] = useState('Overview'), [penalties, setPenalties] = useState([]);
+  const [me, setMe] = useState(null), [page, setPage] = useState('Overview'), [penalties, setPenalties] = useState([]), [tickets, setTickets] = useState([]);
   const [products, setProducts] = useState([]), [orders, setOrders] = useState([]), [summary, setSummary] = useState(null), [categories, setCategories] = useState([]);
   const [error, setError] = useState(''), [toast, setToast] = useState(''), [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false), [modal, setModal] = useState(null), [query, setQuery] = useState(''), [mobileNav, setMobileNav] = useState(false);
@@ -36,8 +36,8 @@ function App() {
   async function load() {
     setLoading(true);
     try {
-      const [account, p, o, s, c, pen] = await Promise.all([api('/me'), api('/seller/products'), api('/seller/orders'), api('/seller/summary'), api('/categories'), api('/seller/penalties')]);
-      setMe(account); setProducts(p); setOrders(o); setSummary(s); setCategories(c); setPenalties(pen);
+      const [account, p, o, s, c, pen, tks] = await Promise.all([api('/me'), api('/seller/products'), api('/seller/orders'), api('/seller/summary'), api('/categories'), api('/seller/penalties'), api('/seller/support')]);
+      setMe(account); setProducts(p); setOrders(o); setSummary(s); setCategories(c); setPenalties(pen); setTickets(tks);
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   }
   useEffect(() => { if (session) load(); }, [session]);
@@ -73,7 +73,8 @@ function App() {
   // A line needs packing once it's PLACED and this shop hasn't ticked it off
   // yet -- NTSA's own stock never shows up here, only ever the seller's own.
   const toPack = orders.filter(o => o.status === 'PLACED' && !o.packedAt);
-  const nav = [['Overview', LayoutDashboard], ['My products', Package], ['My orders', ShoppingBag], ['To pack', PackageCheck]];
+  const nav = [['Overview', LayoutDashboard], ['My products', Package], ['My orders', ShoppingBag], ['To pack', PackageCheck], ['Support', LifeBuoy]];
+  const openTickets = tickets.filter(t => t.status === 'OPEN').length;
   const shown = products.filter(p => `${p.name} ${p.category?.name}`.toLowerCase().includes(query.toLowerCase()));
   function go(name) { setPage(name); setQuery(''); setMobileNav(false); }
 
@@ -81,7 +82,7 @@ function App() {
     <aside className={mobileNav ? 'sidebar open' : 'sidebar'}>
       <div className="brand"><img className="brand-logo" src="/ntsa_logo.png" alt="NTSA"/></div>
       <div className="workspace-label">SELLER WORKSPACE</div>
-      <nav>{nav.map(([name, Icon]) => <button key={name} className={page === name ? 'nav-item active' : 'nav-item'} onClick={() => go(name)}><Icon size={19}/><span>{name}</span>{name === 'My orders' && orders.length > 0 && <small>{orders.length}</small>}{name === 'To pack' && toPack.length > 0 && <small>{toPack.length}</small>}</button>)}</nav>
+      <nav>{nav.map(([name, Icon]) => <button key={name} className={page === name ? 'nav-item active' : 'nav-item'} onClick={() => go(name)}><Icon size={19}/><span>{name}</span>{name === 'My orders' && orders.length > 0 && <small>{orders.length}</small>}{name === 'To pack' && toPack.length > 0 && <small>{toPack.length}</small>}{name === 'Support' && openTickets > 0 && <small>{openTickets}</small>}</button>)}</nav>
       <div className="sidebar-note"><ShieldCheck size={24}/><strong>{me?.onHoliday ? 'You are on holiday.' : 'Your shop on NTSA.'}</strong><p>{me?.onHoliday ? 'Your products are hidden from shoppers until you come back.' : 'Going away? Put your shop on hold so no new orders come in.'}</p><button className="text-button" style={{ color: me?.onHoliday ? '#ffb45d' : '#86a4b5', marginTop: 10 }} disabled={busy} onClick={() => action(() => api('/seller/holiday', { method: 'POST', body: { onHoliday: !me?.onHoliday } }), me?.onHoliday ? 'Welcome back — your shop is live' : 'Your shop is on holiday')}>{me?.onHoliday ? 'End holiday & go live' : 'Go on holiday'}</button></div>
       <button className="nav-item signout" onClick={logout}><LogOut size={18}/>Sign out</button>
     </aside>
@@ -218,6 +219,10 @@ function App() {
               </tr>)}</tbody>
             </table></div> : <Empty text="Nothing waiting on you right now"/>}
           </section>}
+          {page === 'Support' && <SellerSupportPage tickets={tickets} busy={busy}
+            onRaise={(body, done) => action(async () => { await api('/seller/support', { method: 'POST', body }); done(); }, 'Sent to the NTSA team')}
+            onReply={(t, body, done) => action(async () => { await api(`/seller/support/${t.id}/message`, { method: 'POST', body: { body } }); done(); })}
+            onRate={(t, rating, feedback, done) => action(async () => { await api(`/seller/support/${t.id}/rate`, { method: 'POST', body: { rating, feedback } }); done(); }, 'Thanks for the feedback')}/>}
         </>}
         <footer>NTSA <span>·</span> Seller panel<span className="footer-right">Your shop, your customers</span></footer>
       </main>
@@ -245,6 +250,63 @@ function App() {
   </div>;
 }
 
+// The seller's help desk: raise a request to the NTSA support team, follow the
+// back-and-forth, and rate how it was handled once it's resolved.
+function SellerSupportPage({ tickets, busy, onRaise, onReply, onRate }) {
+  const [raising, setRaising] = useState(false);
+  const [openId, setOpenId] = useState(tickets[0]?.id || null);
+  return <>
+    <section className="panel" style={{ marginBottom: 22 }}>
+      <div className="panel-heading">
+        <div><h2>Support <span className="count">{tickets.filter(t => t.status === 'OPEN').length} open</span></h2><p>Stuck on something? Raise it with the NTSA team and track the reply here.</p></div>
+        {!raising && <Button onClick={() => setRaising(true)}><Plus size={17}/>New request</Button>}
+      </div>
+      {raising && <form className="editor" style={{ padding: '18px 24px' }} onSubmit={e => {
+        e.preventDefault();
+        const f = Object.fromEntries(new FormData(e.target));
+        if (!f.subject.trim() || !f.body.trim()) return;
+        onRaise({ subject: f.subject.trim(), body: f.body.trim() }, () => setRaising(false));
+      }}>
+        <Field label="Subject" name="subject" required maxLength={120} placeholder="e.g. A payout looks wrong"/>
+        <Field label="Tell us what's going on"><textarea name="body" required maxLength={2000} rows={4} placeholder="Share as much detail as you can…"/></Field>
+        <div style={{ display: 'flex', gap: 10 }}><Button secondary type="button" onClick={() => setRaising(false)}>Cancel</Button><Button disabled={busy}>Send to NTSA</Button></div>
+      </form>}
+    </section>
+    <section className="panel">
+      <div className="panel-heading"><div><h2>Your requests</h2><p>Every conversation you've had with the team.</p></div></div>
+      {tickets.length ? <div className="ticket-list">{tickets.map(t => <div key={t.id} className="ticket-card">
+        <button className="ticket-card-head" onClick={() => setOpenId(openId === t.id ? null : t.id)}>
+          <div><strong>{t.subject}</strong><small>Updated {new Date(t.updatedAt).toLocaleString('en-IN')}</small></div>
+          <div className="ticket-card-head-right"><Badge>{t.status === 'OPEN' ? 'Open' : 'Resolved'}</Badge><ChevronRight size={16} className={openId === t.id ? 'rot' : ''}/></div>
+        </button>
+        {openId === t.id && <SellerTicketThread ticket={t} busy={busy} onReply={onReply} onRate={onRate}/>}
+      </div>)}</div> : <Empty text="No requests yet — raise one above if you need a hand"/>}
+    </section>
+  </>;
+}
+function SellerTicketThread({ ticket, busy, onReply, onRate }) {
+  const [text, setText] = useState('');
+  const [rating, setRating] = useState(5);
+  const msgs = ticket.messages || [];
+  return <div className="support-thread">
+    <div className="support-messages">
+      {msgs.map((m, i) => <div key={i} className={`support-msg ${m.sender === 'SELLER' ? 'from-support' : 'from-seller'}`}>
+        <div className="support-msg-head"><strong>{m.sender === 'SELLER' ? 'You' : (m.name || 'NTSA support')}</strong><small>{new Date(m.at).toLocaleString('en-IN')}</small></div>
+        <p>{m.body}</p>
+      </div>)}
+    </div>
+    {ticket.status === 'OPEN' ? <form className="support-reply" onSubmit={e => { e.preventDefault(); const body = text.trim(); if (!body) return; onReply(ticket, body, () => setText('')); }}>
+      <textarea value={text} onChange={e => setText(e.target.value)} rows={2} maxLength={2000} placeholder="Add more detail or a reply…"/>
+      <div className="support-reply-actions"><Button disabled={busy || !text.trim()}>Send reply</Button></div>
+    </form> : ticket.rating ? <p className="muted">You rated this {'★'.repeat(ticket.rating)}{ticket.feedback ? ` — “${ticket.feedback}”` : ''}. Thanks!</p>
+      : <form className="support-reply" onSubmit={e => { e.preventDefault(); const feedback = new FormData(e.target).get('feedback').trim(); onRate(ticket, Number(rating), feedback, () => {}); }}>
+        <p className="muted">This request is resolved. How did we do?</p>
+        <div className="support-reply-actions" style={{ marginBottom: 8 }}>{[5, 4, 3, 2, 1].map(n => <button key={n} type="button" className={`star-btn ${n <= rating ? 'on' : ''}`} onClick={() => setRating(n)} aria-label={`${n} stars`}>★</button>)}</div>
+        <textarea name="feedback" rows={2} maxLength={500} placeholder="Anything you'd like to add? (optional)"/>
+        <div className="support-reply-actions"><Button disabled={busy}>Submit rating</Button></div>
+      </form>}
+  </div>;
+}
 // A dependency-free bar chart of the last 14 days' sales, drawn straight from
 // the seller's own order lines (gross value, cancelled lines left out). Kept as
 // inline SVG so the seller panel stays a tiny bundle with no chart library.

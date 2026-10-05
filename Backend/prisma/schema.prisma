@@ -115,7 +115,30 @@ model Seller {
   products Product[]
   items OrderItem[]
   penalties SellerPenalty[]
+  supportTickets SupportTicket[]
   @@map("sellers")
+}
+// A help request. A seller raises one about a problem, or the admin raises
+// one to flag a product to the support team. The support team replies in the
+// thread and resolves it; the seller can rate how the member helped.
+model SupportTicket {
+  id String @id @default(cuid())
+  sellerId String?
+  productId String?
+  raisedByRole String // SELLER | ADMIN
+  subject String
+  status String @default("OPEN") // OPEN | RESOLVED
+  rating Int?
+  feedback String?
+  // Who on the support side last handled it, shown to the admin with the rating.
+  handledByName String?
+  // The conversation: [{ sender: 'SELLER'|'SUPPORT'|'ADMIN', name, body, at }].
+  messages Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  seller Seller? @relation(fields: [sellerId], references: [id])
+  @@index([status, createdAt])
+  @@map("support_tickets")
 }
 // One fine the admin has docked, kept as its own row so the seller can see
 // what each penalty was for and when -- `Seller.penaltyPaise` is the sum of

@@ -119,7 +119,7 @@ export const blockedPincodeSchema = z.object({
   pincode: z.string().trim().regex(/^[0-9]{6}$/, 'Enter a 6-digit PIN code'),
   reason: z.string().trim().max(200).nullable().optional(),
 });
-export const staffRole = z.enum(['ADMIN', 'PACKING', 'SALES']);
+export const staffRole = z.enum(['ADMIN', 'PACKING', 'SALES', 'SUPPORT']);
 export const staffCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
   email: z.string().trim().toLowerCase().email().max(200),

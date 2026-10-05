@@ -18,8 +18,8 @@ import { streamInvoice, invoiceNumberFor } from './services/invoice.js';
 export const router = Router();
 const admin = roles('ADMIN'), customer = roles('CUSTOMER'), buyer = roles('CUSTOMER', 'VENDOR');
 // Panel staff: packing sees the orders to pack, sales signs up new sellers.
-const packing = roles('ADMIN', 'PACKING'), sales = roles('ADMIN', 'SALES');
-const panel = roles('ADMIN', 'PACKING', 'SALES');
+const packing = roles('ADMIN', 'PACKING'), sales = roles('ADMIN', 'SALES'), support = roles('ADMIN', 'SUPPORT');
+const panel = roles('ADMIN', 'PACKING', 'SALES', 'SUPPORT');
 const loginLimiter = rateLimit({ windowMs: 15 * 60000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false });
 const safeVendor = v => { const { passwordHash, sessionVersion, ...safe } = v; return safe; };
 const safeStaff = a => { const { passwordHash, sessionVersion, ...safe } = a; return safe; };
@@ -141,9 +141,9 @@ router.patch('/me', customer, async (req, res) => {
 // Any password-holding account changes its own password: verify the current
 // one, set the new one, and hand back a fresh token since bumping the session
 // version signs every other device out.
-router.post('/me/password', roles('ADMIN', 'PACKING', 'SALES', 'VENDOR', 'SELLER'), async (req, res) => {
+router.post('/me/password', roles('ADMIN', 'PACKING', 'SALES', 'SUPPORT', 'VENDOR', 'SELLER'), async (req, res) => {
   const { currentPassword, newPassword } = z.object({ currentPassword: z.string().min(1).max(200), newPassword: z.string().min(8).max(200) }).parse(req.body);
-  const model = { ADMIN: db.admin, PACKING: db.admin, SALES: db.admin, VENDOR: db.vendor, SELLER: db.seller }[req.actor.role];
+  const model = { ADMIN: db.admin, PACKING: db.admin, SALES: db.admin, SUPPORT: db.admin, VENDOR: db.vendor, SELLER: db.seller }[req.actor.role];
   requireThat(await bcrypt.compare(currentPassword, req.actor.account.passwordHash), 400, 'Your current password is not correct');
   const updated = await model.update({ where: { id: req.actor.id }, data: { passwordHash: await bcrypt.hash(newPassword, 12), sessionVersion: { increment: 1 } } });
   res.json({ token: tokenFor(req.actor.role, updated) });
@@ -597,6 +597,31 @@ router.post('/admin/products', async (req, res) => res.status(201).json(await db
 router.put('/admin/products/:id', async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: await productData(req.body) })));
 router.delete('/admin/products/:id', async (req, res) => { await db.product.update({ where: { id: req.params.id }, data: { active: false } }); res.status(204).end(); });
 router.post('/admin/products/:id/restore', async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: { active: true } })));
+// The admin flags a product to the support team to look into.
+router.post('/admin/products/:id/report', async (req, res) => {
+  const { note } = z.object({ note: z.string().trim().min(1).max(500) }).parse(req.body);
+  const product = await db.product.findUnique({ where: { id: req.params.id }, select: { name: true, sellerId: true } });
+  requireThat(product, 404, 'Product not found');
+  const ticket = await db.supportTicket.create({ data: { sellerId: product.sellerId, productId: req.params.id, raisedByRole: 'ADMIN', subject: `Product flagged: ${product.name}`, messages: [{ sender: 'ADMIN', name: 'Admin', body: note, at: new Date().toISOString() }] } });
+  await notify('SUPPORT', 'SUPPORT_TICKET', 'Admin flagged a product', `${product.name}: ${note}`, ticket.id);
+  res.status(201).json(ticket);
+});
+// ---------- Support team panel (ADMIN + SUPPORT) ----------
+router.get('/support/tickets', support, async (req, res) => res.json(await db.supportTicket.findMany({ include: { seller: { select: { shopName: true } } }, orderBy: [{ status: 'asc' }, { updatedAt: 'desc' }], take: 300 })));
+router.post('/support/tickets/:id/message', support, async (req, res) => {
+  const { body } = supportMsg.parse(req.body);
+  const ticket = await db.supportTicket.findUnique({ where: { id: req.params.id } });
+  requireThat(ticket, 404, 'Ticket not found');
+  const messages = [...(ticket.messages || []), { sender: req.actor.role === 'ADMIN' ? 'ADMIN' : 'SUPPORT', name: req.actor.account.name || 'Support', body, at: new Date().toISOString() }];
+  res.json(await db.supportTicket.update({ where: { id: ticket.id }, data: { messages, handledByName: req.actor.account.name || 'Support' } }));
+});
+router.post('/support/tickets/:id/resolve', support, async (req, res) => res.json(await db.supportTicket.update({ where: { id: req.params.id }, data: { status: 'RESOLVED', handledByName: req.actor.account.name || 'Support' } })));
+router.post('/support/tickets/:id/reopen', support, async (req, res) => res.json(await db.supportTicket.update({ where: { id: req.params.id }, data: { status: 'OPEN' } })));
+// The support team can also take a seller's product off the shop (or put it
+// back) when something's wrong with it.
+router.get('/support/products', support, async (req, res) => res.json(await db.product.findMany({ where: { sellerId: { not: null } }, include: { category: { select: { name: true } }, seller: { select: { shopName: true } } }, orderBy: { createdAt: 'desc' }, take: 300 })));
+router.post('/support/products/:id/hide', support, async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: { active: false } })));
+router.post('/support/products/:id/restore', support, async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: { active: true } })));
 // A fresh copy to tweak -- same stock, a "(copy)" name, and hidden until the
 // admin is happy with it, so a near-identical listing is a click, not a retype.
 router.post('/admin/products/:id/duplicate', async (req, res) => {
@@ -940,6 +965,32 @@ router.post('/seller/holiday', seller, async (req, res) => {
 // Every penalty the admin has docked this shop, with the reason, so the
 // seller knows exactly what each deduction on their earnings was for.
 router.get('/seller/penalties', seller, async (req, res) => res.json(await db.sellerPenalty.findMany({ where: { sellerId: req.actor.id }, orderBy: { createdAt: 'desc' } })));
+// ---------- Support tickets ----------
+const supportMsg = z.object({ body: z.string().trim().min(1).max(2000) });
+// A seller raises a help request; the support team is told a new one is in.
+router.post('/seller/support', seller, async (req, res) => {
+  const { subject, body } = z.object({ subject: z.string().trim().min(1).max(120), body: z.string().trim().min(1).max(2000) }).parse(req.body);
+  const ticket = await db.supportTicket.create({ data: { sellerId: req.actor.id, raisedByRole: 'SELLER', subject, messages: [{ sender: 'SELLER', name: req.actor.account.shopName, body, at: new Date().toISOString() }] } });
+  await notify('SUPPORT', 'SUPPORT_TICKET', 'New support request', `${req.actor.account.shopName}: ${subject}`, ticket.id);
+  res.status(201).json(ticket);
+});
+router.get('/seller/support', seller, async (req, res) => res.json(await db.supportTicket.findMany({ where: { sellerId: req.actor.id }, orderBy: { updatedAt: 'desc' } })));
+router.post('/seller/support/:id/message', seller, async (req, res) => {
+  const { body } = supportMsg.parse(req.body);
+  const ticket = await db.supportTicket.findFirst({ where: { id: req.params.id, sellerId: req.actor.id } });
+  requireThat(ticket, 404, 'Ticket not found');
+  const messages = [...(ticket.messages || []), { sender: 'SELLER', name: req.actor.account.shopName, body, at: new Date().toISOString() }];
+  const updated = await db.supportTicket.update({ where: { id: ticket.id }, data: { messages, status: 'OPEN' } });
+  await notify('SUPPORT', 'SUPPORT_TICKET', 'New reply on a ticket', `${req.actor.account.shopName} replied: ${ticket.subject}`, ticket.id);
+  res.json(updated);
+});
+// Once resolved, the seller can rate and review how the member helped.
+router.post('/seller/support/:id/rate', seller, async (req, res) => {
+  const { rating, feedback } = z.object({ rating: z.number().int().min(1).max(5), feedback: z.string().trim().max(500).optional() }).parse(req.body);
+  const ticket = await db.supportTicket.findFirst({ where: { id: req.params.id, sellerId: req.actor.id } });
+  requireThat(ticket && ticket.status === 'RESOLVED', 400, 'You can rate a ticket once it is resolved');
+  res.json(await db.supportTicket.update({ where: { id: ticket.id }, data: { rating, feedback: feedback || null } }));
+});
 // Photos for the seller's own products, watermarked like every other one.
 router.post('/seller/images', seller, multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => res.status(201).json(await uploadImage(req.file, { watermark: req.actor.account.watermark !== false })));
 // A short product clip (3-5s). Same size cap as the wholesale-chat videos.

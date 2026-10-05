@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LayoutDashboard, Package, Shapes, Users, User, ShoppingBag, RotateCcw, LogOut, Search, Plus, ArrowUpRight, ChevronRight, Check, Menu, X, Truck, ShieldCheck, Wallet, Store, Image, Tag, Eye, EyeOff, Bell, ClipboardList, UserPlus, BadgeCheck, UserCog, MapPin, Paperclip, Settings as SettingsIcon, FileText, BarChart3, Star, TrendingUp, Stamp } from 'lucide-react';
+import { LayoutDashboard, Package, Shapes, Users, User, ShoppingBag, RotateCcw, LogOut, Search, Plus, ArrowUpRight, ChevronRight, Check, Menu, X, Truck, ShieldCheck, Wallet, Store, Image, Tag, Eye, EyeOff, Bell, ClipboardList, UserPlus, BadgeCheck, UserCog, MapPin, Paperclip, Settings as SettingsIcon, FileText, BarChart3, Star, TrendingUp, Stamp, LifeBuoy } from 'lucide-react';
 import { api, money, paise, openInvoice, suggestCategory, SELLER_PANEL_URL } from './api';
 import { Button, Field, PasswordField, Badge, Empty, Modal, Stat, ProductImage, CONDITION_LABEL } from './ui';
 import { WholesaleProductsPage, AudienceField } from './pages/wholesale-products';
@@ -53,6 +53,7 @@ function App() {
   // is the sign-up request each one started as.
   const [sellers, setSellers] = useState([]);
   const [hiddenProducts, setHiddenProducts] = useState([]), [reviews, setReviews] = useState([]), [insights, setInsights] = useState([]);
+  const [tickets, setTickets] = useState([]), [supportProducts, setSupportProducts] = useState([]);
   // Overview and Reports share the same revenue/order-mix figures, so one
   // load keeps them in sync instead of each page fetching its own copy.
   const [reports, setReports] = useState(null), [reportsDays, setReportsDays] = useState(30), [loadingReports, setLoadingReports] = useState(false);
@@ -61,7 +62,7 @@ function App() {
     try { setReports(await api(`/admin/reports?days=${days}`)); } catch (e) { setError(e.message); } finally { setLoadingReports(false); }
   }
   const role = me?.role ?? 'ADMIN';
-  const isAdmin = role === 'ADMIN', isPacking = role === 'PACKING', isSales = role === 'SALES';
+  const isAdmin = role === 'ADMIN', isPacking = role === 'PACKING', isSales = role === 'SALES', isSupport = role === 'SUPPORT';
   const unread = notifications.filter(n => !n.readAt).length;
   function logout() { sessionStorage.removeItem('ntsa-token'); setSession(null); setMe(null); setCart({}); setModal(null); setError(''); }
   async function load() {
@@ -78,13 +79,18 @@ function App() {
         setApplications(apps); setNotifications(notes);
         return;
       }
+      if (account.role === 'SUPPORT') {
+        const [tks, sp, notes] = await Promise.all([api('/support/tickets'), api('/support/products'), api('/notifications')]);
+        setTickets(tks); setSupportProducts(sp); setNotifications(notes);
+        return;
+      }
       const [p, c, o] = await Promise.all([api(account.role === 'ADMIN' ? '/admin/products?audience=RETAIL' : '/vendor/products'), api('/categories'), api('/orders')]);
       setProducts(p); setCategories(c); setOrders(o);
       if (account.role === 'ADMIN') setWholesaleProducts(await api('/admin/products?audience=WHOLESALE'));
       if (account.role === 'ADMIN') {
-        const [v, r, b, cp, st, apps, notes, queue, pins, stats, rules, cfg, custs, rep, sls, hidden, revs, ins] = await Promise.all([api('/admin/vendors'), api('/admin/refunds'), api('/admin/banners'), api('/admin/coupons'), api('/admin/staff'), api('/admin/seller-applications'), api('/notifications'), api('/packing/orders'), api('/admin/blocked-pincodes'), api('/admin/pincode-stats'), api('/admin/delivery-rules'), api('/admin/settings'), api('/admin/customers'), api(`/admin/reports?days=${reportsDays}`), api('/admin/sellers'), api('/admin/products?hidden=true'), api('/admin/reviews'), api('/admin/seller-insights')]);
+        const [v, r, b, cp, st, apps, notes, queue, pins, stats, rules, cfg, custs, rep, sls, hidden, revs, ins, tks] = await Promise.all([api('/admin/vendors'), api('/admin/refunds'), api('/admin/banners'), api('/admin/coupons'), api('/admin/staff'), api('/admin/seller-applications'), api('/notifications'), api('/packing/orders'), api('/admin/blocked-pincodes'), api('/admin/pincode-stats'), api('/admin/delivery-rules'), api('/admin/settings'), api('/admin/customers'), api(`/admin/reports?days=${reportsDays}`), api('/admin/sellers'), api('/admin/products?hidden=true'), api('/admin/reviews'), api('/admin/seller-insights'), api('/support/tickets')]);
         setVendors(v); setRefunds(r); setBanners(b); setCoupons(cp); setStaff(st); setApplications(apps); setNotifications(notes); setToPack(queue); setBlockedPins(pins); setPinStats(stats); setDeliveryRules(rules); setSettings(cfg);
-        setCustomers(custs); setReports(rep); setSellers(sls); setHiddenProducts(hidden); setReviews(revs); setInsights(ins);
+        setCustomers(custs); setReports(rep); setSellers(sls); setHiddenProducts(hidden); setReviews(revs); setInsights(ins); setTickets(tks);
       }
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   }
@@ -153,10 +159,11 @@ function App() {
     if (busy) return; setBusy(true); setError('');
     try { await fn(); setToast(message); await load(); } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
-  if (!session) return <Login onLogin={(token, loginRole) => { sessionStorage.setItem('ntsa-token', token); setPage(loginRole === 'PACKING' ? 'To pack' : loginRole === 'SALES' ? 'Add seller' : 'Overview'); setSession(token); }}/ >;
+  if (!session) return <Login onLogin={(token, loginRole) => { sessionStorage.setItem('ntsa-token', token); setPage(loginRole === 'PACKING' ? 'To pack' : loginRole === 'SALES' ? 'Add seller' : loginRole === 'SUPPORT' ? 'Tickets' : 'Overview'); setSession(token); }}/ >;
   const nav = isPacking ? [['To pack', ClipboardList], ['Packed', Check]]
     : isSales ? [['Add seller', UserPlus], ['My sellers', Store]]
-    : isAdmin ? [['Overview', LayoutDashboard], ['Products', Package], ['Wholesale products', Store], ['Categories', Shapes], ['Orders', ShoppingBag], ['Customers', User], ['Reviews', Star], ['Vendors', Users], ['To pack', ClipboardList], ['Shipments', Truck], ['Banners', Image], ['Coupons', Tag], ['Reports', BarChart3], ['Sellers', BadgeCheck], ['Seller insights', TrendingUp], ['Product label', Stamp], ['Refunds', RotateCcw], ['Delivery areas', MapPin], ['Staff', UserCog], ['Invoice', FileText], ['Settings', SettingsIcon]]
+    : isSupport ? [['Tickets', LifeBuoy], ['Seller products', Package], ['Settings', SettingsIcon]]
+    : isAdmin ? [['Overview', LayoutDashboard], ['Products', Package], ['Wholesale products', Store], ['Categories', Shapes], ['Orders', ShoppingBag], ['Customers', User], ['Reviews', Star], ['Vendors', Users], ['To pack', ClipboardList], ['Shipments', Truck], ['Banners', Image], ['Coupons', Tag], ['Reports', BarChart3], ['Sellers', BadgeCheck], ['Seller insights', TrendingUp], ['Product label', Stamp], ['Support', LifeBuoy], ['Refunds', RotateCcw], ['Delivery areas', MapPin], ['Staff', UserCog], ['Invoice', FileText], ['Settings', SettingsIcon]]
     : [['Overview', LayoutDashboard], ['Wholesale catalog', Store], ['Orders', ShoppingBag], ['Messages', Paperclip]];
   const pendingApplications = applications.filter(a => a.status === 'PENDING').length;
   const shown = products.filter(p => `${p.name} ${p.category?.name} ${p.seller?.shopName || ''}`.toLowerCase().includes(query.toLowerCase()));
@@ -165,7 +172,7 @@ function App() {
   const next = { PLACED: 'PACKED', PACKED: 'SHIPPED', SHIPPED: 'OUT_FOR_DELIVERY' };
   function go(name) { setPage(name); setQuery(''); setMobileNav(false); }
   return <div className="app-shell">
-    <aside className={mobileNav ? 'sidebar open' : 'sidebar'}><div className="brand"><img className="brand-logo" src="/ntsa_logo.png" alt="NTSA"/></div><div className="workspace-label">{isPacking ? 'PACKING WORKSPACE' : isSales ? 'SALES WORKSPACE' : isAdmin ? 'COMMERCE WORKSPACE' : 'WHOLESALE WORKSPACE'}</div>
+    <aside className={mobileNav ? 'sidebar open' : 'sidebar'}><div className="brand"><img className="brand-logo" src="/ntsa_logo.png" alt="NTSA"/></div><div className="workspace-label">{isPacking ? 'PACKING WORKSPACE' : isSales ? 'SALES WORKSPACE' : isSupport ? 'SUPPORT WORKSPACE' : isAdmin ? 'COMMERCE WORKSPACE' : 'WHOLESALE WORKSPACE'}</div>
       <nav>{nav.map(([name, Icon]) => <button key={name} className={page === name ? 'nav-item active' : 'nav-item'} onClick={() => go(name)}><Icon size={19}/><span>{name}</span>{name === 'Orders' && <small>{reports?.summary?.orders ?? orders.length}</small>}{name === 'To pack' && toPack.length > 0 && <small>{toPack.length}</small>}{name === 'Sellers' && pendingApplications > 0 && <small>{pendingApplications}</small>}</button>)}</nav>
       <div className="sidebar-note"><ShieldCheck size={24}/><strong>Everything in one place.</strong><p>{isPacking ? 'Pack what came in, mark it done.' : isSales ? 'Bring new shops onto NTSA.' : isAdmin ? 'Your products, partners and everyday operations.' : 'Better prices. Bigger possibilities.'}</p></div>
       <button className="nav-item signout" onClick={logout}><LogOut size={18}/>Sign out</button>
@@ -179,7 +186,7 @@ function App() {
       </div>}
       <span className="online-dot"/><span>{isAdmin ? 'Super Admin' : me?.name || (isPacking ? 'Packing team' : isSales ? 'Sales team' : 'Vendor')}</span><div className="avatar">{isAdmin ? 'SA' : isPacking ? 'PK' : isSales ? 'SL' : 'WV'}</div></div></header>
       <main className="content">
-        <div className="page-heading"><div><div className="eyebrow">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div><h1>{page === 'Overview' ? 'A good day to grow.' : page}</h1><p>{({ Overview: 'Here’s what’s happening with your store today.', Products: 'A little care for every product on your shelf.', Categories: 'Make your collection easy to discover.', Banners: 'Control the Home screen banner without a code change.', Coupons: 'Create and manage discount codes.', Orders: 'From your shelf to their doorstep.', Vendors: 'Build stronger wholesale partnerships.', Customers: 'Everyone who has ever shopped with you.', Shipments: 'What has left the shelf, and where it is now.', Reports: 'Revenue, payments and what is actually selling.', Refunds: 'Thoughtful resolutions. Happier customers.', 'Wholesale catalog': 'Stock up on quality. Save on every order.', 'To pack': 'Everything waiting to be packed and sent.', Packed: 'Packed today and on its way.', 'Add seller': 'Sign up a shop that wants to sell on NTSA.', 'My sellers': 'What you sent for verification.', Sellers: 'Check the details, then hand out their login.', 'Product label': 'Decide whose product photos carry the NTSA logo.', Staff: 'Logins for your packing and sales teams.', 'Delivery areas': 'Delivery charges, and the areas you no longer deliver to.', Invoice: 'Your letterhead, the bill columns, and the terms every invoice is printed with.', Settings: 'Your account, password and how the panel looks.' })[page]}</p></div>
+        <div className="page-heading"><div><div className="eyebrow">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div><h1>{page === 'Overview' ? 'A good day to grow.' : page}</h1><p>{({ Overview: 'Here’s what’s happening with your store today.', Products: 'A little care for every product on your shelf.', Categories: 'Make your collection easy to discover.', Banners: 'Control the Home screen banner without a code change.', Coupons: 'Create and manage discount codes.', Orders: 'From your shelf to their doorstep.', Vendors: 'Build stronger wholesale partnerships.', Customers: 'Everyone who has ever shopped with you.', Shipments: 'What has left the shelf, and where it is now.', Reports: 'Revenue, payments and what is actually selling.', Refunds: 'Thoughtful resolutions. Happier customers.', 'Wholesale catalog': 'Stock up on quality. Save on every order.', 'To pack': 'Everything waiting to be packed and sent.', Packed: 'Packed today and on its way.', 'Add seller': 'Sign up a shop that wants to sell on NTSA.', 'My sellers': 'What you sent for verification.', Sellers: 'Check the details, then hand out their login.', 'Product label': 'Decide whose product photos carry the NTSA logo.', Tickets: 'Help requests from sellers, and products the admin has flagged.', Support: 'Every support ticket, who handled it, and how sellers rated them.', 'Seller products': 'Take a seller’s product off the shop, or put it back.', Staff: 'Logins for your packing and sales teams.', 'Delivery areas': 'Delivery charges, and the areas you no longer deliver to.', Invoice: 'Your letterhead, the bill columns, and the terms every invoice is printed with.', Settings: 'Your account, password and how the panel looks.' })[page]}</p></div>
           {isAdmin && ['Products', 'Wholesale products', 'Categories', 'Vendors', 'Banners', 'Coupons'].includes(page) && <Button onClick={() => setModal({ type: page, data: null })}><Plus size={17}/>Add {{ Categories: 'category', Banners: 'banner', Coupons: 'coupon', 'Wholesale products': 'wholesale product' }[page] || page.slice(0, -1).toLowerCase()}</Button>}
           {isAdmin && page === 'Staff' && <Button onClick={() => setModal({ type: 'Staff', data: null })}><Plus size={17}/>Add staff login</Button>}
           {(isPacking || isAdmin) && page === 'To pack' && <Button secondary onClick={load}>Refresh</Button>}
@@ -195,11 +202,13 @@ function App() {
           {page === 'Customers' && <CustomersPage customers={customers} query={query} setQuery={setQuery} busy={busy} onBlock={(c, blocked) => action(() => api(`/admin/customers/${c.id}`, { method: 'PATCH', body: { blocked } }), blocked ? `${c.name || 'Customer'} blocked` : `${c.name || 'Customer'} unblocked`)}/>}
           {page === 'Seller insights' && <SellerInsightsPage insights={insights} query={query} setQuery={setQuery} openSellerDashboard={openSellerDashboard}/>}
           {page === 'Product label' && <ProductLabelPage sellers={sellers} settings={settings} query={query} setQuery={setQuery} busy={busy} onToggleSeller={(s, watermark) => action(() => api(`/admin/sellers/${s.id}`, { method: 'PATCH', body: { watermark } }), `${s.shopName}: logo ${watermark ? 'on' : 'off'}`)} onToggleOwn={watermark => action(() => api('/admin/settings', { method: 'PUT', body: { companyName: settings.companyName, companyAddress: settings.companyAddress || '', companyGSTIN: settings.companyGSTIN || null, companyPhone: settings.companyPhone || null, companyEmail: settings.companyEmail || null, logoUrl: settings.logoUrl || null, invoiceTerms: settings.invoiceTerms || null, invoiceBankDetails: settings.invoiceBankDetails || null, invoiceColumns: settings.invoiceColumns || null, watermarkOwn: watermark } }), `NTSA own stock: logo ${watermark ? 'on' : 'off'}`)}/>}
+          {(page === 'Tickets' || page === 'Support') && <SupportTicketsPage tickets={tickets} query={query} setQuery={setQuery} busy={busy} onReply={(t, body, done) => action(async () => { await api(`/support/tickets/${t.id}/message`, { method: 'POST', body: { body } }); done(); })} onResolve={t => action(() => api(`/support/tickets/${t.id}/resolve`, { method: 'POST' }), 'Ticket resolved')} onReopen={t => action(() => api(`/support/tickets/${t.id}/reopen`, { method: 'POST' }), 'Ticket reopened')}/>}
+          {isSupport && page === 'Seller products' && <SupportProductsPage products={supportProducts} query={query} setQuery={setQuery} busy={busy} onHide={p => action(() => api(`/support/products/${p.id}/hide`, { method: 'POST' }), `${p.name} hidden`)} onRestore={p => action(() => api(`/support/products/${p.id}/restore`, { method: 'POST' }), `${p.name} back on sale`)}/>}
           {page === 'Reviews' && <ReviewsPage reviews={reviews} query={query} setQuery={setQuery} busy={busy} onAdd={() => setModal({ type: 'AdminReview', data: null })} onRemove={r => setModal({ type: 'Delete', data: { path: `/admin/reviews/${r.id}`, name: `${r.authorName || r.user?.name || 'Customer'}'s review of ${r.product?.name}` } })}/>}
           {page === 'Shipments' && <ShipmentsPage orders={orders}/>}
           {page === 'Reports' && <ReportsPage reports={reports} reportsDays={reportsDays} setReportsDays={loadReports} loadingReports={loadingReports}/>}
           {['Products', 'Wholesale catalog'].includes(page) && <section className="panel"><div className="panel-heading"><h2>{isAdmin ? 'All products' : 'Available to order'} <span className="count">{products.length}</span></h2><div className="search"><Search size={17}/><input aria-label="Search products" placeholder="Search products or categories…" value={query} onChange={e => setQuery(e.target.value)}/></div></div>
-          {isAdmin ? <div className="table-scroll"><table><thead><tr><th>Product</th><th>Seller</th><th>SKU</th><th>Retail / wholesale</th><th>Stock</th><th>Refund window</th><th>Actions</th></tr></thead><tbody>{shown.map(p => <tr key={p.id}><td><div className="product-cell"><ProductImage product={p}/><div><strong>{p.name}</strong><small>{p.category?.name}{p.deal ? ' · Deal of the day' : ''}{p.condition && p.condition !== 'NEW' ? ` · ${{ REFURBISHED: 'Refurbished', OPEN_BOX: 'Open box', USED: 'Used' }[p.condition]}` : ''}</small></div></div></td><td>{p.seller?.shopName ? <button className="text-button" style={{ display: 'inline' }} onClick={() => setQuery(p.seller.shopName)}>{p.seller.shopName}</button> : <small className="muted">NTSA</small>}</td><td>{p.sku ? <small>{p.sku}</small> : <small className="muted">—</small>}</td><td><strong>{money(p.pricePaise)}</strong><small>{money(p.wholesalePaise)} wholesale</small></td><td><Badge>{`${p.stock} units`}</Badge></td><td>{p.refundWindowHours} hours<small>from {p.category?.name}</small></td><td><div className="row-actions"><button onClick={() => setModal({ type: 'Products', data: p })}>Edit</button><button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/duplicate`, { method: 'POST' }), `Copied “${p.name}” — find it hidden, edit and restore`)}>Duplicate</button>{p.featuredRank > 0 ? <button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/feature`, { method: 'POST', body: { top: false } }), 'Placement reset')}>Unpin</button> : <button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/feature`, { method: 'POST', body: { top: true } }), `“${p.name}” moved to the top`)}>Move to top</button>}<button className="danger-text" onClick={() => setModal({ type: 'Delete', data: { path: `/admin/products/${p.id}`, name: p.name } })}>Hide from shop</button></div></td></tr>)}</tbody></table></div> : <div className="catalog">{shown.map(p => <article className="product-card" key={p.id}><ProductImage product={p}/><small>{p.category?.name}</small><h3>{p.name}</h3><div><strong>{money(p.wholesalePaise)}</strong><del>{money(p.pricePaise)}</del></div><p>{p.stock} available · {p.refundWindowHours}h refund window</p><Field label="Order quantity" type="number" min="0" max={p.stock} value={cart[p.id] || 0} onChange={e => setCart({ ...cart, [p.id]: Math.max(0, Math.min(p.stock, Number(e.target.value))) })}/></article>)}</div>}{!shown.length && <Empty text="No products found"/>}</section>}
+          {isAdmin ? <div className="table-scroll"><table><thead><tr><th>Product</th><th>Seller</th><th>SKU</th><th>Retail / wholesale</th><th>Stock</th><th>Refund window</th><th>Actions</th></tr></thead><tbody>{shown.map(p => <tr key={p.id}><td><div className="product-cell"><ProductImage product={p}/><div><strong>{p.name}</strong><small>{p.category?.name}{p.deal ? ' · Deal of the day' : ''}{p.condition && p.condition !== 'NEW' ? ` · ${{ REFURBISHED: 'Refurbished', OPEN_BOX: 'Open box', USED: 'Used' }[p.condition]}` : ''}</small></div></div></td><td>{p.seller?.shopName ? <button className="text-button" style={{ display: 'inline' }} onClick={() => setQuery(p.seller.shopName)}>{p.seller.shopName}</button> : <small className="muted">NTSA</small>}</td><td>{p.sku ? <small>{p.sku}</small> : <small className="muted">—</small>}</td><td><strong>{money(p.pricePaise)}</strong><small>{money(p.wholesalePaise)} wholesale</small></td><td><Badge>{`${p.stock} units`}</Badge></td><td>{p.refundWindowHours} hours<small>from {p.category?.name}</small></td><td><div className="row-actions"><button onClick={() => setModal({ type: 'Products', data: p })}>Edit</button><button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/duplicate`, { method: 'POST' }), `Copied “${p.name}” — find it hidden, edit and restore`)}>Duplicate</button>{p.featuredRank > 0 ? <button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/feature`, { method: 'POST', body: { top: false } }), 'Placement reset')}>Unpin</button> : <button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/feature`, { method: 'POST', body: { top: true } }), `“${p.name}” moved to the top`)}>Move to top</button>}{p.seller?.shopName && <button onClick={() => setModal({ type: 'ReportProduct', data: p })}>Report to support</button>}<button className="danger-text" onClick={() => setModal({ type: 'Delete', data: { path: `/admin/products/${p.id}`, name: p.name } })}>Hide from shop</button></div></td></tr>)}</tbody></table></div> : <div className="catalog">{shown.map(p => <article className="product-card" key={p.id}><ProductImage product={p}/><small>{p.category?.name}</small><h3>{p.name}</h3><div><strong>{money(p.wholesalePaise)}</strong><del>{money(p.pricePaise)}</del></div><p>{p.stock} available · {p.refundWindowHours}h refund window</p><Field label="Order quantity" type="number" min="0" max={p.stock} value={cart[p.id] || 0} onChange={e => setCart({ ...cart, [p.id]: Math.max(0, Math.min(p.stock, Number(e.target.value))) })}/></article>)}</div>}{!shown.length && <Empty text="No products found"/>}</section>}
           {isAdmin && page === 'Products' && hiddenProducts.length > 0 && <section className="panel" style={{ marginTop: 22 }}><div className="panel-heading"><div><h2>Hidden from the shop <span className="count">{hiddenProducts.length}</span></h2><p>Taken off the app by the admin or the seller. Restore one to put it back on sale.</p></div></div><div className="table-scroll"><table><thead><tr><th>Product</th><th>Seller</th><th>Price</th><th>Stock</th><th>Actions</th></tr></thead><tbody>{hiddenProducts.map(p => <tr key={p.id}><td><div className="product-cell"><ProductImage product={p}/><div><strong>{p.name}</strong><small>{p.category?.name}</small></div></div></td><td>{p.seller?.shopName || <small className="muted">NTSA</small>}</td><td>{money(p.pricePaise)}</td><td>{p.stock} units</td><td><div className="row-actions"><button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/restore`, { method: 'POST' }), `${p.name} is back on sale`)}>Restore</button></div></td></tr>)}</tbody></table></div></section>}
           {page === 'Wholesale products' && <WholesaleProductsPage products={wholesaleProducts} query={query} setQuery={setQuery}
             onEdit={p => setModal({ type: 'Wholesale products', data: p })}
@@ -348,7 +357,7 @@ function App() {
       </main>
     </div>
     {toast && <div role="status" className="toast"><Check size={18}/>{toast}</div>}
-    {modal && <Modal title={({ Products: modal.data ? 'Edit product' : 'New product', 'Wholesale products': modal.data ? 'Edit wholesale product' : 'New wholesale product', Categories: modal.data ? 'Edit category' : 'New category', Vendors: modal.data ? 'Edit partner' : 'New wholesale partner', Sellers: `Edit ${modal.data?.shopName}`, Banners: modal.data ? 'Edit banner' : 'New banner', Coupons: modal.data ? 'Edit coupon' : 'New coupon', Order: 'Order details', Delete: 'Remove record', Reset: 'Reset vendor password', SellerReset: `Reset password · ${modal.data?.shopName}`, Messages: `Messages · ${modal.data?.name}`, Checkout: 'Place wholesale order', Pack: `Order #${modal.data?.id?.slice(0, 10).toUpperCase()}`, Staff: 'New staff login', StaffEdit: 'Edit staff login', StaffReset: 'Reset staff password', Application: modal.data?.shopName, Approve: `Approve ${modal.data?.shopName}`, Reject: `Reject ${modal.data?.shopName}`, Penalty: `Penalty · ${modal.data?.shopName}`, AdminReview: 'Add a review' })[modal.type]} close={() => !busy && setModal(null)}>
+    {modal && <Modal title={({ Products: modal.data ? 'Edit product' : 'New product', 'Wholesale products': modal.data ? 'Edit wholesale product' : 'New wholesale product', Categories: modal.data ? 'Edit category' : 'New category', Vendors: modal.data ? 'Edit partner' : 'New wholesale partner', Sellers: `Edit ${modal.data?.shopName}`, Banners: modal.data ? 'Edit banner' : 'New banner', Coupons: modal.data ? 'Edit coupon' : 'New coupon', Order: 'Order details', Delete: 'Remove record', Reset: 'Reset vendor password', SellerReset: `Reset password · ${modal.data?.shopName}`, Messages: `Messages · ${modal.data?.name}`, Checkout: 'Place wholesale order', Pack: `Order #${modal.data?.id?.slice(0, 10).toUpperCase()}`, Staff: 'New staff login', StaffEdit: 'Edit staff login', StaffReset: 'Reset staff password', Application: modal.data?.shopName, Approve: `Approve ${modal.data?.shopName}`, Reject: `Reject ${modal.data?.shopName}`, Penalty: `Penalty · ${modal.data?.shopName}`, AdminReview: 'Add a review', ReportProduct: `Report to support · ${modal.data?.name}` })[modal.type]} close={() => !busy && setModal(null)}>
       {error && <div role="alert" className="alert">{error}</div>}
       {['Products', 'Wholesale products', 'Categories', 'Vendors', 'Sellers', 'Banners', 'Coupons'].includes(modal.type) && <Editor type={modal.type} data={modal.data} categories={categories} busy={busy} onSubmit={body => action(async () => {
         const path = { Products: 'products', 'Wholesale products': 'products', Categories: 'categories', Vendors: 'vendors', Sellers: 'sellers', Banners: 'banners', Coupons: 'coupons' }[modal.type];
@@ -369,6 +378,11 @@ function App() {
       {modal.type === 'SellerReset' && <ResetPassword vendor={{ ...modal.data, name: modal.data.shopName }} busy={busy} onSubmit={password => action(async () => { await api(`/admin/sellers/${modal.data.id}/password`, { method: 'POST', body: { password } }); setModal(null); }, 'Password updated')}/>}
       {modal.type === 'Penalty' && <PenaltyManager seller={modal.data} busy={busy} onApply={(amount, reason, done) => action(async () => { await api(`/admin/sellers/${modal.data.id}/penalty`, { method: 'POST', body: { amountPaise: paise(amount), reason } }); done(); }, 'Penalty applied')} onRemove={(id, done) => action(async () => { await api(`/admin/sellers/${modal.data.id}/penalties/${id}`, { method: 'DELETE' }); done(); }, 'Penalty removed')}/>}
       {modal.type === 'AdminReview' && <AdminReviewForm products={products} busy={busy} onSubmit={({ productId, body }) => action(async () => { await api(`/admin/products/${productId}/reviews`, { method: 'POST', body }); setModal(null); }, 'Review added')}/>}
+      {modal.type === 'ReportProduct' && <form className="editor" onSubmit={e => { e.preventDefault(); const note = new FormData(e.target).get('note').trim(); if (!note) return; action(async () => { await api(`/admin/products/${modal.data.id}/report`, { method: 'POST', body: { note } }); setModal(null); }, 'Sent to the support team'); }}>
+        <p className="muted">Flag “{modal.data.name}”{modal.data.seller?.shopName ? ` (${modal.data.seller.shopName})` : ''} for the support team to review. They can message the seller and hide the product if needed.</p>
+        <Field label="What's the issue?"><textarea name="note" required maxLength={1000} rows={4} placeholder="e.g. Misleading title, wrong images, pricing looks off…"/></Field>
+        <Button disabled={busy}>Report to support</Button>
+      </form>}
       {modal.type === 'Messages' && <VendorMessages vendor={modal.data}/>}
       {modal.type === 'Order' && <OrderDetails order={orders.find(o => o.id === modal.data.id) || modal.data} admin={isAdmin} busy={busy} action={action} next={next} onCancel={reason => action(async () => { await api(`${isAdmin ? '/admin' : ''}/orders/${modal.data.id}/cancel`, { method: 'POST', body: { reason } }); setModal(null); }, 'Order cancelled, stock put back')} onSetDelivery={isAdmin ? ((body, done) => action(async () => { await api(`/admin/orders/${modal.data.id}/delivery`, { method: 'PATCH', body }); done(); }, 'Delivery details saved')) : null} onSetExtras={isAdmin ? ((extras, done) => action(async () => { await api(`/admin/orders/${modal.data.id}/invoice-extras`, { method: 'PATCH', body: { extras } }); done(); }, 'Bill updated')) : null}/>}
       {modal.type === 'Checkout' && <WholesaleCheckout items={cartItems} total={cartTotal} limits={me?.limits} busy={busy} onSubmit={body => action(async () => { await api('/orders', { method: 'POST', body }); setCart({}); setModal(null); go('Orders'); }, 'Wholesale order placed')}/>}
@@ -484,6 +498,81 @@ function ProductLabelPage({ sellers, settings, query, setQuery, busy, onToggleSe
       </tbody>
     </table></div>
     {!shown.length && !q && <Empty text="No sellers yet"/>}
+  </section>;
+}
+// Support workspace: the ticket inbox. Sellers raise tickets, admins flag
+// products -- support replies, resolves, and reopens them here.
+function SupportTicketsPage({ tickets, query, setQuery, busy, onReply, onResolve, onReopen }) {
+  const [openId, setOpenId] = useState(null);
+  const [filter, setFilter] = useState('OPEN');
+  const q = query.toLowerCase();
+  const shown = tickets.filter(t => (filter === 'ALL' || t.status === filter)
+    && (t.subject.toLowerCase().includes(q) || (t.seller?.shopName || '').toLowerCase().includes(q)));
+  const openCount = tickets.filter(t => t.status === 'OPEN').length;
+  return <section className="panel">
+    <div className="panel-heading">
+      <div><h2>Support tickets <span className="count">{openCount} open</span></h2><p>Seller requests and products flagged for review. Reply to the raiser, then resolve.</p></div>
+      <div className="search"><Search size={17}/><input aria-label="Search tickets" placeholder="Search subject or shop…" value={query} onChange={e => setQuery(e.target.value)}/></div>
+    </div>
+    <div className="order-filters"><div className="tabs" style={{ margin: 0, width: 'auto' }}>{[['OPEN', 'Open'], ['RESOLVED', 'Resolved'], ['ALL', 'All']].map(([v, label]) => <button key={v} type="button" className={filter === v ? 'selected' : ''} onClick={() => setFilter(v)}>{label}</button>)}</div></div>
+    <div className="table-scroll"><table>
+      <thead><tr><th>Subject</th><th>From</th><th>Status</th><th>Updated</th><th></th></tr></thead>
+      <tbody>
+        {shown.map(t => <React.Fragment key={t.id}>
+          <tr>
+            <td><strong>{t.subject}</strong>{t.productId && <small>Flagged product</small>}</td>
+            <td>{t.raisedByRole === 'SELLER' ? (t.seller?.shopName || 'Seller') : 'Admin'}{t.rating ? <small>Rated {'★'.repeat(t.rating)}</small> : null}</td>
+            <td><Badge>{t.status === 'OPEN' ? 'Open' : 'Resolved'}</Badge></td>
+            <td><small>{new Date(t.updatedAt).toLocaleString('en-IN')}</small></td>
+            <td><button className="text-button" onClick={() => setOpenId(openId === t.id ? null : t.id)}>{openId === t.id ? 'Hide' : 'Open'} <ChevronRight size={14}/></button></td>
+          </tr>
+          {openId === t.id && <tr className="ticket-thread-row"><td colSpan={5}><SupportThread ticket={t} busy={busy} onReply={onReply} onResolve={onResolve} onReopen={onReopen}/></td></tr>}
+        </React.Fragment>)}
+      </tbody>
+    </table></div>
+    {!shown.length && <Empty text="No tickets here"/>}
+  </section>;
+}
+function SupportThread({ ticket, busy, onReply, onResolve, onReopen }) {
+  const [text, setText] = useState('');
+  const msgs = ticket.messages || [];
+  return <div className="support-thread">
+    <div className="support-messages">
+      {msgs.map((m, i) => <div key={i} className={`support-msg ${m.sender === 'SELLER' ? 'from-seller' : 'from-support'}`}>
+        <div className="support-msg-head"><strong>{m.name || m.sender}</strong><small>{new Date(m.at).toLocaleString('en-IN')}</small></div>
+        <p>{m.body}</p>
+      </div>)}
+    </div>
+    {ticket.status === 'RESOLVED' && ticket.rating ? <p className="muted">Seller rated this {'★'.repeat(ticket.rating)}{ticket.feedback ? ` — “${ticket.feedback}”` : ''}</p> : null}
+    {ticket.status === 'OPEN' ? <form className="support-reply" onSubmit={e => { e.preventDefault(); const body = text.trim(); if (!body) return; onReply(ticket, body, () => setText('')); }}>
+      <textarea value={text} onChange={e => setText(e.target.value)} rows={2} maxLength={1000} placeholder="Reply to the raiser…"/>
+      <div className="support-reply-actions"><Button disabled={busy || !text.trim()}>Send reply</Button><button type="button" className="text-button" disabled={busy} onClick={() => onResolve(ticket)}>Mark resolved</button></div>
+    </form> : <button type="button" className="text-button" disabled={busy} onClick={() => onReopen(ticket)}>Reopen ticket</button>}
+  </div>;
+}
+// Support's view of seller products -- they can hide a reported product from
+// sale and restore it once the seller fixes it.
+function SupportProductsPage({ products, query, setQuery, busy, onHide, onRestore }) {
+  const q = query.toLowerCase();
+  const shown = products.filter(p => p.name.toLowerCase().includes(q) || (p.seller?.shopName || '').toLowerCase().includes(q));
+  return <section className="panel">
+    <div className="panel-heading">
+      <div><h2>Seller products <span className="count">{products.length}</span></h2><p>Hide a product while a seller sorts out an issue, then restore it.</p></div>
+      <div className="search"><Search size={17}/><input aria-label="Search products" placeholder="Search products or shops…" value={query} onChange={e => setQuery(e.target.value)}/></div>
+    </div>
+    <div className="table-scroll"><table>
+      <thead><tr><th>Product</th><th>Shop</th><th>Price</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {shown.map(p => <tr key={p.id}>
+          <td><div className="product-cell"><ProductImage product={p}/><div><strong>{p.name}</strong><small>{p.category?.name}</small></div></div></td>
+          <td>{p.seller?.shopName || 'NTSA'}</td>
+          <td>{money(p.pricePaise)}</td>
+          <td><Badge>{p.active === false ? 'Disabled' : 'Active'}</Badge></td>
+          <td>{p.active === false ? <button className="text-button" disabled={busy} onClick={() => onRestore(p)}>Restore</button> : <button className="danger-text" disabled={busy} onClick={() => onHide(p)}>Hide</button>}</td>
+        </tr>)}
+      </tbody>
+    </table></div>
+    {!shown.length && <Empty text="No products"/>}
   </section>;
 }
 // The real settings: who you are, your password, and how the panel looks.
@@ -634,7 +723,7 @@ function StaffEditor({ data, busy, onSubmit }) {
         <Field label="Email (their login)" name="email" type="email" maxLength={200} required autoComplete="off"/>
         <PasswordField label="Password" name="password" minLength={8} maxLength={100} required autoComplete="new-password"/>
       </div>}
-    <Field label="Team"><select name="role" defaultValue={data?.role || 'PACKING'} required><option value="PACKING">Packing team — sees only orders to pack</option><option value="SALES">Sales team — signs up new sellers</option><option value="ADMIN">Admin — full access</option></select></Field>
+    <Field label="Team"><select name="role" defaultValue={data?.role || 'PACKING'} required><option value="PACKING">Packing team — sees only orders to pack</option><option value="SALES">Sales team — signs up new sellers</option><option value="SUPPORT">Support team — handles seller tickets</option><option value="ADMIN">Admin — full access</option></select></Field>
     <Button disabled={busy}>{busy ? 'Saving…' : data ? 'Save changes' : 'Create login'}</Button>
   </form>;
 }

@@ -58,3 +58,24 @@
 .video-chip{position:relative;width:88px;height:88px;border-radius:8px;overflow:hidden;border:1px solid #e1e8ed;background:#000}
 .video-chip video{width:100%;height:100%;object-fit:cover}
 .video-chip .icon-button{position:absolute;top:2px;right:2px;background:#fff;border-radius:50%;padding:3px}
+.ticket-list{display:flex;flex-direction:column}
+.ticket-card{border-bottom:1px solid #eef1f3}.ticket-card:last-child{border-bottom:0}
+.ticket-card-head{width:100%;display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 24px;background:none;border:0;cursor:pointer;text-align:left}
+.ticket-card-head:hover{background:#f7fafb}
+.ticket-card-head strong{display:block;font-size:14px;color:#173442}
+.ticket-card-head small{color:#8b9aa3;font-size:12px}
+.ticket-card-head-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.ticket-card-head-right .rot{transform:rotate(90deg)}
+.support-thread{padding:0 24px 18px}
+.support-messages{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;max-height:340px;overflow-y:auto}
+.support-msg{max-width:80%;border-radius:10px;padding:9px 13px;font-size:13px;line-height:1.45}
+.support-msg.from-seller{align-self:flex-start;background:#fff;border:1px solid #e5ebef}
+.support-msg.from-support{align-self:flex-end;background:#e7f1ee;border:1px solid #cfe5db}
+.support-msg-head{display:flex;justify-content:space-between;gap:14px;margin-bottom:3px}
+.support-msg-head strong{font-size:12px}.support-msg-head small{color:#8b9aa3;font-size:11px}
+.support-msg p{margin:0;color:#173442;white-space:pre-wrap}
+.support-reply{display:flex;flex-direction:column;gap:10px}
+.support-reply textarea{width:100%;border:1px solid #dbe3e8;border-radius:8px;padding:9px 11px;font:inherit;font-size:13px;resize:vertical}
+.support-reply-actions{display:flex;align-items:center;gap:12px}
+.star-btn{background:none;border:0;font-size:24px;line-height:1;color:#d4dde3;cursor:pointer;padding:0}
+.star-btn.on{color:#ffb020}

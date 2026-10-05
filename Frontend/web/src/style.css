@@ -124,3 +124,20 @@
 .wm-toggle span{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 3px #0003}
 .wm-toggle.on span{left:21px}
 [data-theme="dark"] .wm-toggle{background:#2c3850}[data-theme="dark"] .wm-toggle.on{background:#499b76}
+.ticket-thread-row>td{background:#f7fafb;padding:0}
+.support-thread{padding:16px 20px}
+.support-messages{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;max-height:320px;overflow-y:auto}
+.support-msg{max-width:78%;border-radius:10px;padding:9px 13px;font-size:13px;line-height:1.45}
+.support-msg.from-seller{align-self:flex-start;background:#fff;border:1px solid #e5ebef}
+.support-msg.from-support{align-self:flex-end;background:#e7f1ee;border:1px solid #cfe5db}
+.support-msg-head{display:flex;justify-content:space-between;gap:14px;margin-bottom:3px}
+.support-msg-head strong{font-size:12px}.support-msg-head small{color:#8b9aa3;font-size:11px}
+.support-msg p{margin:0;color:#173442;white-space:pre-wrap}
+.support-reply{display:flex;flex-direction:column;gap:10px}
+.support-reply textarea{width:100%;border:1px solid #dbe3e8;border-radius:8px;padding:9px 11px;font:inherit;font-size:13px;resize:vertical}
+.support-reply-actions{display:flex;align-items:center;gap:16px}
+[data-theme="dark"] .ticket-thread-row>td{background:#0e1626}
+[data-theme="dark"] .support-msg.from-seller{background:#141c30;border-color:#28344d}
+[data-theme="dark"] .support-msg.from-support{background:#15332a;border-color:#1f5141}
+[data-theme="dark"] .support-msg p{color:#cdd7e6}
+[data-theme="dark"] .support-reply textarea{background:#0e1626;border-color:#28344d;color:#e6ebf2}
