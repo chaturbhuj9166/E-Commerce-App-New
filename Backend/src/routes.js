@@ -84,12 +84,33 @@ router.post('/auth/demo', loginLimiter, async (req, res) => {
 router.get('/categories', async (req, res) => res.json(await db.category.findMany({ orderBy: { name: 'asc' } })));
 router.get('/banners', async (req, res) => res.json(await db.banner.findMany({ where: { active: true }, orderBy: { sortOrder: 'asc' } })));
 router.get('/products', async (req, res) => {
-  const q = z.object({ categoryId: z.string().optional(), search: z.string().max(100).optional(), deal: z.enum(['true', 'false']).optional() }).parse(req.query);
+  const q = z.object({
+    categoryId: z.string().optional(), search: z.string().max(100).optional(), deal: z.enum(['true', 'false']).optional(),
+    // Shopper filters and sort, same idea as Amazon/Flipkart's left rail.
+    sort: z.enum(['featured', 'price_asc', 'price_desc', 'newest', 'rating', 'discount', 'popular']).optional(),
+    minPrice: z.coerce.number().int().min(0).optional(), maxPrice: z.coerce.number().int().min(0).optional(),
+    minRating: z.coerce.number().min(0).max(5).optional(), inStock: z.enum(['true', 'false']).optional(),
+    minDiscount: z.coerce.number().int().min(0).max(100).optional(),
+  }).parse(req.query);
   // The search box (and the AI assistant's free-text queries) match against
   // both the name and description, since a shopper describing what they want
   // ("something to carry my laptop") rarely types the exact product name.
-  const products = await db.product.findMany({ where: { active: true, audience: { in: ['RETAIL', 'BOTH'] }, categoryId: q.categoryId, deal: q.deal ? q.deal === 'true' : undefined, ...(q.search ? { OR: [{ name: { contains: q.search, mode: 'insensitive' } }, { description: { contains: q.search, mode: 'insensitive' } }] } : {}) }, include: { category: true, reviews: { select: { rating: true } } }, orderBy: [{ featuredRank: 'desc' }, { createdAt: 'desc' }], take: 200 });
-  res.json(products.map(({ wholesalePaise, reviews, ...p }) => ({ ...p, sizePrices: publicSizePrices(p.sizePrices), rating: reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : null, reviewCount: reviews.length })));
+  const where = { active: true, audience: { in: ['RETAIL', 'BOTH'] }, categoryId: q.categoryId, deal: q.deal ? q.deal === 'true' : undefined,
+    ...(q.inStock === 'true' ? { stock: { gt: 0 } } : {}),
+    ...(q.minPrice != null || q.maxPrice != null ? { pricePaise: { ...(q.minPrice != null ? { gte: q.minPrice * 100 } : {}), ...(q.maxPrice != null ? { lte: q.maxPrice * 100 } : {}) } } : {}),
+    ...(q.search ? { OR: [{ name: { contains: q.search, mode: 'insensitive' } }, { description: { contains: q.search, mode: 'insensitive' } }] } : {}) };
+  // Price and recency sort cleanly at the database; rating, discount and
+  // popularity need the review aggregate, so those are ordered in memory below.
+  const dbOrder = { price_asc: [{ pricePaise: 'asc' }], price_desc: [{ pricePaise: 'desc' }], newest: [{ createdAt: 'desc' }] }[q.sort] || [{ featuredRank: 'desc' }, { createdAt: 'desc' }];
+  const products = await db.product.findMany({ where, include: { category: true, reviews: { select: { rating: true } } }, orderBy: dbOrder, take: 200 });
+  const discountOf = p => p.mrpPaise && p.mrpPaise > p.pricePaise ? Math.round((1 - p.pricePaise / p.mrpPaise) * 100) : 0;
+  let rows = products.map(({ wholesalePaise, reviews, ...p }) => ({ ...p, sizePrices: publicSizePrices(p.sizePrices), rating: reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : null, reviewCount: reviews.length, discountPercent: discountOf(p) }));
+  if (q.minRating != null) rows = rows.filter(p => (p.rating ?? 0) >= q.minRating);
+  if (q.minDiscount != null) rows = rows.filter(p => p.discountPercent >= q.minDiscount);
+  if (q.sort === 'rating') rows.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+  else if (q.sort === 'discount') rows.sort((a, b) => b.discountPercent - a.discountPercent);
+  else if (q.sort === 'popular') rows.sort((a, b) => b.reviewCount - a.reviewCount);
+  res.json(rows);
 });
 router.get('/products/:id', async (req, res) => {
   const p = await db.product.findFirst({ where: { id: req.params.id, active: true, audience: { in: ['RETAIL', 'BOTH'] } }, include: { category: true, reviews: { select: { rating: true, comment: true, images: true, createdAt: true, authorName: true, user: { select: { name: true } } }, take: 100, orderBy: { createdAt: 'desc' } } } });
@@ -846,11 +867,17 @@ router.post('/seller/orders/:id/cancel', seller, async (req, res) => {
 // counted as earned once the order is delivered. `earnedPaise` is net, after
 // NTSA's commission -- `commissionPaise` is the other half of that split.
 async function sellerSummaryFor(sellerId, commissionPercent, penaltyPaise = 0) {
-  const items = await db.orderItem.findMany({ where: { sellerId }, include: { order: { select: { status: true } } } });
+  const items = await db.orderItem.findMany({ where: { sellerId }, include: { order: { select: { status: true, cancelledBy: true } }, refund: { select: { status: true } } } });
   const live = items.filter(i => i.order.status !== 'CANCELLED');
   const value = rows => rows.reduce((sum, i) => sum + i.unitPaise * i.quantity, 0);
-  const deliveredGrossPaise = value(live.filter(i => i.order.status === 'DELIVERED'));
+  const delivered = live.filter(i => i.order.status === 'DELIVERED');
+  const deliveredGrossPaise = value(delivered);
   const commissionPaise = Math.round(deliveredGrossPaise * commissionPercent / 100);
+  // Performance signals, the same ones a real marketplace grades a seller on.
+  const totalOrders = new Set(items.map(i => i.orderId)).size;
+  const sellerCancelledOrders = new Set(items.filter(i => i.order.status === 'CANCELLED' && i.order.cancelledBy === 'SELLER').map(i => i.orderId)).size;
+  const refundedItems = items.filter(i => i.refund).length;
+  const ratingAgg = await db.review.aggregate({ where: { product: { sellerId } }, _avg: { rating: true }, _count: true });
   return {
     products: await db.product.count({ where: { sellerId, active: true } }),
     outOfStock: await db.product.count({ where: { sellerId, active: true, stock: 0 } }),
@@ -859,11 +886,18 @@ async function sellerSummaryFor(sellerId, commissionPercent, penaltyPaise = 0) {
     salesPaise: value(live),
     commissionPercent,
     commissionPaise,
-    // After NTSA's cut and any penalties the admin has docked.
+    // The settlement: what's actually payable, step by step.
+    deliveredGrossPaise,
     earnedPaise: deliveredGrossPaise - commissionPaise - penaltyPaise,
     penaltyPaise,
     awaitingPaise: value(live.filter(i => i.order.status !== 'DELIVERED')),
     cancelledPaise: value(items.filter(i => i.order.status === 'CANCELLED')),
+    // Performance: rates as whole-number percentages, plus the shop's rating.
+    deliveredOrders: new Set(delivered.map(i => i.orderId)).size,
+    cancelRate: totalOrders ? Math.round(sellerCancelledOrders / totalOrders * 100) : 0,
+    refundRate: delivered.length ? Math.round(refundedItems / delivered.length * 100) : 0,
+    avgRating: ratingAgg._avg.rating,
+    ratingCount: ratingAgg._count,
   };
 }
 router.get('/seller/summary', seller, async (req, res) => res.json(await sellerSummaryFor(req.actor.id, req.actor.account.commissionPercent, req.actor.account.penaltyPaise)));

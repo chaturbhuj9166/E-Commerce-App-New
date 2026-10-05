@@ -133,6 +133,28 @@ function App() {
                 <StatusDonut orders={orders}/>
               </section>
             </div>
+            <div className="chart-grid" style={{ marginBottom: 22 }}>
+              <section className="panel">
+                <div className="panel-heading"><div><h2>Settlement</h2><p>How your delivered sales become what NTSA pays you</p></div><Wallet size={20}/></div>
+                <div style={{ padding: '18px 24px' }}>
+                  <div className="settle-row"><span>Delivered sales (gross)</span><strong>{money(summary?.deliveredGrossPaise)}</strong></div>
+                  <div className="settle-row"><span>NTSA commission ({summary?.commissionPercent ?? 0}%)</span><span className="danger-text">− {money(summary?.commissionPaise)}</span></div>
+                  <div className="settle-row"><span>Penalties</span><span className="danger-text">− {money(summary?.penaltyPaise)}</span></div>
+                  <div className="settle-row settle-total"><strong>You get paid</strong><strong>{money(summary?.earnedPaise)}</strong></div>
+                  <p className="muted" style={{ marginTop: 12, marginBottom: 0 }}>{money(summary?.awaitingPaise)} more is on the way (ordered, not yet delivered).</p>
+                </div>
+              </section>
+              <section className="panel">
+                <div className="panel-heading"><div><h2>Performance</h2><p>How your shop is doing — keep these healthy</p></div><BadgeCheck size={20}/></div>
+                <div style={{ padding: '18px 24px' }}>
+                  <div className="settle-row"><span>Shop rating</span><strong>{summary?.avgRating ? `★ ${summary.avgRating.toFixed(1)} (${summary.ratingCount})` : 'No reviews yet'}</strong></div>
+                  <div className="settle-row"><span>Cancellation rate</span><strong className={summary?.cancelRate > 10 ? 'danger-text' : ''}>{summary?.cancelRate ?? 0}%</strong></div>
+                  <div className="settle-row"><span>Refund/return rate</span><strong className={summary?.refundRate > 10 ? 'danger-text' : ''}>{summary?.refundRate ?? 0}%</strong></div>
+                  <div className="settle-row"><span>Delivered orders</span><strong>{summary?.deliveredOrders ?? 0}</strong></div>
+                  <p className="muted" style={{ marginTop: 12, marginBottom: 0 }}>A high cancellation or refund rate can lead to penalties. Pack on time and describe items accurately.</p>
+                </div>
+              </section>
+            </div>
             {penalties.length > 0 && <section className="panel" style={{ marginBottom: 22, border: '1px solid #f0d2cc' }}>
               <div className="panel-heading"><div><h2>Penalties</h2><p>Fines NTSA has applied, and what each was for. These are deducted from your earnings.</p></div><strong className="danger-text">{money(summary?.penaltyPaise)}</strong></div>
               <div className="table-scroll"><table><thead><tr><th>Date</th><th>Amount</th><th>Reason</th></tr></thead>
