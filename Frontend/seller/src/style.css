@@ -79,3 +79,12 @@
 .support-reply-actions{display:flex;align-items:center;gap:12px}
 .star-btn{background:none;border:0;font-size:24px;line-height:1;color:#d4dde3;cursor:pointer;padding:0}
 .star-btn.on{color:#ffb020}
+.product-image.zoomable{cursor:zoom-in}
+.lightbox{position:fixed;inset:0;z-index:1000;background:rgba(9,14,24,.82);display:flex;align-items:center;justify-content:center;padding:40px;backdrop-filter:blur(2px)}
+.lightbox-img{max-width:90vw;max-height:90vh;object-fit:contain;border-radius:10px;box-shadow:0 20px 60px #0008;background:#fff}
+.lightbox-close{position:absolute;top:18px;right:20px;color:#fff;background:rgba(255,255,255,.12)}
+.lightbox-close:hover{background:rgba(255,255,255,.22)}
+.lightbox-nav{position:absolute;top:50%;transform:translateY(-50%);color:#fff;background:rgba(255,255,255,.12);width:46px;height:46px;display:flex;align-items:center;justify-content:center}
+.lightbox-nav:hover{background:rgba(255,255,255,.22)}
+.lightbox-nav.prev{left:18px}.lightbox-nav.next{right:18px}
+.lightbox-count{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);color:#fff;background:rgba(0,0,0,.4);padding:5px 14px;border-radius:20px;font-size:13px;font-weight:600}
