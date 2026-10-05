@@ -138,6 +138,16 @@ router.patch('/me', customer, async (req, res) => {
   const data = z.object({ name: z.string().trim().min(1).max(100).optional(), email: z.string().email().optional(), fcmToken: z.string().max(4096).nullable().optional() }).strict().parse(req.body);
   res.json(await db.user.update({ where: { id: req.actor.id }, data }));
 });
+// Any password-holding account changes its own password: verify the current
+// one, set the new one, and hand back a fresh token since bumping the session
+// version signs every other device out.
+router.post('/me/password', roles('ADMIN', 'PACKING', 'SALES', 'VENDOR', 'SELLER'), async (req, res) => {
+  const { currentPassword, newPassword } = z.object({ currentPassword: z.string().min(1).max(200), newPassword: z.string().min(8).max(200) }).parse(req.body);
+  const model = { ADMIN: db.admin, PACKING: db.admin, SALES: db.admin, VENDOR: db.vendor, SELLER: db.seller }[req.actor.role];
+  requireThat(await bcrypt.compare(currentPassword, req.actor.account.passwordHash), 400, 'Your current password is not correct');
+  const updated = await model.update({ where: { id: req.actor.id }, data: { passwordHash: await bcrypt.hash(newPassword, 12), sessionVersion: { increment: 1 } } });
+  res.json({ token: tokenFor(req.actor.role, updated) });
+});
 router.post('/me/photo', customer, multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('photo'), async (req, res) => {
   const { url } = await uploadImage(req.file);
   res.json(await db.user.update({ where: { id: req.actor.id }, data: { photoUrl: url } }));

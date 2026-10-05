@@ -28,6 +28,10 @@ const DEFAULT_INVOICE_COLUMNS = [
 
 function App() {
   const [session, setSession] = useState(() => sessionStorage.getItem('ntsa-token'));
+  // Panel appearance, remembered on this device. Applied as data-theme on the
+  // root so the CSS dark overrides kick in.
+  const [theme, setTheme] = useState(() => { try { return localStorage.getItem('ntsa-theme') || 'light'; } catch { return 'light'; } });
+  useEffect(() => { try { document.documentElement.setAttribute('data-theme', theme); localStorage.setItem('ntsa-theme', theme); } catch {} }, [theme]);
   const [me, setMe] = useState(null), [page, setPage] = useState('Overview'), [error, setError] = useState(''), [toast, setToast] = useState('');
   const [products, setProducts] = useState([]), [categories, setCategories] = useState([]), [orders, setOrders] = useState([]), [vendors, setVendors] = useState([]), [refunds, setRefunds] = useState([]);
   const [banners, setBanners] = useState([]), [coupons, setCoupons] = useState([]);
@@ -152,7 +156,7 @@ function App() {
   if (!session) return <Login onLogin={(token, loginRole) => { sessionStorage.setItem('ntsa-token', token); setPage(loginRole === 'PACKING' ? 'To pack' : loginRole === 'SALES' ? 'Add seller' : 'Overview'); setSession(token); }}/ >;
   const nav = isPacking ? [['To pack', ClipboardList], ['Packed', Check]]
     : isSales ? [['Add seller', UserPlus], ['My sellers', Store]]
-    : isAdmin ? [['Overview', LayoutDashboard], ['Products', Package], ['Wholesale products', Store], ['Categories', Shapes], ['Orders', ShoppingBag], ['Customers', User], ['Reviews', Star], ['Vendors', Users], ['To pack', ClipboardList], ['Shipments', Truck], ['Banners', Image], ['Coupons', Tag], ['Reports', BarChart3], ['Sellers', BadgeCheck], ['Seller insights', TrendingUp], ['Refunds', RotateCcw], ['Delivery areas', MapPin], ['Staff', UserCog], ['Settings', SettingsIcon]]
+    : isAdmin ? [['Overview', LayoutDashboard], ['Products', Package], ['Wholesale products', Store], ['Categories', Shapes], ['Orders', ShoppingBag], ['Customers', User], ['Reviews', Star], ['Vendors', Users], ['To pack', ClipboardList], ['Shipments', Truck], ['Banners', Image], ['Coupons', Tag], ['Reports', BarChart3], ['Sellers', BadgeCheck], ['Seller insights', TrendingUp], ['Refunds', RotateCcw], ['Delivery areas', MapPin], ['Staff', UserCog], ['Invoice', FileText], ['Settings', SettingsIcon]]
     : [['Overview', LayoutDashboard], ['Wholesale catalog', Store], ['Orders', ShoppingBag], ['Messages', Paperclip]];
   const pendingApplications = applications.filter(a => a.status === 'PENDING').length;
   const shown = products.filter(p => `${p.name} ${p.category?.name} ${p.seller?.shopName || ''}`.toLowerCase().includes(query.toLowerCase()));
@@ -175,7 +179,7 @@ function App() {
       </div>}
       <span className="online-dot"/><span>{isAdmin ? 'Super Admin' : me?.name || (isPacking ? 'Packing team' : isSales ? 'Sales team' : 'Vendor')}</span><div className="avatar">{isAdmin ? 'SA' : isPacking ? 'PK' : isSales ? 'SL' : 'WV'}</div></div></header>
       <main className="content">
-        <div className="page-heading"><div><div className="eyebrow">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div><h1>{page === 'Overview' ? 'A good day to grow.' : page}</h1><p>{({ Overview: 'Here’s what’s happening with your store today.', Products: 'A little care for every product on your shelf.', Categories: 'Make your collection easy to discover.', Banners: 'Control the Home screen banner without a code change.', Coupons: 'Create and manage discount codes.', Orders: 'From your shelf to their doorstep.', Vendors: 'Build stronger wholesale partnerships.', Customers: 'Everyone who has ever shopped with you.', Shipments: 'What has left the shelf, and where it is now.', Reports: 'Revenue, payments and what is actually selling.', Refunds: 'Thoughtful resolutions. Happier customers.', 'Wholesale catalog': 'Stock up on quality. Save on every order.', 'To pack': 'Everything waiting to be packed and sent.', Packed: 'Packed today and on its way.', 'Add seller': 'Sign up a shop that wants to sell on NTSA.', 'My sellers': 'What you sent for verification.', Sellers: 'Check the details, then hand out their login.', Staff: 'Logins for your packing and sales teams.', 'Delivery areas': 'Delivery charges, and the areas you no longer deliver to.', Settings: 'The letterhead every invoice is printed with.' })[page]}</p></div>
+        <div className="page-heading"><div><div className="eyebrow">{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div><h1>{page === 'Overview' ? 'A good day to grow.' : page}</h1><p>{({ Overview: 'Here’s what’s happening with your store today.', Products: 'A little care for every product on your shelf.', Categories: 'Make your collection easy to discover.', Banners: 'Control the Home screen banner without a code change.', Coupons: 'Create and manage discount codes.', Orders: 'From your shelf to their doorstep.', Vendors: 'Build stronger wholesale partnerships.', Customers: 'Everyone who has ever shopped with you.', Shipments: 'What has left the shelf, and where it is now.', Reports: 'Revenue, payments and what is actually selling.', Refunds: 'Thoughtful resolutions. Happier customers.', 'Wholesale catalog': 'Stock up on quality. Save on every order.', 'To pack': 'Everything waiting to be packed and sent.', Packed: 'Packed today and on its way.', 'Add seller': 'Sign up a shop that wants to sell on NTSA.', 'My sellers': 'What you sent for verification.', Sellers: 'Check the details, then hand out their login.', Staff: 'Logins for your packing and sales teams.', 'Delivery areas': 'Delivery charges, and the areas you no longer deliver to.', Invoice: 'Your letterhead, the bill columns, and the terms every invoice is printed with.', Settings: 'Your account, password and how the panel looks.' })[page]}</p></div>
           {isAdmin && ['Products', 'Wholesale products', 'Categories', 'Vendors', 'Banners', 'Coupons'].includes(page) && <Button onClick={() => setModal({ type: page, data: null })}><Plus size={17}/>Add {{ Categories: 'category', Banners: 'banner', Coupons: 'coupon', 'Wholesale products': 'wholesale product' }[page] || page.slice(0, -1).toLowerCase()}</Button>}
           {isAdmin && page === 'Staff' && <Button onClick={() => setModal({ type: 'Staff', data: null })}><Plus size={17}/>Add staff login</Button>}
           {(isPacking || isAdmin) && page === 'To pack' && <Button secondary onClick={load}>Refresh</Button>}
@@ -336,7 +340,8 @@ function App() {
               </tr>)}
             </tbody></table></div>
             {!staff.length && <Empty text="Add your first packing or sales login"/>}</section>}
-          {page === 'Settings' && <SettingsPage settings={settings} busy={busy} action={action}/>}
+          {page === 'Invoice' && <SettingsPage settings={settings} busy={busy} action={action}/>}
+          {page === 'Settings' && <AccountSettingsPage me={me} role={role} theme={theme} setTheme={setTheme} busy={busy} action={action} onPasswordChanged={token => { sessionStorage.setItem('ntsa-token', token); setSession(token); }} goStaff={() => go('Staff')}/>}
         </>}
         <footer>NTSA <span>·</span> Shop smarter. Live better.<span className="footer-right">Your everyday commerce companion</span></footer>
       </main>
@@ -454,6 +459,50 @@ function PackSlip({ order, busy, admin, onPackItem, onPacked }) {
 }
 // The company letterhead every invoice is printed with -- one row, filled
 // in once. Blank fields still produce a working invoice, just a plainer one.
+// The real settings: who you are, your password, and how the panel looks.
+function AccountSettingsPage({ me, role, theme, setTheme, busy, action, onPasswordChanged, goStaff }) {
+  const [error, setError] = useState('');
+  const roleLabel = { ADMIN: 'Administrator', PACKING: 'Packing team', SALES: 'Sales team' }[role] || role;
+  return <>
+    <section className="panel" style={{ marginBottom: 22 }}>
+      <div className="panel-heading"><div><h2>Appearance</h2><p>Choose how the panel looks on this device.</p></div></div>
+      <div style={{ padding: '18px 24px', display: 'flex', gap: 12 }}>
+        {[['light', 'Light', Image], ['dark', 'Dark', ShieldCheck]].map(([v, label]) => <button key={v} type="button" className={`theme-choice ${theme === v ? 'selected' : ''}`} onClick={() => setTheme(v)}>
+          <span className={`theme-swatch ${v}`}/>{label}{theme === v && <Check size={15}/>}
+        </button>)}
+      </div>
+    </section>
+    <section className="panel" style={{ marginBottom: 22 }}>
+      <div className="panel-heading"><div><h2>My account</h2><p>You're signed in as {roleLabel}.</p></div></div>
+      <div style={{ padding: '18px 24px' }}>
+        <div className="settle-row"><span>Name</span><strong>{me?.name || '—'}</strong></div>
+        <div className="settle-row"><span>Email</span><strong>{me?.email || '—'}</strong></div>
+        <div className="settle-row"><span>Role</span><strong>{roleLabel}</strong></div>
+      </div>
+    </section>
+    <section className="panel" style={{ marginBottom: 22 }}>
+      <div className="panel-heading"><div><h2>Change password</h2><p>Changing it signs you out of every other device.</p></div></div>
+      <form className="editor" style={{ padding: '18px 24px' }} onSubmit={e => {
+        e.preventDefault(); setError('');
+        const f = Object.fromEntries(new FormData(e.target));
+        if (f.newPassword !== f.confirm) { setError('The new passwords do not match'); return; }
+        action(async () => { const r = await api('/me/password', { method: 'POST', body: { currentPassword: f.current, newPassword: f.newPassword } }); e.target.reset(); onPasswordChanged(r.token); }, 'Password changed');
+      }}>
+        <PasswordField label="Current password" name="current" required autoComplete="current-password"/>
+        <div className="form-grid">
+          <PasswordField label="New password (min 8 characters)" name="newPassword" required minLength={8} autoComplete="new-password"/>
+          <PasswordField label="Confirm new password" name="confirm" required minLength={8} autoComplete="new-password"/>
+        </div>
+        {error && <div role="alert" className="alert">{error}</div>}
+        <Button disabled={busy}>Change password</Button>
+      </form>
+    </section>
+    {role === 'ADMIN' && <section className="panel">
+      <div className="panel-heading"><div><h2>Team logins</h2><p>Create and manage packing, sales and admin accounts.</p></div></div>
+      <div style={{ padding: '18px 24px' }}><Button secondary onClick={goStaff}><UserCog size={16}/>Go to Staff</Button></div>
+    </section>}
+  </>;
+}
 function SettingsPage({ settings, busy, action }) {
   const [logoUrl, setLogoUrl] = useState(settings?.logoUrl || '');
   const [uploading, setUploading] = useState(false), [error, setError] = useState('');
