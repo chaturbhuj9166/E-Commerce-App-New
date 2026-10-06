@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../providers/shop_provider.dart';
+import '../../providers/vendor_provider.dart';
 import '../../widgets/category_icon.dart';
 import 'wholesale_category_products_screen.dart';
 
@@ -43,7 +44,12 @@ class _WholesaleCategoriesScreenState extends State<WholesaleCategoriesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final categories = context.watch<ShopProvider>().categories;
+    final all = context.watch<ShopProvider>().categories;
+    // The vendor catalog only holds wholesale products, so most categories are
+    // empty. Show only those with at least one of the vendor's products; fall
+    // back to all while products haven't loaded yet (don't hide everything).
+    final stocked = context.watch<VendorProvider>().products.map((p) => p.category?.id).whereType<String>().toSet();
+    final categories = stocked.isEmpty ? all : all.where((c) => stocked.contains(c.id)).toList();
     return Scaffold(
       appBar: AppBar(automaticallyImplyLeading: !widget.embedded, title: const Text('All Categories')),
       body: SafeArea(

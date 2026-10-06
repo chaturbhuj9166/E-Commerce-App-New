@@ -348,6 +348,12 @@ router.post('/vendor/messages', roles('VENDOR'), async (req, res) => {
 // A photo or short clip a wholesaler attaches to the thread. Video files are
 // much bigger than product photos, so this cap is 25 MB rather than 5.
 router.post('/vendor/attachments', roles('VENDOR'), multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 1 } }).single('file'), async (req, res) => res.status(201).json(await uploadAttachment(req.file)));
+// The wholesaler's own profile photo, shown on their wholesale home -- same
+// idea as a customer's /me/photo, kept on the vendor record.
+router.post('/vendor/photo', roles('VENDOR'), multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('photo'), async (req, res) => {
+  const { url } = await uploadImage(req.file);
+  res.json(await db.vendor.update({ where: { id: req.actor.id }, data: { photoUrl: url } }));
+});
 router.use('/admin', admin);
 // The company letterhead invoices are printed with. Upserted as one fixed
 // row, so there is always exactly one to read or write.

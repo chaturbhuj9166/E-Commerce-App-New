@@ -229,6 +229,8 @@ model Vendor {
   passwordHash String
   email String?
   phone String?
+  // The partner's own profile photo, set from the wholesale app (Cloudinary URL).
+  photoUrl String?
   // KYC captured when the super admin onboards a wholesale partner.
   // Note: storing a full Aadhaar number has its own compliance
   // considerations under the Aadhaar Act for non-UIDAI-authorized

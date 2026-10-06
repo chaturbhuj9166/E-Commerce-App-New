@@ -8,6 +8,7 @@ import '../../providers/vendor_provider.dart';
 import '../../providers/wishlist_provider.dart';
 import '../../widgets/bottom_nav_shell.dart';
 import '../../widgets/price_tag.dart';
+import '../../widgets/vendor_avatar.dart';
 import '../account/about_screen.dart';
 import '../account/legal_text_screen.dart';
 import '../auth/login_screen.dart';
@@ -47,7 +48,7 @@ class WholesaleSettingsScreen extends StatelessWidget {
               decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.border)),
               child: Row(
                 children: [
-                  CircleAvatar(radius: 24, backgroundColor: AppColors.navy, child: const Icon(Icons.storefront_rounded, color: Colors.white)),
+                  const VendorAvatar(radius: 24),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(

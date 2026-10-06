@@ -49,6 +49,7 @@ typedef VendorLine = ({String productId, String? size, String? color});
 /// login replaces the session token; the customer's is stashed until exit.
 class VendorProvider extends ChangeNotifier {
   String? name;
+  String? photoUrl;
   VendorLimits? limits;
   List<Product> products = [];
   bool productsLoaded = false;
@@ -124,9 +125,20 @@ class VendorProvider extends ChangeNotifier {
   /// Fills the session from a vendor's GET /me body (login or app restart).
   Future<void> restore(Map<String, dynamic> me) async {
     name = me['name'] as String? ?? 'Wholesale Partner';
+    photoUrl = me['photoUrl'] as String?;
     limits = me['limits'] != null ? VendorLimits.fromJson(me['limits'] as Map<String, dynamic>) : null;
     notifyListeners();
     await loadProducts();
+  }
+
+  /// Sets the signed-in vendor's profile photo. Reads bytes rather than a file
+  /// path so it works on Flutter web too (same mechanism as the customer's
+  /// Edit Profile). Throws on failure, like [uploadAttachment].
+  Future<void> uploadPhoto(XFile photo) async {
+    final form = FormData.fromMap({'photo': await imagePart(photo)});
+    final data = await ApiClient.instance.post('/vendor/photo', data: form) as Map<String, dynamic>;
+    photoUrl = data['photoUrl'] as String?;
+    notifyListeners();
   }
 
   Future<void> loadProducts() async {
@@ -218,6 +230,7 @@ class VendorProvider extends ChangeNotifier {
   /// Clears in-memory vendor state only (tokens untouched).
   void reset() {
     name = null;
+    photoUrl = null;
     limits = null;
     products = [];
     productsLoaded = false;

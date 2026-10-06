@@ -5,6 +5,7 @@ import '../../providers/shop_provider.dart';
 import '../../providers/vendor_provider.dart';
 import '../../widgets/banner_slider.dart';
 import '../../widgets/price_tag.dart';
+import '../../widgets/vendor_avatar.dart';
 import '../../widgets/wholesale_product_grid.dart';
 import 'wholesale_product_details_screen.dart';
 
@@ -40,7 +41,25 @@ class _WholesaleCatalogTabState extends State<WholesaleCatalogTab> {
         child: ListView(
           padding: const EdgeInsets.only(bottom: 14),
           children: [
-            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
+              child: Row(
+                children: [
+                  const VendorAvatar(radius: 26),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Welcome back', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                        Text(vendor.name ?? 'Wholesale Partner', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
             BannerSlider(banners: shop.banners, onShopNow: () {}),
             const SizedBox(height: 16),
             if (vendor.limits != null)
