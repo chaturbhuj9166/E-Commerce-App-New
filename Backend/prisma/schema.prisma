@@ -196,6 +196,17 @@ model BlockedPincode {
   createdAt DateTime @default(now())
   @@map("blocked_pincodes")
 }
+// An area/city the admin has stopped delivering to (repeated fraud or returns).
+// Matched against an address's city, case-insensitively, the same way a blocked
+// PIN code is matched against its postal code.
+model BlockedArea {
+  id String @id @default(cuid())
+  // Stored lower-cased so the match is case-insensitive and can't duplicate.
+  name String @unique
+  reason String?
+  createdAt DateTime @default(now())
+  @@map("blocked_areas")
+}
 // In-panel bell notifications (push to phones needs Firebase, which the
 // client hasn't provided yet).
 model Notification {

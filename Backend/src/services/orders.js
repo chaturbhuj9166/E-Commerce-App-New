@@ -32,6 +32,14 @@ export async function deliveryChargeFor(goodsPaise, client = db) {
 }
 // The baseline delivery estimate quoted at checkout, before any holiday delay.
 const STANDARD_DELIVERY_DAYS = 7;
+// A delivery destination is refused if its PIN code or its city/area is on the
+// admin's block list -- the same check for saving an address and placing an
+// order, so a blocked area is caught the moment a customer types it in.
+export async function assertDeliverable(client, address) {
+  requireThat(!await client.blockedPincode.findUnique({ where: { pincode: address.postalCode } }), 400, `We are not delivering to PIN code ${address.postalCode} right now`);
+  const city = (address.city || '').trim().toLowerCase();
+  if (city) requireThat(!await client.blockedArea.findUnique({ where: { name: city } }), 400, `We are not delivering to ${address.city} right now`);
+}
 export async function checkout(actor, input) {
   const data = checkoutSchema.parse(input);
   requireThat(data.paymentMethod !== 'DEMO' || config.DEMO_MODE, 400, 'Demo payments are disabled');
@@ -49,7 +57,7 @@ export async function checkout(actor, input) {
     }
     requireThat(address, 400, 'A delivery address is required');
     // Areas blocked for repeated fraud can't be ordered to at all.
-    requireThat(!await tx.blockedPincode.findUnique({ where: { pincode: address.postalCode } }), 400, `We are not delivering to PIN code ${address.postalCode} right now`);
+    await assertDeliverable(tx, address);
     // Wholesale-only stock stays out of the shopping app, and retail-only
     // stock out of the wholesale portal, at checkout as well as in the lists.
     const forSale = actor.role === 'VENDOR' ? ['WHOLESALE', 'BOTH'] : ['RETAIL', 'BOTH'];

@@ -6,14 +6,14 @@ import { randomInt } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { db, atomic } from './db.js';
 import { config } from './config.js';
-import { z, productSchema, addressSchema, vendorCreateSchema, vendorUpdateSchema, vendorPasswordSchema, vendorMessageSchema, bannerSchema, reviewSchema, adminReviewSchema, couponSchema, staffCreateSchema, staffUpdateSchema, sellerApplicationSchema, sellerApproveSchema, sellerUpdateSchema, blockedPincodeSchema, deliveryRuleSchema, settingsSchema, invoiceExtrasSchema, panelPagesSchema } from './lib/validation.js';
+import { z, productSchema, addressSchema, vendorCreateSchema, vendorUpdateSchema, vendorPasswordSchema, vendorMessageSchema, bannerSchema, reviewSchema, adminReviewSchema, couponSchema, staffCreateSchema, staffUpdateSchema, sellerApplicationSchema, sellerApproveSchema, sellerUpdateSchema, blockedPincodeSchema, deliveryRuleSchema, settingsSchema, invoiceExtrasSchema, panelPagesSchema, blockedAreaSchema } from './lib/validation.js';
 import { requireThat, holidayGraceCutoff } from './lib/rules.js';
 import { variantFor, priceFor, publicSizePrices } from './lib/variants.js';
 import { auth, roles, tokenFor } from './services/auth.js';
 import { verifyCustomer } from './services/firebase.js';
 import { uploadImage, uploadAttachment } from './services/storage.js';
 import { gateway, validSignature } from './services/payments.js';
-import { checkout, ownedOrder, publicOrder, orderInclude, ownerWhere, changeStatus, cancelOrder, CANCELLABLE_BY_BUYER, deliveryCode, deliver, requestRefund, reviewRefund } from './services/orders.js';
+import { checkout, ownedOrder, publicOrder, orderInclude, ownerWhere, changeStatus, cancelOrder, CANCELLABLE_BY_BUYER, deliveryCode, deliver, requestRefund, reviewRefund, assertDeliverable } from './services/orders.js';
 import { streamInvoice, invoiceNumberFor } from './services/invoice.js';
 export const router = Router();
 const admin = roles('ADMIN'), customer = roles('CUSTOMER'), buyer = roles('CUSTOMER', 'VENDOR');
@@ -160,16 +160,15 @@ router.post('/me/photo', customer, multer({ storage: multer.memoryStorage(), lim
 router.post('/uploads', customer, multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image'), async (req, res) => res.status(201).json(await uploadImage(req.file)));
 // Saving an address in a blocked area is refused up front, so the shopper
 // finds out before they have a cart full of things.
-const checkPincode = async postalCode => requireThat(!await db.blockedPincode.findUnique({ where: { pincode: postalCode } }), 400, `We are not delivering to PIN code ${postalCode} right now`);
 router.get('/addresses', customer, async (req, res) => res.json(await db.address.findMany({ where: { userId: req.actor.id } })));
 router.post('/addresses', customer, async (req, res) => {
   const data = addressSchema.parse(req.body);
-  await checkPincode(data.postalCode);
+  await assertDeliverable(db, data);
   res.status(201).json(await db.address.create({ data: { ...data, userId: req.actor.id } }));
 });
 router.put('/addresses/:id', customer, async (req, res) => {
   const data = addressSchema.parse(req.body);
-  await checkPincode(data.postalCode);
+  await assertDeliverable(db, data);
   const result = await db.address.updateMany({ where: { id: req.params.id, userId: req.actor.id }, data });
   requireThat(result.count, 404, 'Address not found'); res.json({ ok: true });
 });
@@ -410,6 +409,19 @@ router.post('/admin/blocked-pincodes', async (req, res) => {
 });
 router.delete('/admin/blocked-pincodes/:pincode', async (req, res) => {
   await db.blockedPincode.deleteMany({ where: { pincode: req.params.pincode } });
+  res.status(204).end();
+});
+// Whole areas/cities the shop won't deliver to -- for when it's not a single
+// PIN code but a neighbourhood that keeps costing returns. Matched on the
+// address's city, case-insensitively, so it's stored lower-cased.
+router.get('/admin/blocked-areas', async (req, res) => res.json(await db.blockedArea.findMany({ orderBy: { createdAt: 'desc' } })));
+router.post('/admin/blocked-areas', async (req, res) => {
+  const data = blockedAreaSchema.parse(req.body);
+  const name = data.name.toLowerCase();
+  res.status(201).json(await db.blockedArea.upsert({ where: { name }, update: { reason: data.reason ?? null }, create: { name, reason: data.reason ?? null } }));
+});
+router.delete('/admin/blocked-areas/:id', async (req, res) => {
+  await db.blockedArea.deleteMany({ where: { id: req.params.id } });
   res.status(204).end();
 });
 // Orders vs refunds per PIN code, so a block is a decision, not a guess.

@@ -61,7 +61,7 @@ function App() {
   // Packing and sales staff sign in on the same page and get their own few pages.
   const [staff, setStaff] = useState([]), [applications, setApplications] = useState([]), [notifications, setNotifications] = useState([]);
   const [toPack, setToPack] = useState([]), [packed, setPacked] = useState([]), [bellOpen, setBellOpen] = useState(false);
-  const [blockedPins, setBlockedPins] = useState([]), [pinStats, setPinStats] = useState([]), [deliveryRules, setDeliveryRules] = useState([]);
+  const [blockedPins, setBlockedPins] = useState([]), [pinStats, setPinStats] = useState([]), [deliveryRules, setDeliveryRules] = useState([]), [blockedAreas, setBlockedAreas] = useState([]);
   // The letterhead every invoice is printed with.
   const [settings, setSettings] = useState(null);
   const [customers, setCustomers] = useState([]);
@@ -123,7 +123,7 @@ function App() {
         const [v, r, b, cp, st, apps, notes, queue, pins, stats, rules, cfg, custs, rep, sls, hidden, revs, ins, tks] = await Promise.all([api('/admin/vendors'), api('/admin/refunds'), api('/admin/banners'), api('/admin/coupons'), api('/admin/staff'), api('/admin/seller-applications'), api('/notifications'), api('/packing/orders'), api('/admin/blocked-pincodes'), api('/admin/pincode-stats'), api('/admin/delivery-rules'), api('/admin/settings'), api('/admin/customers'), api(`/admin/reports?days=${reportsDays}`), api('/admin/sellers'), api('/admin/products?hidden=true'), api('/admin/reviews'), api('/admin/seller-insights'), api('/support/tickets')]);
         setVendors(v); setRefunds(r); setBanners(b); setCoupons(cp); setStaff(st); setApplications(apps); setNotifications(notes); setToPack(queue); setBlockedPins(pins); setPinStats(stats); setDeliveryRules(rules); setSettings(cfg);
         setCustomers(custs); setReports(rep); setSellers(sls); setHiddenProducts(hidden); setReviews(revs); setInsights(ins); setTickets(tks);
-        setPageConfig(await api('/admin/pages'));
+        setPageConfig(await api('/admin/pages')); setBlockedAreas(await api('/admin/blocked-areas'));
       }
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   }
@@ -367,6 +367,25 @@ function App() {
                 </tr>)}
               </tbody></table></div>
               {!blockedPins.length && <Empty text="No PIN code is blocked"/>}</section>
+            <section className="panel" style={{ marginTop: 22 }}><div className="panel-heading"><div><h2>Blocked areas <span className="count">{blockedAreas.length}</span></h2><p>Block a whole city/area by name. Nobody there can save an address or place an order — matched on the address's city.</p></div></div>
+              <div style={{ padding: '18px 22px' }}>
+                <form className="editor" style={{ marginBottom: 0 }} onSubmit={e => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); if (!f.name.trim()) return; e.target.reset(); action(() => api('/admin/blocked-areas', { method: 'POST', body: { name: f.name.trim(), reason: f.reason?.trim() || null } }), 'Area blocked'); }}>
+                  <div className="form-grid">
+                    <Field label="Area / city name" name="name" maxLength={80} placeholder="e.g. Sanjay Nagar" required/>
+                    <Field label="Reason (optional)" name="reason" maxLength={200} placeholder="Repeated fake returns"/>
+                  </div>
+                  <Button disabled={busy}>Block this area</Button>
+                </form>
+              </div>
+              <div className="table-scroll"><table><thead><tr><th>Area</th><th>Reason</th><th>Blocked on</th><th>Actions</th></tr></thead><tbody>
+                {blockedAreas.map(a => <tr key={a.id}>
+                  <td><strong style={{ textTransform: 'capitalize' }}>{a.name}</strong></td>
+                  <td>{a.reason || <span className="muted">—</span>}</td>
+                  <td><small>{new Date(a.createdAt).toLocaleDateString('en-IN')}</small></td>
+                  <td><div className="row-actions"><button className="danger-text" disabled={busy} onClick={() => action(() => api(`/admin/blocked-areas/${a.id}`, { method: 'DELETE' }), 'Area unblocked')}>Unblock</button></div></td>
+                </tr>)}
+              </tbody></table></div>
+              {!blockedAreas.length && <Empty text="No area is blocked"/>}</section>
             <section className="panel" style={{ marginTop: 22 }}><div className="panel-heading"><div><h2>Where returns come from</h2><p>Orders and refunds by PIN code — the most refunds first.</p></div></div>
               <div className="table-scroll"><table><thead><tr><th>PIN code</th><th>Orders</th><th>Refunds</th><th>Cancelled</th><th>Refund rate</th><th>Actions</th></tr></thead><tbody>
                 {pinStats.map(s => { const rate = s.orders ? Math.round((s.refunds / s.orders) * 100) : 0; const blocked = blockedPins.some(b => b.pincode === s.pincode); return <tr key={s.pincode}>
