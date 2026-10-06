@@ -634,20 +634,38 @@ function SupportProductsPage({ sellers, products, query, setQuery, busy, onHide,
     {!shown.length && <Empty text="No sellers"/>}
   </section>;
 }
-// The Pages screen: the admin switches each panel's pages on or off. A panel's
-// home page isn't listed, so a panel can never be left with nothing.
+// The Pages screen: each panel lists the pages it's showing, with a toggle to
+// take one off. "Add page" puts a previously removed page back onto a panel.
+// A panel's home page isn't listed, so a panel is never left with nothing.
+const PANEL_LABEL = { SELLER: 'Seller panel', PACKING: 'Packing panel', SALES: 'Sales panel', SUPPORT: 'Support panel' };
 function PagesPage({ config, busy, onSave }) {
-  const isOn = (panel, key) => !config.some(r => r.panel === panel && r.key === key && r.enabled === false);
-  const PANEL_LABEL = { SELLER: 'Seller panel', PACKING: 'Packing panel', SALES: 'Sales panel', SUPPORT: 'Support panel' };
-  const Toggle = ({ on, onChange }) => <button type="button" role="switch" aria-checked={on} className={`wm-toggle ${on ? 'on' : ''}`} disabled={busy} onClick={onChange}><span/></button>;
+  const [adding, setAdding] = useState(false);
+  const isHidden = (panel, key) => config.some(r => r.panel === panel && r.key === key && r.enabled === false);
+  const Toggle = ({ onChange }) => <button type="button" role="switch" aria-checked="true" className="wm-toggle on" disabled={busy} onClick={onChange}><span/></button>;
+  // Pages the admin has taken off a panel -- what "Add page" can put back.
+  const addable = [];
+  for (const [panel, pages] of Object.entries(PANEL_CATALOG)) for (const [key, label] of pages) if (isHidden(panel, key)) addable.push({ panel, key, label });
   return <section className="panel">
-    <div className="panel-heading"><div><h2>Pages</h2><p>Turn each panel's pages on or off. A panel's home page always stays. Changes apply the next time that panel loads.</p></div></div>
-    <div style={{ padding: '6px 24px 20px' }}>
-      {Object.entries(PANEL_CATALOG).map(([panel, pages]) => <div key={panel} className="pages-group">
-        <h3>{PANEL_LABEL[panel]}</h3>
-        {pages.map(([key, label]) => <div className="settle-row" key={key}><span>{label}</span><Toggle on={isOn(panel, key)} onChange={() => onSave([{ panel, key, enabled: !isOn(panel, key) }], () => {})}/></div>)}
-      </div>)}
+    <div className="panel-heading">
+      <div><h2>Pages</h2><p>The pages each panel is showing. Switch one off to take it off that panel; use Add page to put a removed page back. Changes apply the next time that panel loads.</p></div>
+      <Button onClick={() => setAdding(true)}><Plus size={17}/>Add page</Button>
     </div>
+    <div style={{ padding: '6px 24px 20px' }}>
+      {Object.entries(PANEL_CATALOG).map(([panel, pages]) => {
+        const active = pages.filter(([key]) => !isHidden(panel, key));
+        return <div key={panel} className="pages-group">
+          <h3>{PANEL_LABEL[panel]}</h3>
+          {active.length ? active.map(([key, label]) => <div className="settle-row" key={key}><span>{label}</span><Toggle onChange={() => onSave([{ panel, key, enabled: false }], () => {})}/></div>)
+            : <p className="muted" style={{ margin: '4px 0' }}>No optional pages right now — add one above.</p>}
+        </div>;
+      })}
+    </div>
+    {adding && <Modal title="Add a page to a panel" close={() => !busy && setAdding(false)}>
+      {addable.length ? <div className="editor">
+        <p className="muted" style={{ marginTop: 0 }}>Pick a page to put back on its panel.</p>
+        {addable.map(a => <div className="settle-row" key={`${a.panel}:${a.key}`}><span><strong>{a.label}</strong><small>{PANEL_LABEL[a.panel]}</small></span><Button secondary disabled={busy} onClick={() => onSave([{ panel: a.panel, key: a.key, enabled: true }], () => setAdding(false))}>Add</Button></div>)}
+      </div> : <p className="muted">Every page is already on its panel. Switch one off first, then you can add it back here.</p>}
+    </Modal>}
   </section>;
 }
 // The real settings: who you are, your password, and how the panel looks.
