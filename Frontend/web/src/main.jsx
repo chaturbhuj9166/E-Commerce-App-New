@@ -45,10 +45,11 @@ const ADMIN_PAGE_PANELS = ['SUPPORT', 'PACKING', 'SALES'];
 
 function App() {
   const [session, setSession] = useState(() => sessionStorage.getItem('ntsa-token'));
-  // Panel appearance, remembered on this device. Applied as data-theme on the
-  // root so the CSS dark overrides kick in.
-  const [theme, setTheme] = useState(() => { try { return localStorage.getItem('ntsa-theme') || 'light'; } catch { return 'light'; } });
-  useEffect(() => { try { document.documentElement.setAttribute('data-theme', theme); localStorage.setItem('ntsa-theme', theme); } catch {} }, [theme]);
+  // Panel appearance, remembered per role on this device (so turning the admin
+  // panel dark doesn't also darken the packing/sales/support workspaces someone
+  // signs into next). Applied as data-theme on the root for the CSS overrides.
+  const [theme, setTheme] = useState('light');
+  useEffect(() => { try { document.documentElement.setAttribute('data-theme', theme); } catch {} }, [theme]);
   const [me, setMe] = useState(null), [page, setPage] = useState('Overview'), [error, setError] = useState(''), [toast, setToast] = useState('');
   const [products, setProducts] = useState([]), [categories, setCategories] = useState([]), [orders, setOrders] = useState([]), [vendors, setVendors] = useState([]), [refunds, setRefunds] = useState([]);
   const [banners, setBanners] = useState([]), [coupons, setCoupons] = useState([]);
@@ -82,6 +83,11 @@ function App() {
     try { setReports(await api(`/admin/reports?days=${days}`)); } catch (e) { setError(e.message); } finally { setLoadingReports(false); }
   }
   const role = me?.role ?? 'ADMIN';
+  // Load this role's own saved theme once we know who's signed in, and persist
+  // only when the user actually changes it (so switching role never writes one
+  // role's choice onto another's key).
+  useEffect(() => { try { setTheme(localStorage.getItem(`ntsa-theme-${role}`) || 'light'); } catch {} }, [role]);
+  const changeTheme = v => { setTheme(v); try { localStorage.setItem(`ntsa-theme-${role}`, v); } catch {} };
   const isAdmin = role === 'ADMIN', isPacking = role === 'PACKING', isSales = role === 'SALES', isSupport = role === 'SUPPORT';
   const isStaff = isPacking || isSales || isSupport;
   const unread = notifications.filter(n => !n.readAt).length;
@@ -422,7 +428,7 @@ function App() {
             </tbody></table></div>
             {!staff.length && <Empty text="Add your first packing or sales login"/>}</section>}
           {page === 'Invoice' && <SettingsPage settings={settings} busy={busy} action={action}/>}
-          {page === 'Settings' && <AccountSettingsPage me={me} role={role} theme={theme} setTheme={setTheme} busy={busy} action={action} onPasswordChanged={token => { sessionStorage.setItem('ntsa-token', token); setSession(token); }} goStaff={() => go('Staff')}/>}
+          {page === 'Settings' && <AccountSettingsPage me={me} role={role} theme={theme} setTheme={changeTheme} busy={busy} action={action} onPasswordChanged={token => { sessionStorage.setItem('ntsa-token', token); setSession(token); }} goStaff={() => go('Staff')}/>}
         </>}
         <footer>NTSA <span>·</span> Shop smarter. Live better.<span className="footer-right">Your everyday commerce companion</span></footer>
       </main>
