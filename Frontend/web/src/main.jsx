@@ -391,7 +391,7 @@ function App() {
                 {pinStats.map(s => { const rate = s.orders ? Math.round((s.refunds / s.orders) * 100) : 0; const blocked = blockedPins.some(b => b.pincode === s.pincode); return <tr key={s.pincode}>
                   <td><strong>{s.pincode}</strong></td><td>{s.orders}</td><td>{s.refunds}</td><td>{s.cancelled}</td>
                   <td><Badge>{`${rate}%`}</Badge></td>
-                  <td><div className="row-actions">{blocked ? <span className="muted">Blocked</span> : <button disabled={busy} onClick={() => action(() => api('/admin/blocked-pincodes', { method: 'POST', body: { pincode: s.pincode, reason: `${rate}% of orders refunded` } }), 'PIN code blocked')}>Block</button>}</div></td>
+                  <td><div className="row-actions">{blocked ? <button className="danger-text" disabled={busy} onClick={() => action(() => api(`/admin/blocked-pincodes/${s.pincode}`, { method: 'DELETE' }), 'PIN code unblocked')}>Unblock</button> : <button disabled={busy} onClick={() => action(() => api('/admin/blocked-pincodes', { method: 'POST', body: { pincode: s.pincode, reason: `${rate}% of orders refunded` } }), 'PIN code blocked')}>Block</button>}</div></td>
                 </tr>; })}
               </tbody></table></div>
               {!pinStats.length && <Empty text="No orders yet"/>}</section>
