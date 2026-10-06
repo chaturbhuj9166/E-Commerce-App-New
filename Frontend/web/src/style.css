@@ -158,3 +158,14 @@
 [data-theme="dark"] .pages-group+.pages-group{border-top-color:#28344d}
 .verify-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;background:#fdecec;color:#c0392b}
 .verify-chip.ok{background:#e3f4ea;color:#1f8f54}
+.kebab{padding:5px 7px;border-radius:8px}
+.kebab:hover{background:#eef2f4}
+.kebab-menu{position:fixed;z-index:1200;background:#fff;border:1px solid #e5ebef;border-radius:11px;box-shadow:0 12px 34px #0b213a24;padding:6px;min-width:172px;display:flex;flex-direction:column}
+.kebab-menu button{text-align:left;background:none;border:0;padding:9px 12px;border-radius:7px;font:inherit;font-size:13px;color:#173442;cursor:pointer;white-space:nowrap}
+.kebab-menu button:hover{background:#f2f6f8}
+.kebab-menu button.danger-text{color:#c0392b}
+.kebab-menu button:disabled{opacity:.5;cursor:default}
+[data-theme="dark"] .kebab:hover{background:#1b2740}
+[data-theme="dark"] .kebab-menu{background:#141c30;border-color:#28344d}
+[data-theme="dark"] .kebab-menu button{color:#e6ebf2}
+[data-theme="dark"] .kebab-menu button:hover{background:#1b2740}
