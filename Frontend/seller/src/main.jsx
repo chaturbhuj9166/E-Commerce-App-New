@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LayoutDashboard, Package, ShoppingBag, LogOut, Plus, ArrowUpRight, ChevronRight, Check, Menu, ShieldCheck, Wallet, Store, Search, BadgeCheck, Truck, Image, X, Percent, PackageCheck, BarChart3, PieChart, LifeBuoy } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, LogOut, Plus, ArrowUpRight, ChevronRight, Check, Menu, ShieldCheck, Wallet, Store, Search, BadgeCheck, Truck, Image, X, Percent, PackageCheck, BarChart3, PieChart, LifeBuoy, Settings as SettingsIcon, Eye, EyeOff, TrendingUp } from 'lucide-react';
 import { api, money, paise, suggestCategory } from './api';
 import { Button, Field, PasswordField, Badge, Empty, Modal, Stat, ProductImage, CONDITION_LABEL } from './ui';
 import './style.css';
@@ -41,13 +41,14 @@ function App() {
   const [loading, setLoading] = useState(false), [modal, setModal] = useState(null), [query, setQuery] = useState(''), [mobileNav, setMobileNav] = useState(false);
   const [cancelOrderId, setCancelOrderId] = useState(null);
   const [holidayOpen, setHolidayOpen] = useState(false), [holidayDays, setHolidayDays] = useState(2);
+  const [orderView, setOrderView] = useState(null), [hiddenPages, setHiddenPages] = useState([]);
 
   function logout() { sessionStorage.removeItem('ntsa-token'); setSession(null); setMe(null); setModal(null); setError(''); }
   async function load() {
     setLoading(true);
     try {
-      const [account, p, o, s, c, pen, tks] = await Promise.all([api('/me'), api('/seller/products'), api('/seller/orders'), api('/seller/summary'), api('/categories'), api('/seller/penalties'), api('/seller/support')]);
-      setMe(account); setProducts(p); setOrders(o); setSummary(s); setCategories(c); setPenalties(pen); setTickets(tks);
+      const [account, p, o, s, c, pen, tks, pg] = await Promise.all([api('/me'), api('/seller/products'), api('/seller/orders'), api('/seller/summary'), api('/categories'), api('/seller/penalties'), api('/seller/support'), api('/panel/pages')]);
+      setMe(account); setProducts(p); setOrders(o); setSummary(s); setCategories(c); setPenalties(pen); setTickets(tks); setHiddenPages(pg.hidden || []);
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   }
   useEffect(() => { if (session) load(); }, [session]);
@@ -83,10 +84,20 @@ function App() {
   // A line needs packing once it's PLACED and this shop hasn't ticked it off
   // yet -- NTSA's own stock never shows up here, only ever the seller's own.
   const toPack = orders.filter(o => o.status === 'PLACED' && !o.packedAt);
-  const nav = [['Overview', LayoutDashboard], ['My products', Package], ['My orders', ShoppingBag], ['To pack', PackageCheck], ['Support', LifeBuoy]];
+  // Overview is always on; the admin can hide any of the rest from the Pages screen.
+  const allNav = [['Overview', LayoutDashboard, 'overview'], ['My products', Package, 'products'], ['My orders', ShoppingBag, 'orders'], ['To pack', PackageCheck, 'topack'], ['Support', LifeBuoy, 'support'], ['Settings', SettingsIcon, 'settings']];
+  const nav = allNav.filter(([, , key]) => key === 'overview' || !hiddenPages.includes(key));
   const openTickets = tickets.filter(t => t.status === 'OPEN').length;
   const shown = products.filter(p => `${p.name} ${p.category?.name}`.toLowerCase().includes(query.toLowerCase()));
+  // Units sold per product (cancelled lines left out), so the list can show
+  // what's moving and rank demand against the shop's best seller.
+  const soldByProduct = {};
+  for (const o of orders) if (o.status !== 'CANCELLED') soldByProduct[o.productId] = (soldByProduct[o.productId] || 0) + o.quantity;
+  const topSold = Math.max(1, ...Object.values(soldByProduct));
+  const demandOf = id => { const s = soldByProduct[id] || 0; if (!s) return null; return s >= topSold * 0.66 ? 'High' : s <= topSold * 0.33 ? 'Low' : 'Medium'; };
   function go(name) { setPage(name); setQuery(''); setMobileNav(false); }
+  // If the admin hides the page you're on, fall back to Overview.
+  useEffect(() => { if (!nav.some(([name]) => name === page)) setPage('Overview'); }, [hiddenPages]);
 
   return <div className="app-shell">
     <aside className={mobileNav ? 'sidebar open' : 'sidebar'}>
@@ -195,25 +206,29 @@ function App() {
               <div className="search"><Search size={17}/><input aria-label="Search products" placeholder="Search products or categories…" value={query} onChange={e => setQuery(e.target.value)}/></div>
             </div>
             <div className="table-scroll"><table>
-              <thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Returns</th><th>Actions</th></tr></thead>
-              <tbody>{shown.map(p => <tr key={p.id}>
+              <thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Sold · demand</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>{shown.map(p => { const sold = soldByProduct[p.id] || 0, demand = demandOf(p.id); return <tr key={p.id} className={p.active === false ? 'row-hidden' : ''}>
                 <td><div className="product-cell"><ProductImage product={p}/><div><strong>{p.name}</strong><small>{p.category?.name}{p.condition && p.condition !== 'NEW' ? ` · ${CONDITION_LABEL[p.condition]}` : ''}</small></div></div></td>
                 <td><strong>{money(p.pricePaise)}</strong>{p.mrpPaise ? <small>MRP {money(p.mrpPaise)}</small> : null}</td>
                 <td><Badge>{p.stock === 0 ? 'Out of stock' : `${p.stock} units`}</Badge></td>
-                <td>{p.refundWindowHours} hours<small>from {p.category?.name}</small></td>
+                <td>{sold ? <><strong>{sold} sold</strong>{demand && <span className={`demand-tag ${demand.toLowerCase()}`}><TrendingUp size={12}/>{demand}</span>}</> : <small className="muted">No sales yet</small>}</td>
+                <td><Badge>{p.active === false ? 'Disabled' : 'Active'}</Badge></td>
                 <td><div className="row-actions">
                   <button onClick={() => setModal({ data: p })}>Edit</button>
-                  <button disabled={busy} onClick={() => action(() => api(`/seller/products/${p.id}/duplicate`, { method: 'POST' }), `Copied “${p.name}” — it's hidden; edit it, then it shows`)}>Duplicate</button>
+                  {p.active === false
+                    ? <button disabled={busy} onClick={() => action(() => api(`/seller/products/${p.id}/visibility`, { method: 'POST', body: { active: true } }), `“${p.name}” is back on the shop`)}><Eye size={14}/>Show</button>
+                    : <button disabled={busy} onClick={() => action(() => api(`/seller/products/${p.id}/visibility`, { method: 'POST', body: { active: false } }), `“${p.name}” hidden from shoppers`)}><EyeOff size={14}/>Hide</button>}
+                  <button disabled={busy} onClick={() => action(() => api(`/seller/products/${p.id}/duplicate`, { method: 'POST' }), `Copied “${p.name}” — it's hidden; edit it, then show it`)}>Duplicate</button>
                   <button className="danger-text" onClick={() => action(() => api(`/seller/products/${p.id}`, { method: 'DELETE' }), 'Product removed')}>Remove</button>
                 </div></td>
-              </tr>)}</tbody>
+              </tr>; })}</tbody>
             </table></div>
             {!shown.length && <Empty text={products.length ? 'No products found' : 'Add the first thing you want to sell'}/>}
           </section>}
 
           {page === 'My orders' && <section className="panel">
-            <div className="panel-heading"><div><h2>My orders <span className="count">{orders.length}</span></h2><p>Every line a buyer has ordered from your shop. NTSA packs and delivers.</p></div><button className="text-button" onClick={load}>Refresh</button></div>
-            <OrderTable orders={orders} full onCancel={setCancelOrderId}/>
+            <div className="panel-heading"><div><h2>My orders <span className="count">{orders.length}</span></h2><p>Every line a buyer has ordered from your shop. Click one to track it. NTSA packs and delivers.</p></div><button className="text-button" onClick={load}>Refresh</button></div>
+            <OrderTable orders={orders} full onCancel={setCancelOrderId} onOpen={setOrderView}/>
           </section>}
 
           {page === 'To pack' && <section className="panel">
@@ -233,6 +248,7 @@ function App() {
             onRaise={(body, done) => action(async () => { await api('/seller/support', { method: 'POST', body }); done(); }, 'Sent to the NTSA team')}
             onReply={(t, body, done) => action(async () => { await api(`/seller/support/${t.id}/message`, { method: 'POST', body: { body } }); done(); })}
             onRate={(t, rating, feedback, done) => action(async () => { await api(`/seller/support/${t.id}/rate`, { method: 'POST', body: { rating, feedback } }); done(); }, 'Thanks for the feedback')}/>}
+          {page === 'Settings' && <SellerSettingsPage me={me} busy={busy} action={action} onHoliday={() => me?.onHoliday ? action(() => api('/seller/holiday', { method: 'POST', body: { onHoliday: false } }), 'Welcome back — your shop is live') : setHolidayOpen(true)} onPasswordChanged={() => logout()}/>}
         </>}
         <footer>NTSA <span>·</span> Seller panel<span className="footer-right">Your shop, your customers</span></footer>
       </main>
@@ -264,6 +280,9 @@ function App() {
         <Field label="How many days?" type="number" min="1" max="30" value={holidayDays} onChange={e => setHolidayDays(Math.max(1, Math.min(30, Number(e.target.value) || 1)))}/>
         <div style={{ display: 'flex', gap: 10 }}><Button secondary type="button" onClick={() => setHolidayOpen(false)}>Cancel</Button><Button disabled={busy}>Start holiday</Button></div>
       </form>
+    </Modal>}
+    {orderView && <Modal title={`Order #${orderView.orderId.slice(-8).toUpperCase()}`} close={() => setOrderView(null)}>
+      <SellerOrderDetail order={orderView}/>
     </Modal>}
   </div>;
 }
@@ -325,6 +344,46 @@ function SellerTicketThread({ ticket, busy, onReply, onRate }) {
       </form>}
   </div>;
 }
+// The seller's own settings: who they are, holiday mode, and their password.
+function SellerSettingsPage({ me, busy, action, onHoliday, onPasswordChanged }) {
+  const [error, setError] = useState('');
+  const verified = (ok, label) => <span className={`verify-chip ${ok ? 'ok' : ''}`}>{ok ? <Check size={12}/> : null}{label} {ok ? 'verified' : 'pending'}</span>;
+  return <>
+    <section className="panel" style={{ marginBottom: 22 }}>
+      <div className="panel-heading"><div><h2>Your shop</h2><p>The details NTSA has on file for your shop.</p></div></div>
+      <div style={{ padding: '18px 24px' }}>
+        <div className="settle-row"><span>Shop name</span><strong>{me?.shopName || '—'}</strong></div>
+        <div className="settle-row"><span>Owner</span><strong>{me?.ownerName || '—'}</strong></div>
+        <div className="settle-row"><span>Email</span><strong>{me?.email || '—'}</strong></div>
+        <div className="settle-row"><span>Phone</span><strong>{me?.phone || '—'}</strong></div>
+        <div className="settle-row"><span>NTSA commission</span><strong>{me?.commissionPercent ?? 0}%</strong></div>
+        <div className="settle-row"><span>Verification</span><span style={{ display: 'flex', gap: 8 }}>{verified(me?.gstVerified, 'GST')}{verified(me?.aadharVerified, 'Aadhaar')}</span></div>
+      </div>
+    </section>
+    <section className="panel" style={{ marginBottom: 22 }}>
+      <div className="panel-heading"><div><h2>Holiday mode</h2><p>Going away? Pause your shop — deliveries are quoted later and your products hide if you're gone over 3 days.</p></div></div>
+      <div style={{ padding: '18px 24px' }}>
+        <div className="settle-row"><span>Status</span><strong>{me?.onHoliday ? `On holiday${me.holidayDays ? ` (${me.holidayDays} days)` : ''}` : 'Live — open for orders'}</strong></div>
+        <Button secondary={!me?.onHoliday} onClick={onHoliday} disabled={busy} style={{ marginTop: 12 }}>{me?.onHoliday ? 'End holiday & go live' : 'Go on holiday'}</Button>
+      </div>
+    </section>
+    <section className="panel">
+      <div className="panel-heading"><div><h2>Change password</h2><p>Changing it signs you out of every other device.</p></div></div>
+      <form className="editor" style={{ padding: '18px 24px' }} onSubmit={e => {
+        e.preventDefault(); setError('');
+        const f = Object.fromEntries(new FormData(e.target));
+        if (f.newPassword !== f.confirm) { setError('The new passwords do not match'); return; }
+        action(async () => { await api('/me/password', { method: 'POST', body: { currentPassword: f.current, newPassword: f.newPassword } }); e.target.reset(); onPasswordChanged(); }, 'Password changed — please sign in again');
+      }}>
+        <PasswordField label="Current password" name="current" required autoComplete="current-password"/>
+        <PasswordField label="New password (min 8 characters)" name="newPassword" required minLength={8} autoComplete="new-password"/>
+        <PasswordField label="Confirm new password" name="confirm" required minLength={8} autoComplete="new-password"/>
+        {error && <div role="alert" className="alert">{error}</div>}
+        <Button disabled={busy}>Change password</Button>
+      </form>
+    </section>
+  </>;
+}
 // A dependency-free bar chart of the last 14 days' sales, drawn straight from
 // the seller's own order lines (gross value, cancelled lines left out). Kept as
 // inline SVG so the seller panel stays a tiny bundle with no chart library.
@@ -364,10 +423,10 @@ function StatusDonut({ orders }) {
     <div className="donut-legend">{entries.map(([st, n]) => <div key={st} className="legend-row"><span className="dot" style={{ background: COLORS[st] || '#9aa8b0' }}/>{st.charAt(0) + st.slice(1).toLowerCase().replace('_', ' ')}<strong>{n}</strong></div>)}</div>
   </div>;
 }
-function OrderTable({ orders, full, onCancel }) {
+function OrderTable({ orders, full, onCancel, onOpen }) {
   return orders.length ? <div className="table-scroll"><table>
-    <thead><tr><th>Item</th><th>Order</th>{full && <th>Customer</th>}<th>Qty</th><th>Order value</th>{full && <th>You earn</th>}<th>Status</th>{full && onCancel && <th>Actions</th>}</tr></thead>
-    <tbody>{orders.map(o => <tr key={o.id}>
+    <thead><tr><th>Item</th><th>Order</th>{full && <th>Customer</th>}<th>Qty</th><th>Order value</th>{full && <th>You earn</th>}<th>Status</th>{full && <th>Actions</th>}</tr></thead>
+    <tbody>{orders.map(o => <tr key={o.id} className={onOpen ? 'row-clickable' : ''} onClick={onOpen ? () => onOpen(o) : undefined}>
       <td><div className="product-cell">{o.image ? <img className="product-image" src={o.image} alt=""/> : <div className="product-image placeholder"><Package/></div>}<div><strong>{o.name}</strong>{(o.size || o.color) && <small>{[o.size, o.color].filter(Boolean).join(' · ')}</small>}</div></div></td>
       <td><strong>#{o.orderId.slice(-8).toUpperCase()}</strong><small>{full ? new Date(o.placedAt).toLocaleDateString('en-IN') : `${o.buyerName || o.buyer} · ${new Date(o.placedAt).toLocaleDateString('en-IN')}`}</small></td>
       {full && <td>{o.buyerName ? <><strong>{o.buyerName}</strong>{o.address && <small>{o.address.phone}<br/>{o.address.line1}, {o.address.city}, {o.address.state} {o.address.postalCode}</small>}</> : <span className="muted">—</span>}</td>}
@@ -375,9 +434,31 @@ function OrderTable({ orders, full, onCancel }) {
       <td>{money(o.grossPaise ?? o.unitPaise * o.quantity)}{full && <small>{money(o.unitPaise)} each</small>}</td>
       {full && <td>{money(o.netPaise)}<small>{money(o.commissionPaise)} commission ({o.commissionPercent}%)</small></td>}
       <td><Badge>{o.status}</Badge></td>
-      {full && onCancel && <td>{['PENDING_PAYMENT', 'PLACED'].includes(o.status) && <button className="danger-text" onClick={() => onCancel(o.orderId)}>Cancel order</button>}</td>}
+      {full && <td onClick={e => e.stopPropagation()}><div className="row-actions">{onOpen && <button onClick={() => onOpen(o)}>Track</button>}{onCancel && ['PENDING_PAYMENT', 'PLACED'].includes(o.status) && <button className="danger-text" onClick={() => onCancel(o.orderId)}>Cancel</button>}</div></td>}
     </tr>)}</tbody>
   </table></div> : <Empty text="Your first order will show up here"/>;
+}
+// The lifecycle a seller's order moves through, drawn as a vertical tracker
+// with the reached steps filled in. A cancelled order shows that instead.
+const ORDER_STEPS = [['PLACED', 'Order placed'], ['PACKED', 'Packed'], ['SHIPPED', 'Shipped'], ['OUT_FOR_DELIVERY', 'Out for delivery'], ['DELIVERED', 'Delivered']];
+function OrderTracker({ order }) {
+  const order_fmt = d => new Date(d).toLocaleString('en-IN');
+  if (order.status === 'CANCELLED') return <div className="order-track"><div className="track-step done cancelled"><span className="track-dot"/><div><strong>Order cancelled</strong><small>This order won't be packed or delivered.</small></div></div></div>;
+  const idx = ORDER_STEPS.findIndex(([s]) => s === order.status);
+  return <div className="order-track">{ORDER_STEPS.map(([s, label], i) => <div key={s} className={`track-step ${i <= idx ? 'done' : ''} ${i === idx ? 'current' : ''}`}>
+    <span className="track-dot">{i <= idx ? <Check size={12}/> : null}</span>
+    <div><strong>{label}</strong>{s === 'DELIVERED' && order.deliveredAt ? <small>{order_fmt(order.deliveredAt)}</small> : i === idx && s === 'PLACED' ? <small>{order_fmt(order.placedAt)}</small> : null}</div>
+  </div>)}</div>;
+}
+function SellerOrderDetail({ order }) {
+  return <div className="editor">
+    <div className="product-cell" style={{ marginBottom: 14 }}>{order.image ? <img className="product-image" src={order.image} alt=""/> : <div className="product-image placeholder"><Package/></div>}<div><strong>{order.name}</strong>{(order.size || order.color || order.grade) && <small>{[order.size, order.color, order.grade].filter(Boolean).join(' · ')}</small>}<small>Order #{order.orderId.slice(-8).toUpperCase()} · {order.quantity} pc</small></div></div>
+    {(order.deliveryPartner || order.expectedDeliveryAt) && order.status !== 'CANCELLED' && <p className="muted" style={{ marginTop: 0 }}>{order.deliveryPartner && <>Delivery partner: <strong>{order.deliveryPartner}</strong></>}{order.deliveryPartner && order.expectedDeliveryAt && ' · '}{order.expectedDeliveryAt && order.status !== 'DELIVERED' && <>Expected by <strong>{new Date(order.expectedDeliveryAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</strong></>}</p>}
+    <OrderTracker order={order}/>
+    <div className="settle-row"><span>Order value</span><strong>{money(order.grossPaise ?? order.unitPaise * order.quantity)}</strong></div>
+    <div className="settle-row"><span>NTSA commission ({order.commissionPercent}%)</span><strong>−{money(order.commissionPaise)}</strong></div>
+    <div className="settle-row"><span>You earn</span><strong>{money(order.netPaise)}</strong></div>
+  </div>;
 }
 
 function Login({ onLogin }) {

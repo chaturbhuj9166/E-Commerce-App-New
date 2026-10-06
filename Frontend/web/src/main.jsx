@@ -25,6 +25,17 @@ const DEFAULT_INVOICE_COLUMNS = [
   { key: 'rate', label: 'Rate', show: true },
   { key: 'amount', label: 'Amount', show: true },
 ];
+// Which pages the admin can switch on or off per panel, from the Pages screen.
+// A panel's first/home page isn't listed -- it always stays. The key is what's
+// stored; the label is what both the Pages screen and the panel's nav use.
+const PANEL_CATALOG = {
+  SELLER: [['products', 'My products'], ['orders', 'My orders'], ['topack', 'To pack'], ['support', 'Support'], ['settings', 'Settings']],
+  PACKING: [['packed', 'Packed']],
+  SALES: [['mysellers', 'My sellers']],
+  SUPPORT: [['sellerproducts', 'Seller products'], ['settings', 'Settings']],
+};
+// A staff nav label -> its stored page key (only the hideable ones).
+const NAV_KEY = { Packed: 'packed', 'My sellers': 'mysellers', 'Seller products': 'sellerproducts', Settings: 'settings' };
 
 function App() {
   const [session, setSession] = useState(() => sessionStorage.getItem('ntsa-token'));
@@ -54,6 +65,7 @@ function App() {
   const [sellers, setSellers] = useState([]);
   const [hiddenProducts, setHiddenProducts] = useState([]), [reviews, setReviews] = useState([]), [insights, setInsights] = useState([]);
   const [tickets, setTickets] = useState([]), [supportProducts, setSupportProducts] = useState([]);
+  const [hiddenPages, setHiddenPages] = useState([]), [pageConfig, setPageConfig] = useState([]);
   // Overview and Reports share the same revenue/order-mix figures, so one
   // load keeps them in sync instead of each page fetching its own copy.
   const [reports, setReports] = useState(null), [reportsDays, setReportsDays] = useState(30), [loadingReports, setLoadingReports] = useState(false);
@@ -69,6 +81,7 @@ function App() {
     setLoading(true);
     try {
       const account = await api('/me'); setMe(account);
+      if (['PACKING', 'SALES', 'SUPPORT'].includes(account.role)) setHiddenPages((await api('/panel/pages')).hidden || []);
       if (account.role === 'PACKING') {
         const [queue, done, notes] = await Promise.all([api('/packing/orders'), api('/packing/orders?status=PACKED'), api('/notifications')]);
         setToPack(queue); setPacked(done); setNotifications(notes);
@@ -91,6 +104,7 @@ function App() {
         const [v, r, b, cp, st, apps, notes, queue, pins, stats, rules, cfg, custs, rep, sls, hidden, revs, ins, tks] = await Promise.all([api('/admin/vendors'), api('/admin/refunds'), api('/admin/banners'), api('/admin/coupons'), api('/admin/staff'), api('/admin/seller-applications'), api('/notifications'), api('/packing/orders'), api('/admin/blocked-pincodes'), api('/admin/pincode-stats'), api('/admin/delivery-rules'), api('/admin/settings'), api('/admin/customers'), api(`/admin/reports?days=${reportsDays}`), api('/admin/sellers'), api('/admin/products?hidden=true'), api('/admin/reviews'), api('/admin/seller-insights'), api('/support/tickets')]);
         setVendors(v); setRefunds(r); setBanners(b); setCoupons(cp); setStaff(st); setApplications(apps); setNotifications(notes); setToPack(queue); setBlockedPins(pins); setPinStats(stats); setDeliveryRules(rules); setSettings(cfg);
         setCustomers(custs); setReports(rep); setSellers(sls); setHiddenProducts(hidden); setReviews(revs); setInsights(ins); setTickets(tks);
+        setPageConfig(await api('/admin/pages'));
       }
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   }
@@ -160,11 +174,15 @@ function App() {
     try { await fn(); setToast(message); await load(); } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
   if (!session) return <Login onLogin={(token, loginRole) => { sessionStorage.setItem('ntsa-token', token); setPage(loginRole === 'PACKING' ? 'To pack' : loginRole === 'SALES' ? 'Add seller' : loginRole === 'SUPPORT' ? 'Tickets' : 'Overview'); setSession(token); }}/ >;
-  const nav = isPacking ? [['To pack', ClipboardList], ['Packed', Check]]
+  const staffNav = isPacking ? [['To pack', ClipboardList], ['Packed', Check]]
     : isSales ? [['Add seller', UserPlus], ['My sellers', Store]]
     : isSupport ? [['Tickets', LifeBuoy], ['Seller products', Package], ['Settings', SettingsIcon]]
-    : isAdmin ? [['Overview', LayoutDashboard], ['Products', Package], ['Wholesale products', Store], ['Categories', Shapes], ['Orders', ShoppingBag], ['Customers', User], ['Reviews', Star], ['Vendors', Users], ['To pack', ClipboardList], ['Shipments', Truck], ['Banners', Image], ['Coupons', Tag], ['Reports', BarChart3], ['Sellers', BadgeCheck], ['Seller insights', TrendingUp], ['Product label', Stamp], ['Support', LifeBuoy], ['Refunds', RotateCcw], ['Delivery areas', MapPin], ['Staff', UserCog], ['Invoice', FileText], ['Settings', SettingsIcon]]
+    : null;
+  const nav = staffNav ? staffNav.filter(([label]) => { const k = NAV_KEY[label]; return !k || !hiddenPages.includes(k); })
+    : isAdmin ? [['Overview', LayoutDashboard], ['Products', Package], ['Wholesale products', Store], ['Categories', Shapes], ['Orders', ShoppingBag], ['Customers', User], ['Reviews', Star], ['Vendors', Users], ['To pack', ClipboardList], ['Shipments', Truck], ['Banners', Image], ['Coupons', Tag], ['Reports', BarChart3], ['Sellers', BadgeCheck], ['Seller insights', TrendingUp], ['Product label', Stamp], ['Support', LifeBuoy], ['Pages', FileText], ['Refunds', RotateCcw], ['Delivery areas', MapPin], ['Staff', UserCog], ['Invoice', FileText], ['Settings', SettingsIcon]]
     : [['Overview', LayoutDashboard], ['Wholesale catalog', Store], ['Orders', ShoppingBag], ['Messages', Paperclip]];
+  // If staff land on a page the admin has since hidden, fall back to the first.
+  useEffect(() => { if (staffNav && !nav.some(([name]) => name === page) && nav[0]) setPage(nav[0][0]); }, [hiddenPages]);
   const pendingApplications = applications.filter(a => a.status === 'PENDING').length;
   const shown = products.filter(p => `${p.name} ${p.category?.name} ${p.seller?.shopName || ''}`.toLowerCase().includes(query.toLowerCase()));
   const cartItems = products.filter(p => cart[p.id] > 0).map(p => ({ ...p, quantity: cart[p.id] }));
@@ -206,6 +224,7 @@ function App() {
           {isSupport && page === 'Seller products' && <SupportProductsPage products={supportProducts} query={query} setQuery={setQuery} busy={busy} onHide={p => action(() => api(`/support/products/${p.id}/hide`, { method: 'POST' }), `${p.name} hidden`)} onRestore={p => action(() => api(`/support/products/${p.id}/restore`, { method: 'POST' }), `${p.name} back on sale`)}/>}
           {page === 'Reviews' && <ReviewsPage reviews={reviews} query={query} setQuery={setQuery} busy={busy} onAdd={() => setModal({ type: 'AdminReview', data: null })} onRemove={r => setModal({ type: 'Delete', data: { path: `/admin/reviews/${r.id}`, name: `${r.authorName || r.user?.name || 'Customer'}'s review of ${r.product?.name}` } })}/>}
           {page === 'Shipments' && <ShipmentsPage orders={orders}/>}
+          {page === 'Pages' && <PagesPage config={pageConfig} busy={busy} onSave={(rows, done) => action(async () => { setPageConfig(await api('/admin/pages', { method: 'PUT', body: { pages: rows } })); done(); }, 'Page visibility saved')}/>}
           {page === 'Reports' && <ReportsPage reports={reports} reportsDays={reportsDays} setReportsDays={loadReports} loadingReports={loadingReports}/>}
           {['Products', 'Wholesale catalog'].includes(page) && <section className="panel"><div className="panel-heading"><h2>{isAdmin ? 'All products' : 'Available to order'} <span className="count">{products.length}</span></h2><div className="search"><Search size={17}/><input aria-label="Search products" placeholder="Search products or categories…" value={query} onChange={e => setQuery(e.target.value)}/></div></div>
           {isAdmin ? <div className="table-scroll"><table><thead><tr><th>Product</th><th>Seller</th><th>SKU</th><th>Retail / wholesale</th><th>Stock</th><th>Refund window</th><th>Actions</th></tr></thead><tbody>{shown.map(p => <tr key={p.id}><td><div className="product-cell"><ProductImage product={p}/><div><strong>{p.name}</strong><small>{p.category?.name}{p.deal ? ' · Deal of the day' : ''}{p.condition && p.condition !== 'NEW' ? ` · ${{ REFURBISHED: 'Refurbished', OPEN_BOX: 'Open box', USED: 'Used' }[p.condition]}` : ''}</small></div></div></td><td>{p.seller?.shopName ? <button className="text-button" style={{ display: 'inline' }} onClick={() => setQuery(p.seller.shopName)}>{p.seller.shopName}</button> : <small className="muted">NTSA</small>}</td><td>{p.sku ? <small>{p.sku}</small> : <small className="muted">—</small>}</td><td><strong>{money(p.pricePaise)}</strong><small>{money(p.wholesalePaise)} wholesale</small></td><td><Badge>{`${p.stock} units`}</Badge></td><td>{p.refundWindowHours} hours<small>from {p.category?.name}</small></td><td><div className="row-actions"><button onClick={() => setModal({ type: 'Products', data: p })}>Edit</button><button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/duplicate`, { method: 'POST' }), `Copied “${p.name}” — find it hidden, edit and restore`)}>Duplicate</button>{p.featuredRank > 0 ? <button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/feature`, { method: 'POST', body: { top: false } }), 'Placement reset')}>Unpin</button> : <button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/feature`, { method: 'POST', body: { top: true } }), `“${p.name}” moved to the top`)}>Move to top</button>}{p.seller?.shopName && <button onClick={() => setModal({ type: 'ReportProduct', data: p })}>Report to support</button>}<button className="danger-text" onClick={() => setModal({ type: 'Delete', data: { path: `/admin/products/${p.id}`, name: p.name } })}>Hide from shop</button></div></td></tr>)}</tbody></table></div> : <div className="catalog">{shown.map(p => <article className="product-card" key={p.id}><ProductImage product={p}/><small>{p.category?.name}</small><h3>{p.name}</h3><div><strong>{money(p.wholesalePaise)}</strong><del>{money(p.pricePaise)}</del></div><p>{p.stock} available · {p.refundWindowHours}h refund window</p><Field label="Order quantity" type="number" min="0" max={p.stock} value={cart[p.id] || 0} onChange={e => setCart({ ...cart, [p.id]: Math.max(0, Math.min(p.stock, Number(e.target.value))) })}/></article>)}</div>}{!shown.length && <Empty text="No products found"/>}</section>}
@@ -573,6 +592,22 @@ function SupportProductsPage({ products, query, setQuery, busy, onHide, onRestor
       </tbody>
     </table></div>
     {!shown.length && <Empty text="No products"/>}
+  </section>;
+}
+// The Pages screen: the admin switches each panel's pages on or off. A panel's
+// home page isn't listed, so a panel can never be left with nothing.
+function PagesPage({ config, busy, onSave }) {
+  const isOn = (panel, key) => !config.some(r => r.panel === panel && r.key === key && r.enabled === false);
+  const PANEL_LABEL = { SELLER: 'Seller panel', PACKING: 'Packing panel', SALES: 'Sales panel', SUPPORT: 'Support panel' };
+  const Toggle = ({ on, onChange }) => <button type="button" role="switch" aria-checked={on} className={`wm-toggle ${on ? 'on' : ''}`} disabled={busy} onClick={onChange}><span/></button>;
+  return <section className="panel">
+    <div className="panel-heading"><div><h2>Pages</h2><p>Turn each panel's pages on or off. A panel's home page always stays. Changes apply the next time that panel loads.</p></div></div>
+    <div style={{ padding: '6px 24px 20px' }}>
+      {Object.entries(PANEL_CATALOG).map(([panel, pages]) => <div key={panel} className="pages-group">
+        <h3>{PANEL_LABEL[panel]}</h3>
+        {pages.map(([key, label]) => <div className="settle-row" key={key}><span>{label}</span><Toggle on={isOn(panel, key)} onChange={() => onSave([{ panel, key, enabled: !isOn(panel, key) }], () => {})}/></div>)}
+      </div>)}
+    </div>
   </section>;
 }
 // The real settings: who you are, your password, and how the panel looks.

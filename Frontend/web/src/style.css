@@ -152,3 +152,7 @@
 .lightbox-nav:hover{background:rgba(255,255,255,.22)}
 .lightbox-nav.prev{left:18px}.lightbox-nav.next{right:18px}
 .lightbox-count{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);color:#fff;background:rgba(0,0,0,.4);padding:5px 14px;border-radius:20px;font-size:13px;font-weight:600}
+.pages-group{margin-top:8px}
+.pages-group+.pages-group{margin-top:22px;padding-top:14px;border-top:1px solid #edf1f3}
+.pages-group h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8b9aa3;margin:0 0 4px}
+[data-theme="dark"] .pages-group+.pages-group{border-top-color:#28344d}

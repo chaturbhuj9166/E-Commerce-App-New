@@ -6,7 +6,7 @@ import { randomInt } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { db, atomic } from './db.js';
 import { config } from './config.js';
-import { z, productSchema, addressSchema, vendorCreateSchema, vendorUpdateSchema, vendorPasswordSchema, vendorMessageSchema, bannerSchema, reviewSchema, adminReviewSchema, couponSchema, staffCreateSchema, staffUpdateSchema, sellerApplicationSchema, sellerApproveSchema, sellerUpdateSchema, blockedPincodeSchema, deliveryRuleSchema, settingsSchema, invoiceExtrasSchema } from './lib/validation.js';
+import { z, productSchema, addressSchema, vendorCreateSchema, vendorUpdateSchema, vendorPasswordSchema, vendorMessageSchema, bannerSchema, reviewSchema, adminReviewSchema, couponSchema, staffCreateSchema, staffUpdateSchema, sellerApplicationSchema, sellerApproveSchema, sellerUpdateSchema, blockedPincodeSchema, deliveryRuleSchema, settingsSchema, invoiceExtrasSchema, panelPagesSchema } from './lib/validation.js';
 import { requireThat, holidayGraceCutoff } from './lib/rules.js';
 import { variantFor, priceFor, publicSizePrices } from './lib/variants.js';
 import { auth, roles, tokenFor } from './services/auth.js';
@@ -626,6 +626,24 @@ router.post('/support/tickets/:id/reopen', support, async (req, res) => res.json
 router.get('/support/products', support, async (req, res) => res.json(await db.product.findMany({ where: { sellerId: { not: null } }, include: { category: { select: { name: true } }, seller: { select: { shopName: true, onHoliday: true, holidayStart: true, holidayDays: true } } }, orderBy: { createdAt: 'desc' }, take: 300 })));
 router.post('/support/products/:id/hide', support, async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: { active: false } })));
 router.post('/support/products/:id/restore', support, async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: { active: true } })));
+// ---------- Page visibility (the admin "Pages" screen) ----------
+// The admin turns each panel's pages on or off here. Only overrides are
+// stored; a page with no row is on. Every panel reads its own list to decide
+// which nav items to show.
+router.get('/admin/pages', roles('ADMIN'), async (req, res) => res.json(await db.panelPage.findMany()));
+router.put('/admin/pages', roles('ADMIN'), async (req, res) => {
+  const { pages } = panelPagesSchema.parse(req.body);
+  await db.$transaction(pages.map(p => db.panelPage.upsert({
+    where: { panel_key: { panel: p.panel, key: p.key } },
+    update: { enabled: p.enabled },
+    create: { panel: p.panel, key: p.key, enabled: p.enabled },
+  })));
+  res.json(await db.panelPage.findMany());
+});
+// The pages the caller's panel is allowed to show: the keys the admin has
+// turned off, so each panel can hide exactly those. ADMIN sees everything.
+router.get('/panel/pages', roles('SELLER', 'PACKING', 'SALES', 'SUPPORT'), async (req, res) =>
+  res.json({ hidden: (await db.panelPage.findMany({ where: { panel: req.actor.role, enabled: false } })).map(p => p.key) }));
 // A fresh copy to tweak -- same stock, a "(copy)" name, and hidden until the
 // admin is happy with it, so a near-identical listing is a click, not a retype.
 router.post('/admin/products/:id/duplicate', async (req, res) => {
@@ -849,9 +867,18 @@ router.patch('/admin/refunds/:id', async (req, res) => {
 // wholesale side.
 const seller = roles('SELLER');
 const sellerProductData = async (body, sellerId) => ({ ...await productData(body), sellerId });
+// All of this seller's products, hidden ones included, so they can show them
+// again from their own list.
 router.get('/seller/products', seller, async (req, res) => res.json(await db.product.findMany({
-  where: { sellerId: req.actor.id, active: true }, include: { category: true }, orderBy: { createdAt: 'desc' },
+  where: { sellerId: req.actor.id }, include: { category: true }, orderBy: { createdAt: 'desc' },
 })));
+// The seller takes their own product off the shop, or puts it back.
+router.post('/seller/products/:id/visibility', seller, async (req, res) => {
+  const { active } = z.object({ active: z.boolean() }).parse(req.body);
+  const changed = await db.product.updateMany({ where: { id: req.params.id, sellerId: req.actor.id }, data: { active } });
+  requireThat(changed.count === 1, 404, 'Product not found');
+  res.json(await db.product.findUnique({ where: { id: req.params.id }, include: { category: true } }));
+});
 router.post('/seller/products', seller, async (req, res) => res.status(201).json(await db.product.create({ data: await sellerProductData(req.body, req.actor.id) })));
 router.put('/seller/products/:id', seller, async (req, res) => {
   // updateMany scopes the write to this seller, so guessing another shop's
@@ -886,7 +913,7 @@ router.get('/seller/orders', seller, async (req, res) => {
   const commissionPercent = req.actor.account.commissionPercent;
   const items = await db.orderItem.findMany({
     where: { sellerId: req.actor.id },
-    include: { order: { select: { id: true, status: true, createdAt: true, paymentMethod: true, vendorId: true, address: true } }, product: { select: { images: true } } },
+    include: { order: { select: { id: true, status: true, createdAt: true, paymentMethod: true, vendorId: true, address: true, deliveryPartner: true, expectedDeliveryAt: true, deliveredAt: true } }, product: { select: { images: true } } },
     orderBy: { id: 'desc' }, take: 200,
   });
   res.json(items.map(({ order, product, ...item }) => {
@@ -894,6 +921,7 @@ router.get('/seller/orders', seller, async (req, res) => {
     const commissionPaise = Math.round(grossPaise * commissionPercent / 100);
     return { ...item, image: product.images[0] ?? null, orderId: order.id, status: order.status, placedAt: order.createdAt,
       buyerName: order.address?.name || null, buyer: order.vendorId ? 'Wholesale' : 'Customer', address: order.address || null,
+      deliveryPartner: order.deliveryPartner || null, expectedDeliveryAt: order.expectedDeliveryAt || null, deliveredAt: order.deliveredAt || null,
       grossPaise, commissionPercent, commissionPaise, netPaise: grossPaise - commissionPaise };
   }));
 });

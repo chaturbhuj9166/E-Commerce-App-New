@@ -537,3 +537,15 @@ model CartItem {
   @@id([userId, productId, size, color, grade])
   @@map("cart_items")
 }
+// Which nav pages each panel shows. The admin flips these from the "Pages"
+// screen; a panel hides any of its pages the admin has turned off. A missing
+// row means the page is on (the default), so only overrides are stored.
+model PanelPage {
+  id String @id @default(cuid())
+  panel String // SELLER | PACKING | SALES | SUPPORT
+  key String // the page's nav key, e.g. "products", "orders", "settings"
+  enabled Boolean @default(true)
+  updatedAt DateTime @updatedAt
+  @@unique([panel, key])
+  @@map("panel_pages")
+}

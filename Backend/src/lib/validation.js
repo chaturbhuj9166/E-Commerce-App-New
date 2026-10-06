@@ -217,3 +217,13 @@ export const settingsSchema = z.object({
 // The custom charge/discount lines on one order's bill. A negative amount is a
 // discount; the label is what prints.
 export const invoiceExtrasSchema = z.object({ extras: z.array(z.object({ label: z.string().trim().min(1).max(40), amountPaise: z.number().int().min(-10000000).max(10000000) })).max(12) });
+// The admin's page-visibility choices from the "Pages" screen: for each panel
+// page, whether it's shown. Only the pages the admin has an opinion on are
+// sent; everything else stays on by default.
+export const panelPagesSchema = z.object({
+  pages: z.array(z.object({
+    panel: z.enum(['SELLER', 'PACKING', 'SALES', 'SUPPORT']),
+    key: z.string().trim().min(1).max(40),
+    enabled: z.boolean(),
+  })).max(100),
+});
