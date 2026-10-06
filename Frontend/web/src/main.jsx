@@ -66,6 +66,7 @@ function App() {
   const [hiddenProducts, setHiddenProducts] = useState([]), [reviews, setReviews] = useState([]), [insights, setInsights] = useState([]);
   const [tickets, setTickets] = useState([]), [supportProducts, setSupportProducts] = useState([]);
   const [hiddenPages, setHiddenPages] = useState([]), [pageConfig, setPageConfig] = useState([]);
+  const [supportSellers, setSupportSellers] = useState([]);
   // Overview and Reports share the same revenue/order-mix figures, so one
   // load keeps them in sync instead of each page fetching its own copy.
   const [reports, setReports] = useState(null), [reportsDays, setReportsDays] = useState(30), [loadingReports, setLoadingReports] = useState(false);
@@ -93,8 +94,8 @@ function App() {
         return;
       }
       if (account.role === 'SUPPORT') {
-        const [tks, sp, notes] = await Promise.all([api('/support/tickets'), api('/support/products'), api('/notifications')]);
-        setTickets(tks); setSupportProducts(sp); setNotifications(notes);
+        const [tks, sp, sls, notes] = await Promise.all([api('/support/tickets'), api('/support/products'), api('/support/sellers'), api('/notifications')]);
+        setTickets(tks); setSupportProducts(sp); setSupportSellers(sls); setNotifications(notes);
         return;
       }
       const [p, c, o] = await Promise.all([api(account.role === 'ADMIN' ? '/admin/products?audience=RETAIL' : '/vendor/products'), api('/categories'), api('/orders')]);
@@ -221,7 +222,10 @@ function App() {
           {page === 'Seller insights' && <SellerInsightsPage insights={insights} query={query} setQuery={setQuery} openSellerDashboard={openSellerDashboard}/>}
           {page === 'Product label' && <ProductLabelPage sellers={sellers} settings={settings} query={query} setQuery={setQuery} busy={busy} onToggleSeller={(s, watermark) => action(() => api(`/admin/sellers/${s.id}`, { method: 'PATCH', body: { watermark } }), `${s.shopName}: logo ${watermark ? 'on' : 'off'}`)} onToggleOwn={watermark => action(() => api('/admin/settings', { method: 'PUT', body: { companyName: settings.companyName, companyAddress: settings.companyAddress || '', companyGSTIN: settings.companyGSTIN || null, companyPhone: settings.companyPhone || null, companyEmail: settings.companyEmail || null, logoUrl: settings.logoUrl || null, invoiceTerms: settings.invoiceTerms || null, invoiceBankDetails: settings.invoiceBankDetails || null, invoiceColumns: settings.invoiceColumns || null, watermarkOwn: watermark } }), `NTSA own stock: logo ${watermark ? 'on' : 'off'}`)}/>}
           {(page === 'Tickets' || page === 'Support') && <SupportTicketsPage tickets={tickets} query={query} setQuery={setQuery} busy={busy} onReply={(t, body, done) => action(async () => { await api(`/support/tickets/${t.id}/message`, { method: 'POST', body: { body } }); done(); })} onResolve={t => action(() => api(`/support/tickets/${t.id}/resolve`, { method: 'POST' }), 'Ticket resolved')} onReopen={t => action(() => api(`/support/tickets/${t.id}/reopen`, { method: 'POST' }), 'Ticket reopened')}/>}
-          {isSupport && page === 'Seller products' && <SupportProductsPage products={supportProducts} query={query} setQuery={setQuery} busy={busy} onHide={p => action(() => api(`/support/products/${p.id}/hide`, { method: 'POST' }), `${p.name} hidden`)} onRestore={p => action(() => api(`/support/products/${p.id}/restore`, { method: 'POST' }), `${p.name} back on sale`)}/>}
+          {isSupport && page === 'Seller products' && <SupportProductsPage sellers={supportSellers} products={supportProducts} query={query} setQuery={setQuery} busy={busy}
+            onHide={p => action(() => api(`/support/products/${p.id}/hide`, { method: 'POST' }), `${p.name} hidden`)}
+            onRestore={p => action(() => api(`/support/products/${p.id}/restore`, { method: 'POST' }), `${p.name} back on sale`)}
+            onFeature={(p, placement) => action(() => api(`/support/products/${p.id}/feature`, { method: 'POST', body: { placement } }), placement === 'top' ? `“${p.name}” moved to the top` : placement === 'bottom' ? `“${p.name}” moved to the bottom` : 'Placement cleared')}/>}
           {page === 'Reviews' && <ReviewsPage reviews={reviews} query={query} setQuery={setQuery} busy={busy} onAdd={() => setModal({ type: 'AdminReview', data: null })} onRemove={r => setModal({ type: 'Delete', data: { path: `/admin/reviews/${r.id}`, name: `${r.authorName || r.user?.name || 'Customer'}'s review of ${r.product?.name}` } })}/>}
           {page === 'Shipments' && <ShipmentsPage orders={orders}/>}
           {page === 'Pages' && <PagesPage config={pageConfig} busy={busy} onSave={(rows, done) => action(async () => { setPageConfig(await api('/admin/pages', { method: 'PUT', body: { pages: rows } })); done(); }, 'Page visibility saved')}/>}
@@ -571,27 +575,63 @@ function SupportThread({ ticket, busy, onReply, onResolve, onReopen }) {
 }
 // Support's view of seller products -- they can hide a reported product from
 // sale and restore it once the seller fixes it.
-function SupportProductsPage({ products, query, setQuery, busy, onHide, onRestore }) {
+// The support team's shop view: a directory of sellers with how to reach them,
+// then "See products" opens one seller's shelf where support can hide/restore
+// a product or place it (top, bottom, or normal).
+function SupportProductsPage({ sellers, products, query, setQuery, busy, onHide, onRestore, onFeature }) {
+  const [openId, setOpenId] = useState(null);
   const q = query.toLowerCase();
-  const shown = products.filter(p => p.name.toLowerCase().includes(q) || (p.seller?.shopName || '').toLowerCase().includes(q));
+  const open = sellers.find(s => s.id === openId);
+  if (open) {
+    const theirs = products.filter(p => p.seller && p.sellerId === open.id);
+    return <section className="panel">
+      <div className="panel-heading">
+        <div><button className="text-button" onClick={() => setOpenId(null)}>← All sellers</button><h2 style={{ marginTop: 6 }}>{open.shopName} <span className="count">{theirs.length}</span></h2><p>{open.ownerName} · {open.phone}{open.email ? ` · ${open.email}` : ''}</p></div>
+      </div>
+      <div className="table-scroll"><table>
+        <thead><tr><th>Product</th><th>Price</th><th>Placement</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          {theirs.map(p => <tr key={p.id}>
+            <td><div className="product-cell"><ProductImage product={p}/><div><strong>{p.name}</strong><small>{p.category?.name}</small></div></div></td>
+            <td>{money(p.pricePaise)}</td>
+            <td>{p.featuredRank > 0 ? <Badge>Top</Badge> : p.featuredRank < 0 ? <Badge>Bottom</Badge> : <small className="muted">Normal</small>}</td>
+            <td><Badge>{p.active === false ? 'Disabled' : 'Active'}</Badge></td>
+            <td><div className="row-actions">
+              {p.featuredRank > 0
+                ? <button disabled={busy} onClick={() => onFeature(p, 'none')}>Unpin</button>
+                : <button disabled={busy} onClick={() => onFeature(p, 'top')}>Move to top</button>}
+              {p.featuredRank < 0
+                ? <button disabled={busy} onClick={() => onFeature(p, 'none')}>Unbury</button>
+                : <button disabled={busy} onClick={() => onFeature(p, 'bottom')}>Move to bottom</button>}
+              {p.active === false
+                ? <button disabled={busy} onClick={() => onRestore(p)}>Show</button>
+                : <button className="danger-text" disabled={busy} onClick={() => onHide(p)}>Hide</button>}
+            </div></td>
+          </tr>)}
+        </tbody>
+      </table></div>
+      {!theirs.length && <Empty text="This seller has no products yet"/>}
+    </section>;
+  }
+  const shown = sellers.filter(s => s.shopName.toLowerCase().includes(q) || s.ownerName.toLowerCase().includes(q) || (s.phone || '').includes(q));
   return <section className="panel">
     <div className="panel-heading">
-      <div><h2>Seller products <span className="count">{products.length}</span></h2><p>Hide a product while a seller sorts out an issue, then restore it.</p></div>
-      <div className="search"><Search size={17}/><input aria-label="Search products" placeholder="Search products or shops…" value={query} onChange={e => setQuery(e.target.value)}/></div>
+      <div><h2>Sellers <span className="count">{sellers.length}</span></h2><p>Open a seller to manage their products — hide, restore, or change where they show.</p></div>
+      <div className="search"><Search size={17}/><input aria-label="Search sellers" placeholder="Search shop, owner or phone…" value={query} onChange={e => setQuery(e.target.value)}/></div>
     </div>
     <div className="table-scroll"><table>
-      <thead><tr><th>Product</th><th>Shop</th><th>Price</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Shop</th><th>Contact</th><th>Verification</th><th>Products</th><th></th></tr></thead>
       <tbody>
-        {shown.map(p => <tr key={p.id}>
-          <td><div className="product-cell"><ProductImage product={p}/><div><strong>{p.name}</strong><small>{p.category?.name}</small></div></div></td>
-          <td>{p.seller?.shopName || 'NTSA'}{p.seller?.onHoliday && <span className="holiday-tag">On holiday</span>}</td>
-          <td>{money(p.pricePaise)}</td>
-          <td><Badge>{p.active === false ? 'Disabled' : 'Active'}</Badge></td>
-          <td>{p.active === false ? <button className="text-button" disabled={busy} onClick={() => onRestore(p)}>Restore</button> : <button className="danger-text" disabled={busy} onClick={() => onHide(p)}>Hide</button>}</td>
+        {shown.map(s => <tr key={s.id}>
+          <td><strong>{s.shopName}</strong>{s.onHoliday && <span className="holiday-tag">On holiday</span>}<small>{s.ownerName}</small></td>
+          <td>{s.phone}{s.email && <small>{s.email}</small>}</td>
+          <td><span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><span className={`verify-chip ${s.gstVerified ? 'ok' : ''}`}>GST {s.gstVerified ? '✓' : '—'}</span><span className={`verify-chip ${s.aadharVerified ? 'ok' : ''}`}>Aadhaar {s.aadharVerified ? '✓' : '—'}</span></span></td>
+          <td>{s._count?.products ?? 0}</td>
+          <td><button disabled={busy} onClick={() => { setOpenId(s.id); setQuery(''); }}>See products</button></td>
         </tr>)}
       </tbody>
     </table></div>
-    {!shown.length && <Empty text="No products"/>}
+    {!shown.length && <Empty text="No sellers"/>}
   </section>;
 }
 // The Pages screen: the admin switches each panel's pages on or off. A panel's

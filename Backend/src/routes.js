@@ -626,6 +626,22 @@ router.post('/support/tickets/:id/reopen', support, async (req, res) => res.json
 router.get('/support/products', support, async (req, res) => res.json(await db.product.findMany({ where: { sellerId: { not: null } }, include: { category: { select: { name: true } }, seller: { select: { shopName: true, onHoliday: true, holidayStart: true, holidayDays: true } } }, orderBy: { createdAt: 'desc' }, take: 300 })));
 router.post('/support/products/:id/hide', support, async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: { active: false } })));
 router.post('/support/products/:id/restore', support, async (req, res) => res.json(await db.product.update({ where: { id: req.params.id }, data: { active: true } })));
+// The sellers the support team works with -- name, who to contact, and how
+// many products they have, so support can open one shop at a time.
+router.get('/support/sellers', support, async (req, res) => res.json(await db.seller.findMany({
+  where: { deleted: false },
+  select: { id: true, shopName: true, ownerName: true, email: true, phone: true, onHoliday: true, gstVerified: true, aadharVerified: true, _count: { select: { products: true } } },
+  orderBy: { shopName: 'asc' },
+})));
+// Support can also place a seller's product: pin it to the top of the shop,
+// push it to the bottom, or clear it back to normal order. Same featuredRank
+// the admin uses, so the two never fight over placement.
+router.post('/support/products/:id/feature', support, async (req, res) => {
+  const { placement } = z.object({ placement: z.enum(['top', 'bottom', 'none']) }).parse(req.body);
+  const agg = await db.product.aggregate({ _max: { featuredRank: true }, _min: { featuredRank: true } });
+  const rank = placement === 'top' ? (agg._max.featuredRank || 0) + 1 : placement === 'bottom' ? (agg._min.featuredRank || 0) - 1 : 0;
+  res.json(await db.product.update({ where: { id: req.params.id }, data: { featuredRank: rank }, include: { category: { select: { name: true } }, seller: { select: { shopName: true, onHoliday: true } } } }));
+});
 // ---------- Page visibility (the admin "Pages" screen) ----------
 // The admin turns each panel's pages on or off here. Only overrides are
 // stored; a page with no row is on. Every panel reads its own list to decide
