@@ -50,7 +50,7 @@ function App() {
   // signs into next). Applied as data-theme on the root for the CSS overrides.
   const [theme, setTheme] = useState('light');
   useEffect(() => { try { document.documentElement.setAttribute('data-theme', theme); } catch {} }, [theme]);
-  const [me, setMe] = useState(null), [page, setPage] = useState('Overview'), [error, setError] = useState(''), [toast, setToast] = useState('');
+  const [me, setMe] = useState(null), [page, setPage] = useState(() => { try { return sessionStorage.getItem('ntsa-page') || 'Overview'; } catch { return 'Overview'; } }), [error, setError] = useState(''), [toast, setToast] = useState('');
   const [products, setProducts] = useState([]), [categories, setCategories] = useState([]), [orders, setOrders] = useState([]), [vendors, setVendors] = useState([]), [refunds, setRefunds] = useState([]);
   const [banners, setBanners] = useState([]), [coupons, setCoupons] = useState([]);
   // Wholesale-only stock, added from its own page and never shown in the app.
@@ -92,7 +92,7 @@ function App() {
   const isAdmin = role === 'ADMIN', isPacking = role === 'PACKING', isSales = role === 'SALES', isSupport = role === 'SUPPORT';
   const isStaff = isPacking || isSales || isSupport;
   const unread = notifications.filter(n => !n.readAt).length;
-  function logout() { sessionStorage.removeItem('ntsa-token'); setSession(null); setMe(null); setCart({}); setModal(null); setError(''); }
+  function logout() { sessionStorage.removeItem('ntsa-token'); sessionStorage.removeItem('ntsa-page'); setSession(null); setMe(null); setCart({}); setModal(null); setError(''); }
   async function load() {
     setLoading(true);
     try {
@@ -200,7 +200,7 @@ function App() {
     if (busy) return; setBusy(true); setError('');
     try { await fn(); setToast(message); await load(); } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
-  if (!session) return <Login onLogin={(token, loginRole) => { sessionStorage.setItem('ntsa-token', token); setPage(loginRole === 'PACKING' ? 'To pack' : loginRole === 'SALES' ? 'Add seller' : loginRole === 'SUPPORT' ? 'Tickets' : 'Overview'); setSession(token); }}/ >;
+  if (!session) return <Login onLogin={(token, loginRole) => { sessionStorage.setItem('ntsa-token', token); const landing = loginRole === 'PACKING' ? 'To pack' : loginRole === 'SALES' ? 'Add seller' : loginRole === 'SUPPORT' ? 'Tickets' : 'Overview'; setPage(landing); try { sessionStorage.setItem('ntsa-page', landing); } catch {} setSession(token); }}/ >;
   const staffNav = isPacking ? [['To pack', ClipboardList], ['Packed', Check]]
     : isSales ? [['Add seller', UserPlus], ['My sellers', Store]]
     : isSupport ? [['Tickets', LifeBuoy], ['Seller products', Package], ['Settings', SettingsIcon]]
@@ -220,7 +220,7 @@ function App() {
   const cartItems = products.filter(p => cart[p.id] > 0).map(p => ({ ...p, quantity: cart[p.id] }));
   const cartTotal = cartItems.reduce((sum, p) => sum + p.wholesalePaise * p.quantity, 0);
   const next = { PLACED: 'PACKED', PACKED: 'SHIPPED', SHIPPED: 'OUT_FOR_DELIVERY' };
-  function go(name) { setPage(name); setQuery(''); setMobileNav(false); }
+  function go(name) { setPage(name); try { sessionStorage.setItem('ntsa-page', name); } catch {} setQuery(''); setMobileNav(false); }
   return <div className="app-shell">
     <aside className={mobileNav ? 'sidebar open' : 'sidebar'}><div className="brand"><img className="brand-logo" src="/ntsa_logo.png" alt="NTSA"/></div><div className="workspace-label">{isPacking ? 'PACKING WORKSPACE' : isSales ? 'SALES WORKSPACE' : isSupport ? 'SUPPORT WORKSPACE' : isAdmin ? 'COMMERCE WORKSPACE' : 'WHOLESALE WORKSPACE'}</div>
       <nav>{nav.map(([name, Icon]) => <button key={name} className={page === name ? 'nav-item active' : 'nav-item'} onClick={() => go(name)}><Icon size={19}/><span>{name}</span>{name === 'Orders' && <small>{reports?.summary?.orders ?? orders.length}</small>}{name === 'To pack' && toPack.length > 0 && <small>{toPack.length}</small>}{name === 'Sellers' && pendingApplications > 0 && <small>{pendingApplications}</small>}</button>)}</nav>

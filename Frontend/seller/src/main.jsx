@@ -35,7 +35,7 @@ function App() {
     }
     return sessionStorage.getItem('ntsa-token');
   });
-  const [me, setMe] = useState(null), [page, setPage] = useState('Overview'), [penalties, setPenalties] = useState([]), [tickets, setTickets] = useState([]);
+  const [me, setMe] = useState(null), [page, setPage] = useState(() => { try { return sessionStorage.getItem('ntsa-page') || 'Overview'; } catch { return 'Overview'; } }), [penalties, setPenalties] = useState([]), [tickets, setTickets] = useState([]);
   const [products, setProducts] = useState([]), [orders, setOrders] = useState([]), [summary, setSummary] = useState(null), [categories, setCategories] = useState([]);
   const [error, setError] = useState(''), [toast, setToast] = useState(''), [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false), [modal, setModal] = useState(null), [query, setQuery] = useState(''), [mobileNav, setMobileNav] = useState(false);
@@ -43,7 +43,7 @@ function App() {
   const [holidayOpen, setHolidayOpen] = useState(false), [holidayDays, setHolidayDays] = useState(2);
   const [orderView, setOrderView] = useState(null), [hiddenPages, setHiddenPages] = useState([]);
 
-  function logout() { sessionStorage.removeItem('ntsa-token'); setSession(null); setMe(null); setModal(null); setError(''); }
+  function logout() { sessionStorage.removeItem('ntsa-token'); sessionStorage.removeItem('ntsa-page'); setSession(null); setMe(null); setModal(null); setError(''); }
   async function load() {
     setLoading(true);
     try {
@@ -95,7 +95,7 @@ function App() {
   for (const o of orders) if (o.status !== 'CANCELLED') soldByProduct[o.productId] = (soldByProduct[o.productId] || 0) + o.quantity;
   const topSold = Math.max(1, ...Object.values(soldByProduct));
   const demandOf = id => { const s = soldByProduct[id] || 0; if (!s) return null; return s >= topSold * 0.66 ? 'High' : s <= topSold * 0.33 ? 'Low' : 'Medium'; };
-  function go(name) { setPage(name); setQuery(''); setMobileNav(false); }
+  function go(name) { setPage(name); try { sessionStorage.setItem('ntsa-page', name); } catch {} setQuery(''); setMobileNav(false); }
   // If the admin hides the page you're on, fall back to Overview.
   useEffect(() => { if (!nav.some(([name]) => name === page)) setPage('Overview'); }, [hiddenPages]);
 
