@@ -656,10 +656,37 @@ router.put('/admin/pages', roles('ADMIN'), async (req, res) => {
   })));
   res.json(await db.panelPage.findMany());
 });
-// The pages the caller's panel is allowed to show: the keys the admin has
-// turned off, so each panel can hide exactly those. ADMIN sees everything.
-router.get('/panel/pages', roles('SELLER', 'PACKING', 'SALES', 'SUPPORT'), async (req, res) =>
-  res.json({ hidden: (await db.panelPage.findMany({ where: { panel: req.actor.role, enabled: false } })).map(p => p.key) }));
+// What the caller's panel should show: the native pages the admin turned off
+// (`hidden`), and any admin pages the admin added to this panel (`adminPages`,
+// e.g. "orders"). Admin-page grants are stored as rows keyed "admin:<key>".
+router.get('/panel/pages', roles('SELLER', 'PACKING', 'SALES', 'SUPPORT'), async (req, res) => {
+  const rows = await db.panelPage.findMany({ where: { panel: req.actor.role } });
+  res.json({
+    hidden: rows.filter(r => !r.enabled && !r.key.startsWith('admin:')).map(r => r.key),
+    adminPages: rows.filter(r => r.enabled && r.key.startsWith('admin:')).map(r => r.key.slice(6)),
+  });
+});
+// Data for an admin page the admin has shared into a staff panel. The grant is
+// checked here, so a staff member only ever gets a page the admin turned on for
+// their panel. Read-only views -- actions on these pages stay admin-only.
+const SHAREABLE_ADMIN = {
+  orders: async () => (await db.order.findMany({ include: orderInclude, orderBy: { createdAt: 'desc' }, take: 200 })).map(publicOrder),
+  products: () => db.product.findMany({ where: { active: true, audience: { in: ['RETAIL', 'BOTH'] } }, include: { category: true, seller: { select: { shopName: true } } }, orderBy: [{ featuredRank: 'desc' }, { createdAt: 'desc' }] }),
+  customers: () => db.$queryRaw`
+    SELECT u.id, u.name, u.phone, u.email, u.blocked, u."createdAt",
+           COUNT(o.id) FILTER (WHERE o.status != 'CANCELLED')::int AS "orderCount",
+           COALESCE(SUM(o."totalPaise") FILTER (WHERE o.status != 'CANCELLED'), 0)::int AS "totalSpentPaise",
+           MAX(o."createdAt") AS "lastOrderAt"
+    FROM users u LEFT JOIN orders o ON o."userId" = u.id
+    GROUP BY u.id ORDER BY u."createdAt" DESC LIMIT 500`,
+};
+router.get('/panel/admin-data/:key', roles('PACKING', 'SALES', 'SUPPORT'), async (req, res) => {
+  const fn = SHAREABLE_ADMIN[req.params.key];
+  requireThat(fn, 404, 'Unknown page');
+  const grant = await db.panelPage.findUnique({ where: { panel_key: { panel: req.actor.role, key: `admin:${req.params.key}` } } });
+  requireThat(grant?.enabled, 403, 'This page is not enabled for your panel');
+  res.json(await fn());
+});
 // A fresh copy to tweak -- same stock, a "(copy)" name, and hidden until the
 // admin is happy with it, so a near-identical listing is a click, not a retype.
 router.post('/admin/products/:id/duplicate', async (req, res) => {

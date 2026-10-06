@@ -36,6 +36,11 @@ const PANEL_CATALOG = {
 };
 // A staff nav label -> its stored page key (only the hideable ones).
 const NAV_KEY = { Packed: 'packed', 'My sellers': 'mysellers', 'Seller products': 'sellerproducts', Settings: 'settings' };
+// Admin pages the admin can share into a staff panel (read-only views). Each is
+// [key, label, nav icon]; the panel loads its data from /panel/admin-data/<key>.
+const SHAREABLE_ADMIN_PAGES = [['orders', 'Orders', ShoppingBag], ['products', 'Products', Package], ['customers', 'Customers', User]];
+// Only staff panels can be given admin pages (the seller app can't render them).
+const ADMIN_PAGE_PANELS = ['SUPPORT', 'PACKING', 'SALES'];
 
 function App() {
   const [session, setSession] = useState(() => sessionStorage.getItem('ntsa-token'));
@@ -67,6 +72,7 @@ function App() {
   const [tickets, setTickets] = useState([]), [supportProducts, setSupportProducts] = useState([]);
   const [hiddenPages, setHiddenPages] = useState([]), [pageConfig, setPageConfig] = useState([]);
   const [supportSellers, setSupportSellers] = useState([]);
+  const [grantedAdminPages, setGrantedAdminPages] = useState([]);
   // Overview and Reports share the same revenue/order-mix figures, so one
   // load keeps them in sync instead of each page fetching its own copy.
   const [reports, setReports] = useState(null), [reportsDays, setReportsDays] = useState(30), [loadingReports, setLoadingReports] = useState(false);
@@ -76,13 +82,25 @@ function App() {
   }
   const role = me?.role ?? 'ADMIN';
   const isAdmin = role === 'ADMIN', isPacking = role === 'PACKING', isSales = role === 'SALES', isSupport = role === 'SUPPORT';
+  const isStaff = isPacking || isSales || isSupport;
   const unread = notifications.filter(n => !n.readAt).length;
   function logout() { sessionStorage.removeItem('ntsa-token'); setSession(null); setMe(null); setCart({}); setModal(null); setError(''); }
   async function load() {
     setLoading(true);
     try {
       const account = await api('/me'); setMe(account);
-      if (['PACKING', 'SALES', 'SUPPORT'].includes(account.role)) setHiddenPages((await api('/panel/pages')).hidden || []);
+      if (['PACKING', 'SALES', 'SUPPORT'].includes(account.role)) {
+        const pg = await api('/panel/pages');
+        setHiddenPages(pg.hidden || []); setGrantedAdminPages(pg.adminPages || []);
+        // Pull the data for each admin page the admin shared into this panel so
+        // the shared page renders the same as it does for the admin.
+        for (const key of (pg.adminPages || [])) {
+          try {
+            const data = await api(`/panel/admin-data/${key}`);
+            if (key === 'orders') setOrders(data); else if (key === 'products') setProducts(data); else if (key === 'customers') setCustomers(data);
+          } catch {}
+        }
+      }
       if (account.role === 'PACKING') {
         const [queue, done, notes] = await Promise.all([api('/packing/orders'), api('/packing/orders?status=PACKED'), api('/notifications')]);
         setToPack(queue); setPacked(done); setNotifications(notes);
@@ -179,7 +197,9 @@ function App() {
     : isSales ? [['Add seller', UserPlus], ['My sellers', Store]]
     : isSupport ? [['Tickets', LifeBuoy], ['Seller products', Package], ['Settings', SettingsIcon]]
     : null;
-  const nav = staffNav ? staffNav.filter(([label]) => { const k = NAV_KEY[label]; return !k || !hiddenPages.includes(k); })
+  // Admin pages the admin shared into this staff panel, added to its nav.
+  const staffAdminNav = staffNav ? grantedAdminPages.map(k => SHAREABLE_ADMIN_PAGES.find(p => p[0] === k)).filter(Boolean).map(([, label, Icon]) => [label, Icon]) : [];
+  const nav = staffNav ? [...staffNav, ...staffAdminNav].filter(([label]) => { const k = NAV_KEY[label]; return !k || !hiddenPages.includes(k); })
     : isAdmin ? [['Overview', LayoutDashboard], ['Products', Package], ['Wholesale products', Store], ['Categories', Shapes], ['Orders', ShoppingBag], ['Customers', User], ['Reviews', Star], ['Vendors', Users], ['To pack', ClipboardList], ['Shipments', Truck], ['Banners', Image], ['Coupons', Tag], ['Reports', BarChart3], ['Sellers', BadgeCheck], ['Seller insights', TrendingUp], ['Product label', Stamp], ['Support', LifeBuoy], ['Pages', FileText], ['Refunds', RotateCcw], ['Delivery areas', MapPin], ['Staff', UserCog], ['Invoice', FileText], ['Settings', SettingsIcon]]
     : [['Overview', LayoutDashboard], ['Wholesale catalog', Store], ['Orders', ShoppingBag], ['Messages', Paperclip]];
   // If staff land on a page the admin has since hidden, fall back to the first.
@@ -231,7 +251,7 @@ function App() {
           {page === 'Pages' && <PagesPage config={pageConfig} busy={busy} onSave={(rows, done) => action(async () => { setPageConfig(await api('/admin/pages', { method: 'PUT', body: { pages: rows } })); done(); }, 'Page visibility saved')}/>}
           {page === 'Reports' && <ReportsPage reports={reports} reportsDays={reportsDays} setReportsDays={loadReports} loadingReports={loadingReports}/>}
           {['Products', 'Wholesale catalog'].includes(page) && <section className="panel"><div className="panel-heading"><h2>{isAdmin ? 'All products' : 'Available to order'} <span className="count">{products.length}</span></h2><div className="search"><Search size={17}/><input aria-label="Search products" placeholder="Search products or categories…" value={query} onChange={e => setQuery(e.target.value)}/></div></div>
-          {isAdmin ? <div className="table-scroll"><table><thead><tr><th>Product</th><th>Seller</th><th>SKU</th><th>Retail / wholesale</th><th>Stock</th><th>Refund window</th><th>Actions</th></tr></thead><tbody>{shown.map(p => <tr key={p.id}><td><div className="product-cell"><ProductImage product={p}/><div><strong>{p.name}</strong><small>{p.category?.name}{p.deal ? ' · Deal of the day' : ''}{p.condition && p.condition !== 'NEW' ? ` · ${{ REFURBISHED: 'Refurbished', OPEN_BOX: 'Open box', USED: 'Used' }[p.condition]}` : ''}</small></div></div></td><td>{p.seller?.shopName ? <button className="text-button" style={{ display: 'inline' }} onClick={() => setQuery(p.seller.shopName)}>{p.seller.shopName}</button> : <small className="muted">NTSA</small>}</td><td>{p.sku ? <small>{p.sku}</small> : <small className="muted">—</small>}</td><td><strong>{money(p.pricePaise)}</strong><small>{money(p.wholesalePaise)} wholesale</small></td><td><Badge>{`${p.stock} units`}</Badge></td><td>{p.refundWindowHours} hours<small>from {p.category?.name}</small></td><td><div className="row-actions"><button onClick={() => setModal({ type: 'Products', data: p })}>Edit</button><button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/duplicate`, { method: 'POST' }), `Copied “${p.name}” — find it hidden, edit and restore`)}>Duplicate</button>{p.featuredRank > 0 ? <button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/feature`, { method: 'POST', body: { top: false } }), 'Placement reset')}>Unpin</button> : <button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/feature`, { method: 'POST', body: { top: true } }), `“${p.name}” moved to the top`)}>Move to top</button>}{p.seller?.shopName && <button onClick={() => setModal({ type: 'ReportProduct', data: p })}>Report to support</button>}<button className="danger-text" onClick={() => setModal({ type: 'Delete', data: { path: `/admin/products/${p.id}`, name: p.name } })}>Hide from shop</button></div></td></tr>)}</tbody></table></div> : <div className="catalog">{shown.map(p => <article className="product-card" key={p.id}><ProductImage product={p}/><small>{p.category?.name}</small><h3>{p.name}</h3><div><strong>{money(p.wholesalePaise)}</strong><del>{money(p.pricePaise)}</del></div><p>{p.stock} available · {p.refundWindowHours}h refund window</p><Field label="Order quantity" type="number" min="0" max={p.stock} value={cart[p.id] || 0} onChange={e => setCart({ ...cart, [p.id]: Math.max(0, Math.min(p.stock, Number(e.target.value))) })}/></article>)}</div>}{!shown.length && <Empty text="No products found"/>}</section>}
+          {isAdmin ? <div className="table-scroll"><table><thead><tr><th>Product</th><th>Seller</th><th>SKU</th><th>Retail / wholesale</th><th>Stock</th><th>Refund window</th><th>Actions</th></tr></thead><tbody>{shown.map(p => <tr key={p.id}><td><div className="product-cell"><ProductImage product={p}/><div><strong>{p.name}</strong><small>{p.category?.name}{p.deal ? ' · Deal of the day' : ''}{p.condition && p.condition !== 'NEW' ? ` · ${{ REFURBISHED: 'Refurbished', OPEN_BOX: 'Open box', USED: 'Used' }[p.condition]}` : ''}</small></div></div></td><td>{p.seller?.shopName ? <button className="text-button" style={{ display: 'inline' }} onClick={() => setQuery(p.seller.shopName)}>{p.seller.shopName}</button> : <small className="muted">NTSA</small>}</td><td>{p.sku ? <small>{p.sku}</small> : <small className="muted">—</small>}</td><td><strong>{money(p.pricePaise)}</strong><small>{money(p.wholesalePaise)} wholesale</small></td><td><Badge>{`${p.stock} units`}</Badge></td><td>{p.refundWindowHours} hours<small>from {p.category?.name}</small></td><td><div className="row-actions"><button onClick={() => setModal({ type: 'Products', data: p })}>Edit</button><button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/duplicate`, { method: 'POST' }), `Copied “${p.name}” — find it hidden, edit and restore`)}>Duplicate</button>{p.featuredRank > 0 ? <button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/feature`, { method: 'POST', body: { top: false } }), 'Placement reset')}>Unpin</button> : <button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/feature`, { method: 'POST', body: { top: true } }), `“${p.name}” moved to the top`)}>Move to top</button>}{p.seller?.shopName && <button onClick={() => setModal({ type: 'ReportProduct', data: p })}>Report to support</button>}<button className="danger-text" onClick={() => setModal({ type: 'Delete', data: { path: `/admin/products/${p.id}`, name: p.name } })}>Hide from shop</button></div></td></tr>)}</tbody></table></div> : isStaff ? <div className="table-scroll"><table><thead><tr><th>Product</th><th>Seller</th><th>Price</th><th>Stock</th><th>Category</th></tr></thead><tbody>{shown.map(p => <tr key={p.id}><td><div className="product-cell"><ProductImage product={p}/><div><strong>{p.name}</strong><small>{p.category?.name}{p.condition && p.condition !== 'NEW' ? ` · ${{ REFURBISHED: 'Refurbished', OPEN_BOX: 'Open box', USED: 'Used' }[p.condition]}` : ''}</small></div></div></td><td>{p.seller?.shopName || <small className="muted">NTSA</small>}</td><td>{money(p.pricePaise)}</td><td><Badge>{`${p.stock} units`}</Badge></td><td>{p.category?.name}</td></tr>)}</tbody></table></div> : <div className="catalog">{shown.map(p => <article className="product-card" key={p.id}><ProductImage product={p}/><small>{p.category?.name}</small><h3>{p.name}</h3><div><strong>{money(p.wholesalePaise)}</strong><del>{money(p.pricePaise)}</del></div><p>{p.stock} available · {p.refundWindowHours}h refund window</p><Field label="Order quantity" type="number" min="0" max={p.stock} value={cart[p.id] || 0} onChange={e => setCart({ ...cart, [p.id]: Math.max(0, Math.min(p.stock, Number(e.target.value))) })}/></article>)}</div>}{!shown.length && <Empty text="No products found"/>}</section>}
           {isAdmin && page === 'Products' && hiddenProducts.length > 0 && <section className="panel" style={{ marginTop: 22 }}><div className="panel-heading"><div><h2>Hidden from the shop <span className="count">{hiddenProducts.length}</span></h2><p>Taken off the app by the admin or the seller. Restore one to put it back on sale.</p></div></div><div className="table-scroll"><table><thead><tr><th>Product</th><th>Seller</th><th>Price</th><th>Stock</th><th>Actions</th></tr></thead><tbody>{hiddenProducts.map(p => <tr key={p.id}><td><div className="product-cell"><ProductImage product={p}/><div><strong>{p.name}</strong><small>{p.category?.name}</small></div></div></td><td>{p.seller?.shopName || <small className="muted">NTSA</small>}</td><td>{money(p.pricePaise)}</td><td>{p.stock} units</td><td><div className="row-actions"><button disabled={busy} onClick={() => action(() => api(`/admin/products/${p.id}/restore`, { method: 'POST' }), `${p.name} is back on sale`)}>Restore</button></div></td></tr>)}</tbody></table></div></section>}
           {page === 'Wholesale products' && <WholesaleProductsPage products={wholesaleProducts} query={query} setQuery={setQuery}
             onEdit={p => setModal({ type: 'Wholesale products', data: p })}
@@ -640,31 +660,42 @@ function SupportProductsPage({ sellers, products, query, setQuery, busy, onHide,
 const PANEL_LABEL = { SELLER: 'Seller panel', PACKING: 'Packing panel', SALES: 'Sales panel', SUPPORT: 'Support panel' };
 function PagesPage({ config, busy, onSave }) {
   const [adding, setAdding] = useState(false);
+  const [addPanel, setAddPanel] = useState('SUPPORT');
   const isHidden = (panel, key) => config.some(r => r.panel === panel && r.key === key && r.enabled === false);
+  const adminGranted = (panel, key) => config.some(r => r.panel === panel && r.key === `admin:${key}` && r.enabled === true);
   const Toggle = ({ onChange }) => <button type="button" role="switch" aria-checked="true" className="wm-toggle on" disabled={busy} onClick={onChange}><span/></button>;
-  // Pages the admin has taken off a panel -- what "Add page" can put back.
-  const addable = [];
-  for (const [panel, pages] of Object.entries(PANEL_CATALOG)) for (const [key, label] of pages) if (isHidden(panel, key)) addable.push({ panel, key, label });
+  // The pages a given panel can still be given: its own removed pages, plus any
+  // admin pages not yet shared into it (staff panels only).
+  const addableFor = panel => [
+    ...PANEL_CATALOG[panel].filter(([key]) => isHidden(panel, key)).map(([key, label]) => ({ key, label, admin: false })),
+    ...(ADMIN_PAGE_PANELS.includes(panel) ? SHAREABLE_ADMIN_PAGES.filter(([k]) => !adminGranted(panel, k)).map(([k, label]) => ({ key: `admin:${k}`, label: `${label} (admin page)`, admin: true })) : []),
+  ];
   return <section className="panel">
     <div className="panel-heading">
-      <div><h2>Pages</h2><p>The pages each panel is showing. Switch one off to take it off that panel; use Add page to put a removed page back. Changes apply the next time that panel loads.</p></div>
+      <div><h2>Pages</h2><p>The pages each panel is showing. Switch one off to take it off that panel; use Add page to put a page back or share an admin page into a staff panel. Changes apply the next time that panel loads.</p></div>
       <Button onClick={() => setAdding(true)}><Plus size={17}/>Add page</Button>
     </div>
     <div style={{ padding: '6px 24px 20px' }}>
       {Object.entries(PANEL_CATALOG).map(([panel, pages]) => {
-        const active = pages.filter(([key]) => !isHidden(panel, key));
+        const active = [
+          ...pages.filter(([key]) => !isHidden(panel, key)).map(([key, label]) => ({ key, label, admin: false })),
+          ...(ADMIN_PAGE_PANELS.includes(panel) ? SHAREABLE_ADMIN_PAGES.filter(([k]) => adminGranted(panel, k)).map(([k, label]) => ({ key: `admin:${k}`, label: `${label} (admin page)`, admin: true })) : []),
+        ];
         return <div key={panel} className="pages-group">
           <h3>{PANEL_LABEL[panel]}</h3>
-          {active.length ? active.map(([key, label]) => <div className="settle-row" key={key}><span>{label}</span><Toggle onChange={() => onSave([{ panel, key, enabled: false }], () => {})}/></div>)
-            : <p className="muted" style={{ margin: '4px 0' }}>No optional pages right now — add one above.</p>}
+          {active.map(a => <div className="settle-row" key={a.key}><span>{a.label}</span><Toggle onChange={() => onSave([{ panel, key: a.key, enabled: false }], () => {})}/></div>)}
+          {!active.length && <p className="muted" style={{ margin: '4px 0' }}>No optional pages right now — add one above.</p>}
         </div>;
       })}
     </div>
     {adding && <Modal title="Add a page to a panel" close={() => !busy && setAdding(false)}>
-      {addable.length ? <div className="editor">
-        <p className="muted" style={{ marginTop: 0 }}>Pick a page to put back on its panel.</p>
-        {addable.map(a => <div className="settle-row" key={`${a.panel}:${a.key}`}><span><strong>{a.label}</strong><small>{PANEL_LABEL[a.panel]}</small></span><Button secondary disabled={busy} onClick={() => onSave([{ panel: a.panel, key: a.key, enabled: true }], () => setAdding(false))}>Add</Button></div>)}
-      </div> : <p className="muted">Every page is already on its panel. Switch one off first, then you can add it back here.</p>}
+      <div className="editor">
+        <Field label="Which panel?"><select value={addPanel} onChange={e => setAddPanel(e.target.value)}>{Object.keys(PANEL_CATALOG).map(p => <option key={p} value={p}>{PANEL_LABEL[p]}</option>)}</select></Field>
+        {addableFor(addPanel).length ? <>
+          <p className="muted">Pick a page to add to {PANEL_LABEL[addPanel]}.</p>
+          {addableFor(addPanel).map(a => <div className="settle-row" key={a.key}><span>{a.label}</span><Button secondary disabled={busy} onClick={() => onSave([{ panel: addPanel, key: a.key, enabled: true }], () => setAdding(false))}>Add</Button></div>)}
+        </> : <p className="muted">Every available page is already on this panel.</p>}
+      </div>
     </Modal>}
   </section>;
 }
