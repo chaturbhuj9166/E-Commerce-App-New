@@ -60,54 +60,81 @@ class _WholesaleHomeScreenState extends State<WholesaleHomeScreen> {
                 ],
               )
             : Text(_titles[_index]),
-        actions: [
-          Stack(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.shopping_cart_outlined),
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WholesaleCartScreen())),
-              ),
-              if (vendor.cartCount > 0)
-                Positioned(
-                  right: 6,
-                  top: 6,
-                  child: Container(
-                    padding: const EdgeInsets.all(3),
-                    decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
-                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                    child: Text('${vendor.cartCount}', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-            ],
-          ),
-        ],
       ),
       body: IndexedStack(key: ValueKey(isDark), index: _index, children: _tabs),
       bottomNavigationBar: DecoratedBox(
         decoration: BoxDecoration(color: AppColors.surface, border: Border(top: BorderSide(color: AppColors.border))),
         child: SafeArea(
           child: SizedBox(
-            height: 62,
+            height: 66,
+            // Cart sits in the middle, bigger than the rest -- Home, Categories,
+            // [Cart], Messages, Settings.
             child: Row(
-              children: List.generate(_items.length, (i) {
-                final selected = i == _index;
-                final (icon, label) = _items[i];
-                final color = selected ? AppColors.orange : AppColors.textMuted;
-                return Expanded(
-                  child: InkWell(
-                    onTap: () => setState(() => _index = i),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(icon, color: color, size: 23),
-                        const SizedBox(height: 3),
-                        Text(label, style: TextStyle(fontSize: 10.5, color: color, fontWeight: selected ? FontWeight.w600 : FontWeight.w400)),
-                      ],
-                    ),
-                  ),
-                );
-              }),
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _navItem(0),
+                _navItem(1),
+                _cartButton(vendor),
+                _navItem(2),
+                _navItem(3),
+              ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _navItem(int i) {
+    final selected = i == _index;
+    final (icon, label) = _items[i];
+    final color = selected ? AppColors.orange : AppColors.textMuted;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _index = i),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 23),
+            const SizedBox(height: 3),
+            Text(label, style: TextStyle(fontSize: 10.5, color: color, fontWeight: selected ? FontWeight.w600 : FontWeight.w400)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cartButton(VendorProvider vendor) {
+    return Expanded(
+      child: InkWell(
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WholesaleCartScreen())),
+        child: Center(
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: AppColors.orange,
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: AppColors.orange.withOpacity(0.35), blurRadius: 10, offset: const Offset(0, 3))],
+                ),
+                child: const Icon(Icons.shopping_cart_rounded, color: Colors.white, size: 27),
+              ),
+              if (vendor.cartCount > 0)
+                Positioned(
+                  right: -4,
+                  top: -4,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(color: AppColors.danger, shape: BoxShape.circle, border: Border.all(color: AppColors.surface, width: 1.5)),
+                    constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                    child: Text('${vendor.cartCount}', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
