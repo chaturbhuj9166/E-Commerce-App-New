@@ -101,10 +101,16 @@ class ShopProvider extends ChangeNotifier {
     }
   }
 
-  Future<List<Product>> searchProducts(String query, {String? categoryId}) async {
+  // `minPrice`/`maxPrice` are in rupees (the backend multiplies by 100); `sort`
+  // is one of the storefront sorts, e.g. 'price_asc' or 'rating'. The shopping
+  // assistant uses these to turn "shoes under 1000" into a real filtered query.
+  Future<List<Product>> searchProducts(String query, {String? categoryId, int? minPrice, int? maxPrice, String? sort}) async {
     final data = await ApiClient.instance.get('/products', query: {
       if (query.isNotEmpty) 'search': query.length > 100 ? query.substring(0, 100) : query,
       'categoryId': ?categoryId,
+      'minPrice': ?minPrice?.toString(),
+      'maxPrice': ?maxPrice?.toString(),
+      'sort': ?sort,
     });
     return (data as List).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
   }

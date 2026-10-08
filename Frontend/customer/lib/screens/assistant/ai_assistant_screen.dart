@@ -33,7 +33,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   final _controller = TextEditingController();
   final _scroll = ScrollController();
   final List<_ChatMessage> _messages = [
-    _ChatMessage.bot(text: 'Hi! Tell me what you\'re looking for -- e.g. "something to carry my laptop" or "shoes for running" -- and I\'ll find it for you.'),
+    _ChatMessage.bot(text: 'Hi! Tell me what you\'re looking for — you can add a budget or a colour too.\nTry: "shoes under 1000", "white shirt", or "headphones between 500 and 2000".'),
   ];
   bool _loading = false;
 
@@ -44,12 +44,86 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     'plz', 'item', 'product', 'products', 'something', 'suggest', 'recommend',
   };
 
+  // Colour words the shopper might use (English + common Hindi), mapped to the
+  // colour the catalog stores, so "safed"/"white" both match a white product.
+  static const _colors = {
+    'white': 'white', 'safed': 'white', 'black': 'black', 'kala': 'black', 'kaala': 'black',
+    'red': 'red', 'lal': 'red', 'laal': 'red', 'blue': 'blue', 'neela': 'blue', 'green': 'green', 'hara': 'green',
+    'yellow': 'yellow', 'peela': 'yellow', 'pink': 'pink', 'gulabi': 'pink', 'grey': 'grey', 'gray': 'grey',
+    'brown': 'brown', 'purple': 'purple', 'orange': 'orange', 'gold': 'gold', 'golden': 'gold',
+    'silver': 'silver', 'navy': 'navy', 'beige': 'beige', 'maroon': 'maroon', 'cream': 'cream',
+  };
+  // Words that are part of a price/colour phrase, stripped out of the search term.
+  static const _filterWords = {
+    'rs', 'rupees', 'rupay', 'rupaye', 'under', 'below', 'less', 'than', 'within', 'upto', 'max', 'maximum',
+    'above', 'over', 'more', 'min', 'minimum', 'between', 'se', 'kam', 'andar', 'niche', 'tak', 'upar', 'zyada', 'jyada',
+    'daam', 'cheap', 'cheapest', 'sasta', 'costly', 'mehnga', 'expensive', 'premium', 'best', 'top', 'popular', 'rated',
+    'budget', 'lowest', 'color', 'colour', 'rang', 'price', 'cost',
+  };
+
   String _clean(String q) => q
       .toLowerCase()
       .split(RegExp(r'\s+'))
       .where((w) => w.isNotEmpty && !_stopWords.contains(w.replaceAll(RegExp(r'[^a-z]'), '')))
       .join(' ')
       .trim();
+
+  // Pulls a price range, a colour and a sort out of the shopper's sentence, and
+  // leaves the rest (e.g. "shoes") as the thing to search for.
+  ({String term, int? minPrice, int? maxPrice, String? color, String? sort}) _parse(String raw) {
+    var q = raw.toLowerCase();
+    int? minP, maxP;
+    final cur = r'(?:rs\.?|rupees?|rupay|rupaye|₹)?';
+    final range = RegExp('(\\d{2,7})\\s*$cur\\s*(?:-|to|and|se)\\s*(\\d{2,7})').firstMatch(q);
+    if (range != null) {
+      final a = int.parse(range.group(1)!), b = int.parse(range.group(2)!);
+      minP = a < b ? a : b;
+      maxP = a < b ? b : a;
+      q = q.replaceRange(range.start, range.end, ' ');
+    } else {
+      final under = RegExp('(?:under|below|less than|within|upto|up to|max|maximum)\\s*$cur\\s*(\\d{2,7})').firstMatch(q)
+          ?? RegExp('(\\d{2,7})\\s*$cur\\s*(?:se kam|ke andar|ke niche|ke neeche|tak|se niche)').firstMatch(q);
+      if (under != null) {
+        maxP = int.parse(under.group(1)!);
+        q = q.replaceRange(under.start, under.end, ' ');
+      }
+      final over = RegExp('(?:above|over|more than|min|minimum)\\s*$cur\\s*(\\d{2,7})').firstMatch(q)
+          ?? RegExp('(\\d{2,7})\\s*$cur\\s*(?:se upar|se zyada|se jyada)').firstMatch(q);
+      if (over != null) {
+        minP = int.parse(over.group(1)!);
+        q = q.replaceRange(over.start, over.end, ' ');
+      }
+    }
+    String? color;
+    for (final w in q.split(RegExp(r'[^a-z]+'))) {
+      if (_colors.containsKey(w)) {
+        color = _colors[w];
+        break;
+      }
+    }
+    String? sort;
+    if (RegExp(r'cheap|sasta|lowest|budget|kam daam').hasMatch(q)) {
+      sort = 'price_asc';
+    } else if (RegExp(r'costly|mehnga|expensive|premium').hasMatch(q)) {
+      sort = 'price_desc';
+    } else if (RegExp(r'best|top|popular|rated').hasMatch(q)) {
+      sort = 'rating';
+    }
+    final words = q.split(RegExp(r'\s+')).map((w) => w.replaceAll(RegExp(r'[^a-z]'), '')).where((w) {
+      return w.isNotEmpty && !_stopWords.contains(w) && !_filterWords.contains(w) && !_colors.containsKey(w);
+    }).toList();
+    return (term: words.join(' ').trim(), minPrice: minP, maxPrice: maxP, color: color, sort: sort);
+  }
+
+  // Keeps only products that actually come in the asked-for colour -- matched
+  // against the product's colour options, its name, or its listed attributes.
+  List<Product> _filterByColor(List<Product> products, String color) {
+    final c = color.toLowerCase();
+    return products.where((p) =>
+        p.colors.any((x) => x.toLowerCase().contains(c)) ||
+        p.name.toLowerCase().contains(c) ||
+        p.attributes.any((a) => a.$2.toLowerCase().contains(c))).toList();
+  }
 
   void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -68,24 +142,55 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     });
     _scrollToEnd();
     try {
-      final cleaned = _clean(query);
-      var results = await shop.searchProducts(cleaned.isEmpty ? query : cleaned);
-      if (results.isEmpty && cleaned.isNotEmpty && cleaned != query.toLowerCase()) {
-        results = await shop.searchProducts(query);
+      final p = _parse(query);
+      final term = p.term.isEmpty ? _clean(query) : p.term;
+      var results = await shop.searchProducts(term, minPrice: p.minPrice, maxPrice: p.maxPrice, sort: p.sort);
+      // Nothing on the cleaned term? try the raw sentence (still price-filtered).
+      if (results.isEmpty && term.isNotEmpty && term != query.toLowerCase()) {
+        results = await shop.searchProducts(query, minPrice: p.minPrice, maxPrice: p.maxPrice, sort: p.sort);
       }
+      // Still nothing? fall back to a matching category, keeping the price range.
       if (results.isEmpty) {
-        final words = {...cleaned.split(' '), ...query.toLowerCase().split(' ')};
+        final words = {...term.split(' '), ...query.toLowerCase().split(' ')};
         for (final c in shop.categories) {
           if (words.any((w) => w.isNotEmpty && c.name.toLowerCase().contains(w))) {
-            results = await shop.searchProducts('', categoryId: c.id);
+            results = await shop.searchProducts('', categoryId: c.id, minPrice: p.minPrice, maxPrice: p.maxPrice, sort: p.sort);
             if (results.isNotEmpty) break;
           }
         }
       }
+      // Narrow to the asked-for colour; if that leaves nothing, keep the rest
+      // and say the exact colour wasn't found.
+      var colorMissed = false;
+      if (p.color != null && results.isNotEmpty) {
+        final filtered = _filterByColor(results, p.color!);
+        if (filtered.isNotEmpty) {
+          results = filtered;
+        } else {
+          colorMissed = true;
+        }
+      }
       if (!mounted) return;
-      setState(() => _messages.add(results.isEmpty
-          ? _ChatMessage.bot(text: 'I couldn\'t find anything matching that. Try describing it differently, or browse categories from Home.')
-          : _ChatMessage.bot(products: results.take(8).toList())));
+      if (results.isEmpty) {
+        setState(() => _messages.add(_ChatMessage.bot(text: 'I couldn\'t find anything matching that. Try describing it differently, or browse categories from Home.')));
+      } else {
+        final bits = <String>[];
+        if (p.term.isNotEmpty) bits.add(p.term);
+        if (p.color != null) bits.add(p.color!);
+        if (p.minPrice != null && p.maxPrice != null) {
+          bits.add('₹${p.minPrice}–₹${p.maxPrice}');
+        } else if (p.maxPrice != null) {
+          bits.add('under ₹${p.maxPrice}');
+        } else if (p.minPrice != null) {
+          bits.add('above ₹${p.minPrice}');
+        }
+        final summary = colorMissed
+            ? 'I couldn\'t find ${p.color} ones exactly, but here are the closest matches:'
+            : bits.isEmpty
+                ? 'Here\'s what I found:'
+                : 'Here\'s what I found for ${bits.join(' · ')}:';
+        setState(() => _messages.add(_ChatMessage.bot(text: summary, products: results.take(8).toList())));
+      }
     } catch (e) {
       if (mounted) setState(() => _messages.add(_ChatMessage.bot(text: 'Something went wrong while searching. Please try again.')));
     } finally {
