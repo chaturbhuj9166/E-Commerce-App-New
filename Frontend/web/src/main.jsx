@@ -200,7 +200,6 @@ function App() {
     if (busy) return; setBusy(true); setError('');
     try { await fn(); setToast(message); await load(); } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
-  if (!session) return <Login onLogin={(token, loginRole) => { sessionStorage.setItem('ntsa-token', token); const landing = loginRole === 'PACKING' ? 'To pack' : loginRole === 'SALES' ? 'Add seller' : loginRole === 'SUPPORT' ? 'Tickets' : 'Overview'; setPage(landing); try { sessionStorage.setItem('ntsa-page', landing); } catch {} setSession(token); }}/ >;
   const staffNav = isPacking ? [['To pack', ClipboardList], ['Packed', Check]]
     : isSales ? [['Add seller', UserPlus], ['My sellers', Store]]
     : isSupport ? [['Tickets', LifeBuoy], ['Seller products', Package], ['Settings', SettingsIcon]]
@@ -212,6 +211,9 @@ function App() {
     : [['Overview', LayoutDashboard], ['Wholesale catalog', Store], ['Orders', ShoppingBag], ['Messages', Paperclip]];
   // If staff land on a page the admin has since hidden, fall back to the first.
   useEffect(() => { if (staffNav && !nav.some(([name]) => name === page) && nav[0]) setPage(nav[0][0]); }, [hiddenPages]);
+  // Not signed in -> the login screen. This return comes AFTER every hook above
+  // so the hook order never changes between the logged-out and logged-in render.
+  if (!session) return <Login onLogin={(token, loginRole) => { sessionStorage.setItem('ntsa-token', token); const landing = loginRole === 'PACKING' ? 'To pack' : loginRole === 'SALES' ? 'Add seller' : loginRole === 'SUPPORT' ? 'Tickets' : 'Overview'; setPage(landing); try { sessionStorage.setItem('ntsa-page', landing); } catch {} setSession(token); }}/>;
   const pendingApplications = applications.filter(a => a.status === 'PENDING').length;
   const shown = products.filter(p => `${p.name} ${p.category?.name} ${p.seller?.shopName || ''}`.toLowerCase().includes(query.toLowerCase()));
   // On the admin Products page, the same All / NTSA's own / Seller split the
