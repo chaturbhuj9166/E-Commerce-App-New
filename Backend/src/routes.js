@@ -7,7 +7,8 @@ import { Prisma } from '@prisma/client';
 import { db, atomic } from './db.js';
 import { config } from './config.js';
 import { z, productSchema, addressSchema, vendorCreateSchema, vendorUpdateSchema, vendorPasswordSchema, vendorMessageSchema, bannerSchema, reviewSchema, adminReviewSchema, couponSchema, staffCreateSchema, staffUpdateSchema, sellerApplicationSchema, sellerApproveSchema, sellerUpdateSchema, blockedPincodeSchema, deliveryRuleSchema, settingsSchema, invoiceExtrasSchema, panelPagesSchema, blockedAreaSchema } from './lib/validation.js';
-import { requireThat, holidayGraceCutoff } from './lib/rules.js';
+import { requireThat, holidayGraceCutoff, HttpError } from './lib/rules.js';
+import { rankByImage, visualSearchEnabled } from './services/visualSearch.js';
 import { variantFor, priceFor, publicSizePrices } from './lib/variants.js';
 import { auth, roles, tokenFor } from './services/auth.js';
 import { verifyCustomer } from './services/firebase.js';
@@ -87,6 +88,11 @@ router.get('/banners', async (req, res) => res.json(await db.banner.findMany({ w
 // or its seller only just went away (within the 3-day grace). Past the grace,
 // an unreturned seller's products drop off until they come back.
 const onSaleSellerOr = () => [{ sellerId: null }, { seller: { onHoliday: false } }, { seller: { onHoliday: true, holidayStart: { gt: holidayGraceCutoff() } } }];
+// How a product is shown on the storefront: no wholesale price, the public
+// variant prices, and its review aggregate. Shared by the product list and
+// photo search so both return the same shape.
+const discountOf = p => p.mrpPaise && p.mrpPaise > p.pricePaise ? Math.round((1 - p.pricePaise / p.mrpPaise) * 100) : 0;
+const storefrontRow = ({ wholesalePaise, reviews, ...p }) => ({ ...p, sizePrices: publicSizePrices(p.sizePrices), rating: reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : null, reviewCount: reviews.length, discountPercent: discountOf(p) });
 router.get('/products', async (req, res) => {
   const q = z.object({
     categoryId: z.string().optional(), search: z.string().max(100).optional(), deal: z.enum(['true', 'false']).optional(),
@@ -112,14 +118,29 @@ router.get('/products', async (req, res) => {
   // popularity need the review aggregate, so those are ordered in memory below.
   const dbOrder = { price_asc: [{ pricePaise: 'asc' }], price_desc: [{ pricePaise: 'desc' }], newest: [{ createdAt: 'desc' }] }[q.sort] || [{ featuredRank: 'desc' }, { createdAt: 'desc' }];
   const products = await db.product.findMany({ where, include: { category: true, reviews: { select: { rating: true } } }, orderBy: dbOrder, take: 200 });
-  const discountOf = p => p.mrpPaise && p.mrpPaise > p.pricePaise ? Math.round((1 - p.pricePaise / p.mrpPaise) * 100) : 0;
-  let rows = products.map(({ wholesalePaise, reviews, ...p }) => ({ ...p, sizePrices: publicSizePrices(p.sizePrices), rating: reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : null, reviewCount: reviews.length, discountPercent: discountOf(p) }));
+  let rows = products.map(storefrontRow);
   if (q.minRating != null) rows = rows.filter(p => (p.rating ?? 0) >= q.minRating);
   if (q.minDiscount != null) rows = rows.filter(p => p.discountPercent >= q.minDiscount);
   if (q.sort === 'rating') rows.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
   else if (q.sort === 'discount') rows.sort((a, b) => b.discountPercent - a.discountPercent);
   else if (q.sort === 'popular') rows.sort((a, b) => b.reviewCount - a.reviewCount);
   res.json(rows);
+});
+// Photo search: the shopper sends a picture and gets the catalog products
+// that look most like it, best first. `confident` is false when nothing
+// looks close, so the app can say "closest matches" instead of "results".
+const visualLimiter = rateLimit({ windowMs: 60000, limit: 20, standardHeaders: 'draft-8', legacyHeaders: false });
+const photoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } }).single('image');
+router.post('/products/visual-search', visualLimiter, photoUpload, async (req, res) => {
+  requireThat(visualSearchEnabled(), 503, 'Photo search is not available on this server');
+  requireThat(req.file && /^image\//.test(req.file.mimetype), 400, 'Send a photo in the "image" field');
+  const products = await db.product.findMany({ where: { active: true, audience: { in: ['RETAIL', 'BOTH'] }, OR: onSaleSellerOr() }, include: { category: true, reviews: { select: { rating: true } } }, take: 500 });
+  let ranked;
+  try { ranked = await rankByImage(req.file.buffer, products); }
+  catch (e) { console.warn('photo search failed:', e.message); throw new HttpError(422, 'We could not read that photo. Please try another one.'); }
+  const best = ranked[0]?.score ?? 0;
+  const picked = ranked.filter((r, i) => i < 3 || r.score >= Math.max(0.2, best * 0.45)).slice(0, 12);
+  res.json({ confident: best >= 0.45, products: picked.map(r => storefrontRow(r.product)) });
 });
 router.get('/products/:id', async (req, res) => {
   const p = await db.product.findFirst({ where: { id: req.params.id, active: true, audience: { in: ['RETAIL', 'BOTH'] }, OR: onSaleSellerOr() }, include: { category: true, reviews: { select: { rating: true, comment: true, images: true, createdAt: true, authorName: true, user: { select: { name: true } } }, take: 100, orderBy: { createdAt: 'desc' } } } });
