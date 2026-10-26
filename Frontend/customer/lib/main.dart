@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'l10n/app_languages.dart';
+import 'l10n/tr.dart';
 import 'core/api_client.dart';
 import 'core/app_theme.dart';
 import 'providers/auth_provider.dart';
@@ -52,7 +53,10 @@ Future<void> _sessionExpired() async {
     await ApiClient.instance.clearCustomerToken();
     await auth.signOut();
     navigatorKey.currentState?.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
-    scaffoldMessengerKey.currentState?.showSnackBar(const SnackBar(content: Text('Session expired, please sign in again')));
+    final ctx = navigatorKey.currentContext;
+    // The navigator's own context is still valid here: it outlives these awaits.
+    // ignore: use_build_context_synchronously
+    scaffoldMessengerKey.currentState?.showSnackBar(SnackBar(content: Text(ctx != null ? ctx.tr('common.session_expired') : 'Session expired, please sign in again')));
   } finally {
     _expiring = false;
   }

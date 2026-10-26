@@ -16,6 +16,7 @@ const Map<String, String> enCommon = {
   'common.search': 'Search',
   'common.loading': 'Loading...',
   'common.something_wrong': 'Something went wrong. Please try again.',
+  'common.session_expired': 'Session expired, please sign in again',
 
   'lang.title': 'Language',
   'lang.choose_title': 'Choose your language',
