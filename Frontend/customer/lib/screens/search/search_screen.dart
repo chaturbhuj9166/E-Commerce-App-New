@@ -2,9 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/app_colors.dart';
 import '../products/product_listing_screen.dart';
+import '../../l10n/tr.dart';
+import '../../widgets/voice_search_sheet.dart';
+import 'photo_search.dart';
+
+/// What the search screen should do the moment it opens, so the mic and camera
+/// icons on the Home search bar go straight to voice or photo search.
+enum SearchStart { none, voice, photo }
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  const SearchScreen({super.key, this.start = SearchStart.none});
+
+  final SearchStart start;
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -23,6 +32,18 @@ class _SearchScreenState extends State<SearchScreen> {
     SharedPreferences.getInstance().then((prefs) {
       if (mounted) setState(() => _recent = prefs.getStringList(_prefKey) ?? []);
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (widget.start == SearchStart.voice) _voiceSearch();
+      if (widget.start == SearchStart.photo) startPhotoSearch(context);
+    });
+  }
+
+  Future<void> _voiceSearch() async {
+    final heard = await showVoiceSearch(context);
+    if (heard == null || heard.isEmpty || !mounted) return;
+    _controller.text = heard;
+    _search(heard);
   }
 
   @override
@@ -39,7 +60,7 @@ class _SearchScreenState extends State<SearchScreen> {
     await prefs.setStringList(_prefKey, updated);
     if (!mounted) return;
     setState(() => _recent = updated);
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductListingScreen(title: 'Results for "$q"', searchQuery: q)));
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductListingScreen(title: context.tr('search.results_for', {'q': q}), searchQuery: q)));
   }
 
   Future<void> _clearRecent() async {
@@ -56,10 +77,13 @@ class _SearchScreenState extends State<SearchScreen> {
           padding: const EdgeInsets.only(right: 12),
           child: TextField(
             controller: _controller,
-            autofocus: true,
+            autofocus: widget.start == SearchStart.none,
             maxLength: 100, // backend rejects longer search queries
             onSubmitted: _search,
-            decoration: const InputDecoration(counterText: '', hintText: 'Search for products...', prefixIcon: Icon(Icons.search, size: 20), suffixIcon: Icon(Icons.mic_none_rounded)),
+            decoration: InputDecoration(counterText: '', hintText: context.tr('search.hint'), prefixIcon: const Icon(Icons.search, size: 20), suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(icon: const Icon(Icons.mic_none_rounded), tooltip: context.tr('st.search.voice_tooltip'), onPressed: _voiceSearch),
+              IconButton(icon: const Icon(Icons.photo_camera_outlined), tooltip: context.tr('st.search.photo_tooltip'), onPressed: () => startPhotoSearch(context)),
+            ])),
           ),
         ),
       ),
@@ -71,8 +95,8 @@ class _SearchScreenState extends State<SearchScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Recent Searches', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                  TextButton(onPressed: _clearRecent, child: const Text('Clear All')),
+                  Text(context.tr('search.recent'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  TextButton(onPressed: _clearRecent, child: Text(context.tr('search.clear_all'))),
                 ],
               ),
               ..._recent.map((q) => ListTile(
@@ -83,7 +107,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   )),
               const SizedBox(height: 14),
             ],
-            const Text('Trending Searches', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+            Text(context.tr('search.trending'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,

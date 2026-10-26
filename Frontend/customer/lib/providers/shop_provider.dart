@@ -1,5 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 import '../core/api_client.dart';
+import '../core/image_upload.dart';
 import '../models/banner.dart';
 import '../models/category.dart';
 import '../models/coupon.dart';
@@ -113,6 +116,19 @@ class ShopProvider extends ChangeNotifier {
       'sort': ?sort,
     });
     return (data as List).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// Photo search: the products that look most like [photo], best first.
+  /// `confident` is false when nothing is close, so the screen can say
+  /// "closest matches" rather than "results".
+  Future<({List<Product> products, bool confident})> visualSearch(XFile photo) async {
+    final form = FormData.fromMap({'image': await imagePart(photo)});
+    // The first photo search after the server starts also loads the model.
+    final data = await ApiClient.instance.post('/products/visual-search', data: form, timeout: const Duration(seconds: 90)) as Map<String, dynamic>;
+    return (
+      products: (data['products'] as List).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList(),
+      confident: data['confident'] == true,
+    );
   }
 
   Future<Product> productDetails(String id) async {

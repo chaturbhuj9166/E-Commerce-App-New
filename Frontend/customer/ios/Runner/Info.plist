@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>NTSA uses the microphone so you can search for products by voice.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>NTSA turns what you say into a product search.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>NTSA uses the camera so you can search for products with a photo.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>NTSA lets you pick a photo from your gallery to search for similar products.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

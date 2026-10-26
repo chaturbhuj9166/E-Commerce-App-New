@@ -16,6 +16,7 @@ import '../products/product_details_screen.dart';
 import '../products/product_listing_screen.dart';
 import '../search/search_screen.dart';
 import '../wholesale/vendor_login_screen.dart';
+import '../../l10n/tr.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -83,12 +84,12 @@ class _HomeTabState extends State<HomeTab> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(user != null && user.rawName.trim().isNotEmpty ? user.rawName : 'Welcome to NTSA', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                        Text(user != null && user.rawName.trim().isNotEmpty ? user.rawName : context.tr('home.welcome'), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                         Row(
                           children: [
                             const Icon(Icons.location_on, size: 13, color: AppColors.orange),
                             const SizedBox(width: 2),
-                            Flexible(child: Text(_location ?? 'Add a delivery address', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+                            Flexible(child: Text(_location ?? context.tr('home.add_address'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: AppColors.textSecondary))),
                           ],
                         ),
                       ],
@@ -111,14 +112,23 @@ class _HomeTabState extends State<HomeTab> {
                   child: Row(children: [
                     Icon(Icons.search, color: AppColors.textMuted, size: 20),
                     const SizedBox(width: 8),
-                    Text('Search for products, brands...', style: TextStyle(color: AppColors.textMuted, fontSize: 13.5)),
+                    Expanded(child: Text(context.tr('home.search_hint'), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.textMuted, fontSize: 13.5))),
+                    // Straight to voice or photo search, without opening the field first.
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchScreen(start: SearchStart.voice))),
+                      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Icon(Icons.mic_none_rounded, color: AppColors.textMuted, size: 22)),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchScreen(start: SearchStart.photo))),
+                      child: Padding(padding: const EdgeInsets.only(left: 6), child: Icon(Icons.photo_camera_outlined, color: AppColors.textMuted, size: 22)),
+                    ),
                   ]),
                 ),
               ),
             ),
             BannerSlider(
               banners: shop.banners,
-              onShopNow: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProductListingScreen(title: 'All Products'))),
+              onShopNow: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductListingScreen(title: context.tr('home.all_products')))),
             ),
             const SizedBox(height: 18),
             if (shop.categories.isNotEmpty) ...[
@@ -127,10 +137,10 @@ class _HomeTabState extends State<HomeTab> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Categories', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                    Text(context.tr('home.categories'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                     TextButton(
                       onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AllCategoriesScreen())),
-                      child: const Text('See All'),
+                      child: Text(context.tr('common.see_all')),
                     ),
                   ],
                 ),
@@ -156,10 +166,10 @@ class _HomeTabState extends State<HomeTab> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Deals of the Day', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                  Text(context.tr('home.deals'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                   TextButton(
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProductListingScreen(title: 'Deals of the Day', dealsOnly: true))),
-                    child: const Text('See All'),
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductListingScreen(title: context.tr('home.deals'), dealsOnly: true))),
+                    child: Text(context.tr('common.see_all')),
                   ),
                 ],
               ),
@@ -204,8 +214,8 @@ class _HomeTabState extends State<HomeTab> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Wholesale Buyer?', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                            Text('Login with your wholesale ID for bulk rates', style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
+                            Text(context.tr('home.wholesale_title'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                            Text(context.tr('home.wholesale_sub'), style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
                           ],
                         ),
                       ),

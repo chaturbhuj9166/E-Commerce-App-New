@@ -114,7 +114,10 @@ class ApiClient {
   Future<dynamic> get(String path, {Map<String, dynamic>? query, bool notifyUnauthorized = true}) =>
       _unwrap(_dio.get(path, queryParameters: query, options: Options(extra: {'notifyUnauthorized': notifyUnauthorized})));
 
-  Future<dynamic> post(String path, {Object? data}) => _unwrap(_dio.post(path, data: data));
+  /// [timeout] widens the send/receive limits for slow calls such as a photo
+  /// upload that the server then has to analyse.
+  Future<dynamic> post(String path, {Object? data, Duration? timeout}) =>
+      _unwrap(_dio.post(path, data: data, options: timeout == null ? null : Options(sendTimeout: timeout, receiveTimeout: timeout)));
 
   Future<dynamic> put(String path, {Object? data}) => _unwrap(_dio.put(path, data: data));
 

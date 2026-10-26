@@ -2,6 +2,8 @@
     <!-- Debug builds get this automatically; release builds need it declared
          here or the app can't reach the backend at all. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Voice search listens through the phone's speech recognizer. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="NTSA"
         android:name="${applicationName}"
@@ -50,6 +52,11 @@
         <intent>
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>
+        </intent>
+        <!-- Lets voice search find the phone's speech recognition service,
+             per https://pub.dev/packages/speech_to_text#android -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
         </intent>
     </queries>
 </manifest>
