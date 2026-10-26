@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/tr.dart';
 import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
 import '../../models/coupon.dart';
@@ -15,11 +16,13 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _Notice {
-  const _Notice({required this.icon, required this.color, required this.title, required this.body, this.time, this.orderId});
+  const _Notice({required this.icon, required this.color, required this.titleKey, required this.bodyKey, this.args, this.rawBody, this.time, this.orderId});
   final IconData icon;
   final Color color;
-  final String title;
-  final String body;
+  final String titleKey;
+  final String bodyKey;
+  final Map<String, String>? args;
+  final String? rawBody; // text that came from the server, shown as-is
   final DateTime? time;
   final String? orderId;
 }
@@ -30,13 +33,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   String? _error;
 
   static const _statusText = {
-    'PENDING_PAYMENT': (Icons.hourglass_top_rounded, 'Payment pending', 'is waiting for payment.'),
-    'PLACED': (Icons.receipt_long_rounded, 'Order placed', 'has been placed successfully.'),
-    'PACKED': (Icons.inventory_2_rounded, 'Order packed', 'has been packed.'),
-    'SHIPPED': (Icons.local_shipping_rounded, 'Order shipped', 'has been shipped.'),
-    'OUT_FOR_DELIVERY': (Icons.delivery_dining_rounded, 'Out for delivery', 'is out for delivery. Get your delivery OTP from the order page.'),
-    'DELIVERED': (Icons.check_circle_rounded, 'Order delivered', 'has been delivered.'),
-    'CANCELLED': (Icons.cancel_rounded, 'Order cancelled', 'was cancelled.'),
+    'PENDING_PAYMENT': (Icons.hourglass_top_rounded, 'account.notif.pending_payment_title', 'account.notif.pending_payment_body'),
+    'PLACED': (Icons.receipt_long_rounded, 'account.notif.placed_title', 'account.notif.placed_body'),
+    'PACKED': (Icons.inventory_2_rounded, 'account.notif.packed_title', 'account.notif.packed_body'),
+    'SHIPPED': (Icons.local_shipping_rounded, 'account.notif.shipped_title', 'account.notif.shipped_body'),
+    'OUT_FOR_DELIVERY': (Icons.delivery_dining_rounded, 'account.notif.out_for_delivery_title', 'account.notif.out_for_delivery_body'),
+    'DELIVERED': (Icons.check_circle_rounded, 'account.notif.delivered_title', 'account.notif.delivered_body'),
+    'CANCELLED': (Icons.cancel_rounded, 'account.notif.cancelled_title', 'account.notif.cancelled_body'),
   };
 
   @override
@@ -52,13 +55,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       final orders = (results[0] as List).cast<Map<String, dynamic>>().map((o) {
         final id = o['id'] as String;
         final status = o['status'] as String;
-        final (icon, title, text) = _statusText[status] ?? (Icons.receipt_long_rounded, 'Order update', 'was updated.');
+        final (icon, titleKey, bodyBase) = _statusText[status] ?? (Icons.receipt_long_rounded, 'account.notif.updated_title', 'account.notif.updated_body');
         final items = (o['items'] as List? ?? []).length;
         return _Notice(
           icon: icon,
           color: status == 'CANCELLED' ? AppColors.danger : status == 'DELIVERED' ? AppColors.success : AppColors.orange,
-          title: title,
-          body: 'Your order #${id.substring(0, id.length.clamp(0, 10)).toUpperCase()} ($items item${items == 1 ? '' : 's'}) $text',
+          titleKey: titleKey,
+          bodyKey: '${bodyBase}_${items == 1 ? 'one' : 'other'}',
+          args: {'id': id.substring(0, id.length.clamp(0, 10)).toUpperCase(), 'n': '$items'},
           time: DateTime.tryParse(o['updatedAt']?.toString() ?? o['createdAt']?.toString() ?? '')?.toLocal(),
           orderId: id,
         );
@@ -69,8 +73,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return _Notice(
           icon: Icons.local_offer_rounded,
           color: AppColors.danger,
-          title: 'Use code ${coupon.code}',
-          body: coupon.description.isNotEmpty ? coupon.description : '${coupon.summary} on your next order.',
+          titleKey: 'account.notif.use_code',
+          bodyKey: 'account.notif.coupon_body',
+          args: {'code': coupon.code, 'summary': coupon.summaryOf(context)},
+          rawBody: coupon.description.isNotEmpty ? coupon.description : null,
           time: DateTime.tryParse((c as Map)['createdAt']?.toString() ?? '')?.toLocal(),
         );
       }).toList();
@@ -84,13 +90,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  static String _ago(DateTime? t) {
+  static String _ago(BuildContext context, DateTime? t) {
     if (t == null) return '';
     final d = DateTime.now().difference(t);
-    if (d.inMinutes < 1) return 'now';
-    if (d.inHours < 1) return '${d.inMinutes}m ago';
-    if (d.inDays < 1) return '${d.inHours}h ago';
-    if (d.inDays < 30) return '${d.inDays}d ago';
+    if (d.inMinutes < 1) return context.tr('account.notif.now');
+    if (d.inHours < 1) return context.tr('account.notif.minutes_ago', {'n': '${d.inMinutes}'});
+    if (d.inDays < 1) return context.tr('account.notif.hours_ago', {'n': '${d.inHours}'});
+    if (d.inDays < 30) return context.tr('account.notif.days_ago', {'n': '${d.inDays}'});
     return '${t.day}/${t.month}/${t.year}';
   }
 
@@ -129,13 +135,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(n.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                        Text(context.tr(n.titleKey, n.args), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
                         const SizedBox(height: 2),
-                        Text(n.body, style: TextStyle(color: AppColors.textSecondary, fontSize: 12.5)),
+                        Text(n.rawBody ?? context.tr(n.bodyKey, n.args), style: TextStyle(color: AppColors.textSecondary, fontSize: 12.5)),
                       ],
                     ),
                   ),
-                  Text(_ago(n.time), style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                  Text(_ago(context, n.time), style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
                 ],
               ),
             ),
@@ -152,12 +158,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Notifications'),
-          bottom: const TabBar(
+          title: Text(context.tr('account.notif.title')),
+          bottom: TabBar(
             isScrollable: true,
             labelColor: AppColors.navy,
             indicatorColor: AppColors.orange,
-            tabs: [Tab(text: 'All'), Tab(text: 'Orders'), Tab(text: 'Offers')],
+            tabs: [Tab(text: context.tr('account.notif.tab_all')), Tab(text: context.tr('account.notif.tab_orders')), Tab(text: context.tr('account.notif.tab_offers'))],
           ),
         ),
         body: SafeArea(
@@ -165,15 +171,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ? Center(
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     Padding(padding: const EdgeInsets.all(16), child: Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary))),
-                    OutlinedButton(onPressed: _load, child: const Text('Retry')),
+                    OutlinedButton(onPressed: _load, child: Text(context.tr('common.retry'))),
                   ]),
                 )
               : orders == null || offers == null
                   ? const Center(child: CircularProgressIndicator())
                   : TabBarView(children: [
-                      _list([...orders, ...offers]..sort((a, b) => (b.time ?? DateTime(0)).compareTo(a.time ?? DateTime(0))), 'No notifications yet'),
-                      _list(orders, 'Order updates will appear here'),
-                      _list(offers, 'No offers right now'),
+                      _list([...orders, ...offers]..sort((a, b) => (b.time ?? DateTime(0)).compareTo(a.time ?? DateTime(0))), context.tr('account.notif.empty_all')),
+                      _list(orders, context.tr('account.notif.empty_orders')),
+                      _list(offers, context.tr('account.notif.empty_offers')),
                     ]),
         ),
       ),

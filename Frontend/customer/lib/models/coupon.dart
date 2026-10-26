@@ -1,3 +1,6 @@
+import 'package:flutter/widgets.dart' show BuildContext;
+import '../l10n/tr.dart';
+
 class Coupon {
   Coupon({
     required this.code,
@@ -14,6 +17,17 @@ class Coupon {
   final int value;
   final int minOrderPaise;
   final int? maxDiscountPaise;
+
+  /// Translated [summary].
+  String summaryOf(BuildContext context) {
+    final max = maxDiscountPaise;
+    if (discountType == 'PERCENT') {
+      return max != null
+          ? context.tr('checkout.coupon.percent_up_to', {'value': '$value', 'max': (max / 100).toStringAsFixed(0)})
+          : context.tr('checkout.coupon.percent', {'value': '$value'});
+    }
+    return context.tr('checkout.coupon.flat', {'value': (value / 100).toStringAsFixed(0)});
+  }
 
   String get summary => discountType == 'PERCENT'
       ? '$value% off${maxDiscountPaise != null ? ' (up to ₹${(maxDiscountPaise! / 100).toStringAsFixed(0)})' : ''}'

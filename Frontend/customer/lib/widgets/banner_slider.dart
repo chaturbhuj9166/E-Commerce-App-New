@@ -3,6 +3,7 @@ import 'package:video_player/video_player.dart';
 import '../core/app_colors.dart';
 import '../models/banner.dart';
 import 'app_network_image.dart';
+import '../l10n/tr.dart';
 
 /// The Home screen's top banner -- swipeable when the admin has configured
 /// more than one (GET /banners). Falls back to a default look if the admin
@@ -25,7 +26,7 @@ class _BannerSliderState extends State<BannerSlider> {
   // showing at the sides. Reasonable default while a size hasn't loaded yet.
   double _aspectRatio = 2.3;
 
-  static final _fallback = AppBanner(title: 'Great Products\nBetter Living', backgroundColor: AppColors.navy, buttonText: 'Shop Now');
+  AppBanner get _fallback => AppBanner(title: context.tr('w.banner_fallback_title'), backgroundColor: AppColors.navy, buttonText: context.tr('w.banner_fallback_button'));
 
   List<AppBanner> get _banners => widget.banners.isEmpty ? [_fallback] : widget.banners;
 

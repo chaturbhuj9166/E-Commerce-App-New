@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
+import '../../l10n/tr.dart';
 import '../../models/order.dart';
 import '../../widgets/price_tag.dart';
 import 'order_tracking_screen.dart';
@@ -36,7 +37,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
   Widget build(BuildContext context) {
     final orders = _orders;
     return Scaffold(
-      appBar: AppBar(title: const Text('My Orders')),
+      appBar: AppBar(title: Text(context.tr('orders.my.title'))),
       body: SafeArea(
         child: orders == null
             ? Center(
@@ -45,11 +46,11 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                     : Column(mainAxisSize: MainAxisSize.min, children: [
                         Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger))),
                         const SizedBox(height: 12),
-                        OutlinedButton(onPressed: _load, child: const Text('Retry')),
+                        OutlinedButton(onPressed: _load, child: Text(context.tr('common.retry'))),
                       ]),
               )
             : orders.isEmpty
-                ? Center(child: Text('No orders yet', style: TextStyle(color: AppColors.textMuted)))
+                ? Center(child: Text(context.tr('orders.my.empty'), style: TextStyle(color: AppColors.textMuted)))
                 : ListView.separated(
                     padding: const EdgeInsets.all(14),
                     itemCount: orders.length,
@@ -101,7 +102,7 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
-      child: Text(status.replaceAll('_', ' '), style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.w700)),
+      child: Text(orderStatusLabel(context, status).toUpperCase(), style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.w700)),
     );
   }
 }

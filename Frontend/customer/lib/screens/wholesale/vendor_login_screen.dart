@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/tr.dart';
 import '../../core/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/vendor_provider.dart';
 import '../../providers/wishlist_provider.dart';
 import '../../widgets/primary_button.dart';
+import '../language/language_select_screen.dart';
 import 'wholesale_home_screen.dart';
 
 /// Gate in front of the wholesale catalog. The ID/password here is issued by
@@ -43,9 +45,9 @@ class _VendorLoginScreenState extends State<VendorLoginScreen> {
       context.read<CartProvider>().clear();
       context.read<WishlistProvider>().clear();
       context.read<AuthProvider>().clearUser();
-      Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const WholesaleHomeScreen()), (_) => false);
+      goAfterLogin(context, (_) => const WholesaleHomeScreen());
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(vendor.error ?? 'Login failed')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(vendor.error ?? context.tr('ws.login.failed'))));
     }
   }
 
@@ -53,7 +55,7 @@ class _VendorLoginScreenState extends State<VendorLoginScreen> {
   Widget build(BuildContext context) {
     final loading = context.watch<VendorProvider>().loading;
     return Scaffold(
-      appBar: AppBar(title: const Text('Wholesale Login')),
+      appBar: AppBar(title: Text(context.tr('ws.login.app_bar'))),
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -63,25 +65,25 @@ class _VendorLoginScreenState extends State<VendorLoginScreen> {
               const SizedBox(height: 12),
               Icon(Icons.storefront_rounded, size: 56, color: AppColors.navy),
               const SizedBox(height: 16),
-              const Text('Wholesale Buyer Login', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+              Text(context.tr('ws.login.heading'), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
               const SizedBox(height: 6),
               Text(
-                'Use the ID and password given to you by NTSA after verification. Don\'t have one yet? Contact NTSA support to register as a wholesale buyer.',
+                context.tr('ws.login.intro'),
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
               const SizedBox(height: 28),
               TextFormField(
                 controller: _username,
-                decoration: const InputDecoration(labelText: 'Wholesale ID', prefixIcon: Icon(Icons.badge_outlined)),
-                validator: (v) => v!.trim().isEmpty ? 'Enter your wholesale ID' : null,
+                decoration: InputDecoration(labelText: context.tr('ws.login.id_label'), prefixIcon: Icon(Icons.badge_outlined)),
+                validator: (v) => v!.trim().isEmpty ? context.tr('ws.login.id_required') : null,
               ),
               const SizedBox(height: 14),
               TextFormField(
                 controller: _password,
                 obscureText: _obscure,
-                validator: (v) => v!.isEmpty ? 'Enter your password' : null,
+                validator: (v) => v!.isEmpty ? context.tr('ws.login.password_required') : null,
                 decoration: InputDecoration(
-                  labelText: 'Password',
+                  labelText: context.tr('ws.login.password_label'),
                   prefixIcon: const Icon(Icons.lock_outline_rounded),
                   suffixIcon: IconButton(
                     icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
@@ -90,7 +92,7 @@ class _VendorLoginScreenState extends State<VendorLoginScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              PrimaryButton(label: 'Login', loading: loading, onPressed: _submit),
+              PrimaryButton(label: context.tr('ws.login.button'), loading: loading, onPressed: _submit),
             ],
           ),
         ),

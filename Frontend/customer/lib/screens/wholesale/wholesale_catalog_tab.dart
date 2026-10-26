@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/tr.dart';
 import '../../core/app_colors.dart';
 import '../../providers/shop_provider.dart';
 import '../../providers/vendor_provider.dart';
@@ -51,8 +52,8 @@ class _WholesaleCatalogTabState extends State<WholesaleCatalogTab> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Welcome back', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                        Text(vendor.name ?? 'Wholesale Partner', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                        Text(context.tr('ws.catalog.welcome_back'), style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                        Text(vendor.name ?? context.tr('ws.partner_default'), style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                       ],
                     ),
                   ),
@@ -69,19 +70,19 @@ class _WholesaleCatalogTabState extends State<WholesaleCatalogTab> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(12)),
                 child: Text(
-                  'Wholesale rates apply. Order value must be between ${formatPaise(vendor.limits!.minPaise)} and ${formatPaise(vendor.limits!.maxPaise)}.',
+                  context.tr('ws.catalog.rates_apply', {'min': formatPaise(vendor.limits!.minPaise), 'max': formatPaise(vendor.limits!.maxPaise)}),
                   style: const TextStyle(color: Colors.white, fontSize: 12.5),
                 ),
               ),
             const SizedBox(height: 14),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Text('Available to Order', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppColors.textPrimary)),
+              child: Text(context.tr('ws.catalog.available'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppColors.textPrimary)),
             ),
             if (vendor.limitsMissing)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 10),
-                child: Text(VendorProvider.noLimitsMessage, style: TextStyle(color: AppColors.danger, fontSize: 12.5)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                child: Text(context.tr('ws.limits.none_configured'), style: TextStyle(color: AppColors.danger, fontSize: 12.5)),
               ),
             vendor.productsError != null && vendor.products.isEmpty
                 ? Padding(
@@ -90,7 +91,7 @@ class _WholesaleCatalogTabState extends State<WholesaleCatalogTab> {
                       children: [
                         Text(vendor.productsError!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger)),
                         const SizedBox(height: 10),
-                        OutlinedButton(onPressed: vendor.loadProducts, child: const Text('Retry')),
+                        OutlinedButton(onPressed: vendor.loadProducts, child: Text(context.tr('common.retry'))),
                       ],
                     ),
                   )
@@ -99,7 +100,7 @@ class _WholesaleCatalogTabState extends State<WholesaleCatalogTab> {
                     padding: const EdgeInsets.all(24),
                     child: Center(
                       child: vendor.productsLoaded
-                          ? Text('No products available', style: TextStyle(color: AppColors.textMuted))
+                          ? Text(context.tr('ws.catalog.no_products'), style: TextStyle(color: AppColors.textMuted))
                           : const CircularProgressIndicator(),
                     ),
                   )

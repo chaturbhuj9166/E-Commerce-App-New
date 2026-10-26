@@ -13,6 +13,7 @@ import '../../widgets/primary_button.dart';
 import '../../widgets/price_tag.dart';
 import '../../widgets/product_card.dart';
 import '../../widgets/rating_stars.dart';
+import '../../l10n/tr.dart';
 import '../cart/cart_screen.dart';
 import 'write_review_screen.dart';
 
@@ -114,7 +115,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('You may also like', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+        Text(context.tr('pdp.related.title'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
         const SizedBox(height: 10),
         SizedBox(
           height: 240,
@@ -152,12 +153,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     final p = _product!;
     if (p.sizes.isNotEmpty && _selectedSize == null) {
       setState(() => _missingSize = true);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please select a ${p.sizeLabel.toLowerCase()} first')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('pdp.size.select_first', {'size': p.sizeLabel.toLowerCase()}))));
       return;
     }
     if (p.conditionGrades.isNotEmpty && _selectedGrade == null) {
       setState(() => _missingGrade = true);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a condition first')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('pdp.condition.select_first'))));
       return;
     }
     setState(() => buyNow ? _buyingNow = true : _addingToCart = true);
@@ -167,7 +168,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       if (buyNow) {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CartScreen()));
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added to cart')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('pdp.cart.added'))));
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
@@ -198,8 +199,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   icon: const Icon(Icons.share_outlined),
                   onPressed: () {
                     final price = (p.pricePaise / 100).toStringAsFixed(0);
-                    Clipboard.setData(ClipboardData(text: '${p.name} — ₹$price on NTSA. Shop smarter, live better.'));
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Product details copied — paste it anywhere to share')));
+                    Clipboard.setData(ClipboardData(text: context.tr('pdp.share.text', {'name': p.name, 'price': price})));
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('pdp.share.copied'))));
                   },
                 ),
               ],
@@ -213,7 +214,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
                         Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger)),
                         const SizedBox(height: 12),
-                        OutlinedButton(onPressed: _load, child: const Text('Retry')),
+                        OutlinedButton(onPressed: _load, child: Text(context.tr('common.retry'))),
                       ]),
                     ),
             )
@@ -283,7 +284,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                       const SizedBox(width: 6),
                                       Expanded(
                                         child: Text(
-                                          p.conditionNote?.isNotEmpty == true ? '${p.conditionLabel} · ${p.conditionNote}' : '${p.conditionLabel} item — not brand-new stock',
+                                          p.conditionNote?.isNotEmpty == true
+                                              ? context.tr('pdp.condition.with_note', {'label': p.conditionLabelOf(context), 'note': p.conditionNote!})
+                                              : context.tr('pdp.condition.not_new', {'label': p.conditionLabelOf(context)}),
                                           style: const TextStyle(fontSize: 12.5, color: AppColors.orange, fontWeight: FontWeight.w600),
                                         ),
                                       ),
@@ -298,18 +301,18 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               if (p.sizePrices.isNotEmpty && _selectedSize == null)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 2),
-                                  child: Text('Price depends on the ${p.sizeLabel.toLowerCase()} you choose', style: TextStyle(fontSize: 12, color: AppColors.orange, fontWeight: FontWeight.w500)),
+                                  child: Text(context.tr('pdp.price.depends_on_size', {'size': p.sizeLabel.toLowerCase()}), style: TextStyle(fontSize: 12, color: AppColors.orange, fontWeight: FontWeight.w500)),
                                 ),
                               const SizedBox(height: 4),
-                              Text('Inclusive of all taxes', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                              Text(context.tr('pdp.price.inclusive_tax'), style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
                               const SizedBox(height: 14),
                               Text(
-                                p.stock > 0 ? 'In stock (${p.stock} left)' : 'Out of stock',
+                                p.stock > 0 ? context.tr('pdp.stock.in', {'n': '${p.stock}'}) : context.tr('pdp.stock.out'),
                                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: p.stock > 0 ? AppColors.success : AppColors.danger),
                               ),
                               if (p.colors.isNotEmpty) ...[
                                 const SizedBox(height: 16),
-                                Text('Color : ${_selectedColor ?? ''}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                Text(context.tr('pdp.color.selected', {'color': _selectedColor ?? ''}), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                                 const SizedBox(height: 8),
                                 Wrap(
                                   spacing: 8,
@@ -331,7 +334,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               if (p.sizes.isNotEmpty) ...[
                                 const SizedBox(height: 14),
                                 Text(
-                                  _selectedSize == null ? 'Select ${p.sizeLabel}' : '${p.sizeLabel} : $_selectedSize',
+                                  _selectedSize == null ? context.tr('pdp.size.select', {'size': p.sizeLabel}) : context.tr('pdp.size.selected', {'size': p.sizeLabel, 'value': _selectedSize!}),
                                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: _missingSize ? AppColors.danger : null),
                                 ),
                                 const SizedBox(height: 8),
@@ -354,13 +357,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 if (_missingSize)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 6),
-                                    child: Text('Please select a ${p.sizeLabel.toLowerCase()} to continue', style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+                                    child: Text(context.tr('pdp.size.select_to_continue', {'size': p.sizeLabel.toLowerCase()}), style: const TextStyle(color: AppColors.danger, fontSize: 12)),
                                   ),
                               ],
                               if (p.conditionGrades.isNotEmpty) ...[
                                 const SizedBox(height: 14),
                                 Text(
-                                  _selectedGrade == null ? 'Select Condition' : 'Condition : $_selectedGrade',
+                                  _selectedGrade == null ? context.tr('pdp.condition.select') : context.tr('pdp.condition.selected', {'grade': _selectedGrade!}),
                                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: _missingGrade ? AppColors.danger : null),
                                 ),
                                 const SizedBox(height: 8),
@@ -383,20 +386,20 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 if (_missingGrade)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 6),
-                                    child: Text('Please select a condition to continue', style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+                                    child: Text(context.tr('pdp.condition.select_to_continue'), style: const TextStyle(color: AppColors.danger, fontSize: 12)),
                                   ),
                               ],
                               const SizedBox(height: 14),
                               const Divider(),
                               const SizedBox(height: 6),
-                              const Text('Description', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                              Text(context.tr('pdp.description'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                               const SizedBox(height: 6),
                               Text(p.description, style: TextStyle(color: AppColors.textSecondary, fontSize: 13.5, height: 1.5)),
                               if (p.attributes.isNotEmpty) ...[
                                 const SizedBox(height: 16),
                                 const Divider(),
                                 const SizedBox(height: 6),
-                                const Text('Specifications', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                                Text(context.tr('pdp.specifications'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                                 const SizedBox(height: 8),
                                 ...p.attributes.map((a) => Padding(
                                       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -413,7 +416,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               Row(children: [
                                 Icon(Icons.replay_rounded, size: 16, color: AppColors.textSecondary),
                                 const SizedBox(width: 6),
-                                Text('Refundable within ${p.refundWindowHours} hours of delivery', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+                                Text(context.tr('pdp.refundable', {'hours': '${p.refundWindowHours}'}), style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
                               ]),
                               const SizedBox(height: 16),
                               const Divider(),
@@ -421,19 +424,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text('Reviews (${p.reviews.length})', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                                  Text(context.tr('pdp.reviews.title', {'n': '${p.reviews.length}'}), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                                   if (_canReview)
                                     TextButton(
                                       onPressed: () async {
                                         final posted = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => WriteReviewScreen(productId: p.id, productName: p.name)));
                                         if (posted == true) _load();
                                       },
-                                      child: Text(_hasReviewed ? 'Edit your review' : 'Write a Review'),
+                                      child: Text(_hasReviewed ? context.tr('pdp.reviews.edit') : context.tr('review.write')),
                                     ),
                                 ],
                               ),
                               if (p.reviews.isEmpty)
-                                Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text('No reviews yet. Be the first to review this product.', style: TextStyle(color: AppColors.textMuted, fontSize: 13))),
+                                Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text(context.tr('pdp.reviews.empty'), style: TextStyle(color: AppColors.textMuted, fontSize: 13))),
                               ...p.reviews.map((r) => Padding(
                                     padding: const EdgeInsets.only(bottom: 14),
                                     child: Column(
@@ -487,7 +490,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         children: [
                           Expanded(
                             child: PrimaryButton(
-                              label: 'Add to Cart',
+                              label: context.tr('pdp.add_to_cart'),
                               loading: _addingToCart,
                               onPressed: p.stock == 0 || _busy ? null : () => _addToCart(),
                             ),
@@ -495,7 +498,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: PrimaryButton(
-                              label: 'Buy Now',
+                              label: context.tr('pdp.buy_now'),
                               orange: true,
                               loading: _buyingNow,
                               onPressed: p.stock == 0 || _busy ? null : () => _addToCart(buyNow: true),

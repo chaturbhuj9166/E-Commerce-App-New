@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/tr.dart';
 import '../../core/app_colors.dart';
 import '../../widgets/ntsa_logo.dart';
 
@@ -8,24 +9,24 @@ class AboutScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('About NTSA')),
+      appBar: AppBar(title: Text(context.tr('account.about.title'))),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
             const Center(child: NtsaLogo(size: 56)),
             const SizedBox(height: 12),
-            const Text('Shop Smarter, Live Better', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w600)),
+            Text(context.tr('account.about.tagline'), textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
-            Text('Version 1.0.0', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted, fontSize: 12.5)),
+            Text(context.tr('account.about.version', {'v': '1.0.0'}), textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted, fontSize: 12.5)),
             const SizedBox(height: 24),
             const Divider(),
-            _row(context, 'App version', '1.0.0'),
-            _row(context, 'Platform', 'Android'),
+            _row(context, context.tr('account.about.app_version'), '1.0.0'),
+            _row(context, context.tr('account.about.platform'), 'Android'),
             const Divider(),
             const SizedBox(height: 12),
             Text(
-              'NTSA brings electronics, fashion, groceries and more into one app, with wholesale rates for verified business buyers.',
+              context.tr('account.about.description'),
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.5),
             ),

@@ -1,3 +1,5 @@
+import 'package:flutter/widgets.dart' show BuildContext;
+import '../l10n/tr.dart';
 import 'product.dart';
 
 class CartItem {
@@ -22,6 +24,13 @@ class CartItem {
   String get variantText => [
         if (size != null) '${product.sizeLabel}: $size',
         if (color != null) 'Color: $color',
+        ?grade,
+      ].join(' · ');
+
+  /// Translated [variantText].
+  String variantLabel(BuildContext context) => [
+        if (size != null) '${product.sizeLabel}: $size',
+        if (color != null) context.tr('checkout.variant.color', {'color': color!}),
         ?grade,
       ].join(' · ');
 

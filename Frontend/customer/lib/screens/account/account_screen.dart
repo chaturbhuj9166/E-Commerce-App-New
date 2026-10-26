@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/tr.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../providers/auth_provider.dart';
@@ -25,7 +26,7 @@ class AccountScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
     return Scaffold(
-      appBar: AppBar(automaticallyImplyLeading: !embedded, title: const Text('My Account')),
+      appBar: AppBar(automaticallyImplyLeading: !embedded, title: Text(context.tr('account.home.title'))),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -47,7 +48,7 @@ class AccountScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(user?.name ?? 'NTSA Customer', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
+                        Text(user?.name ?? context.tr('account.common.default_name'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
                         if (user?.email != null) Text(user!.email!, style: const TextStyle(color: Colors.white70, fontSize: 12.5)),
                         const SizedBox(height: 8),
                         GestureDetector(
@@ -55,10 +56,10 @@ class AccountScreen extends StatelessWidget {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(color: AppColors.orange, borderRadius: BorderRadius.circular(20)),
-                            child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                              Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 14),
-                              SizedBox(width: 4),
-                              Text('Go Gold', style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w700)),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 14),
+                              const SizedBox(width: 4),
+                              Text(context.tr('account.home.go_gold'), style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w700)),
                             ]),
                           ),
                         ),
@@ -68,22 +69,22 @@ class AccountScreen extends StatelessWidget {
                   IconButton(
                     onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EditProfileScreen())),
                     icon: const Icon(Icons.edit_outlined, color: Colors.white),
-                    tooltip: 'Edit profile',
+                    tooltip: context.tr('account.home.edit_profile'),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
-            _MenuTile(icon: Icons.receipt_long_rounded, label: 'My Orders', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyOrdersScreen()))),
-            _MenuTile(icon: Icons.location_on_outlined, label: 'My Addresses', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AddressesScreen()))),
-            _MenuTile(icon: Icons.favorite_border_rounded, label: 'My Wishlist', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WishlistScreen()))),
-            _MenuTile(icon: Icons.local_offer_outlined, label: 'Coupons & Offers', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CouponsScreen()))),
-            _MenuTile(icon: Icons.card_giftcard_rounded, label: 'Refer & Earn', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReferEarnScreen()))),
-            _MenuTile(icon: Icons.support_agent_rounded, label: 'Help & Support', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HelpSupportScreen()))),
-            _MenuTile(icon: Icons.settings_outlined, label: 'Settings', onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()))),
+            _MenuTile(icon: Icons.receipt_long_rounded, label: context.tr('account.home.my_orders'), onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyOrdersScreen()))),
+            _MenuTile(icon: Icons.location_on_outlined, label: context.tr('account.home.my_addresses'), onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AddressesScreen()))),
+            _MenuTile(icon: Icons.favorite_border_rounded, label: context.tr('account.home.my_wishlist'), onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WishlistScreen()))),
+            _MenuTile(icon: Icons.local_offer_outlined, label: context.tr('account.home.coupons_offers'), onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CouponsScreen()))),
+            _MenuTile(icon: Icons.card_giftcard_rounded, label: context.tr('account.home.refer_earn'), onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReferEarnScreen()))),
+            _MenuTile(icon: Icons.support_agent_rounded, label: context.tr('account.home.help_support'), onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HelpSupportScreen()))),
+            _MenuTile(icon: Icons.settings_outlined, label: context.tr('account.home.settings'), onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()))),
             _MenuTile(
               icon: Icons.logout_rounded,
-              label: 'Logout',
+              label: context.tr('account.home.logout'),
               danger: true,
               onTap: () async {
                 context.read<CartProvider>().clear();

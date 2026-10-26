@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/tr.dart';
 import 'legal_text_screen.dart';
 
 class TermsScreen extends StatelessWidget {
@@ -6,28 +7,28 @@ class TermsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const LegalTextScreen(
-      title: 'Terms & Conditions',
+    return LegalTextScreen(
+      title: context.tr('account.terms.title'),
       sections: [
         (
-          'Using NTSA',
-          'By creating an account and placing orders on NTSA, you agree to provide accurate information and use the app only for genuine personal or, for verified wholesale partners, business purchases.',
+          context.tr('account.terms.h1'),
+          context.tr('account.terms.p1'),
         ),
         (
-          'Orders & Payment',
-          'An order is confirmed once payment is completed or, for Cash on Delivery, once placed. Prices and stock are validated again at checkout and may change without notice.',
+          context.tr('account.terms.h2'),
+          context.tr('account.terms.p2'),
         ),
         (
-          'Refunds',
-          'Each product has its own refund window shown on the product page, starting from the moment your order is marked delivered. Refunds are credited to your NTSA wallet after review.',
+          context.tr('account.terms.h3'),
+          context.tr('account.terms.p3'),
         ),
         (
-          'Wholesale Accounts',
-          'Wholesale IDs are issued only by NTSA after verification and may be disabled at any time at NTSA\'s discretion. Wholesale pricing is for approved bulk buyers only.',
+          context.tr('account.terms.h4'),
+          context.tr('account.terms.p4'),
         ),
         (
-          'Changes',
-          'These terms may be updated from time to time; continued use of the app after a change means you accept the updated terms.',
+          context.tr('account.terms.h5'),
+          context.tr('account.terms.p5'),
         ),
       ],
     );

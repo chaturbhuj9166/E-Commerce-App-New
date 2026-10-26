@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/tr.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/app_colors.dart';
 
@@ -15,10 +16,10 @@ class NotificationPreferencesScreen extends StatefulWidget {
 
 class _NotificationPreferencesScreenState extends State<NotificationPreferencesScreen> {
   static const _keys = {
-    'orders': ('ntsa-notif-orders', 'Order Updates', 'Order placed, packed, shipped and delivered'),
-    'offers': ('ntsa-notif-offers', 'Offers & Promotions', 'Sales, deals of the day and coupon alerts'),
-    'price': ('ntsa-notif-price', 'Price Drop Alerts', 'When a wishlist item gets cheaper'),
-    'arrivals': ('ntsa-notif-arrivals', 'New Arrivals', 'New products in categories you shop'),
+    'orders': ('ntsa-notif-orders', 'account.notif_prefs.orders_title', 'account.notif_prefs.orders_sub'),
+    'offers': ('ntsa-notif-offers', 'account.notif_prefs.offers_title', 'account.notif_prefs.offers_sub'),
+    'price': ('ntsa-notif-price', 'account.notif_prefs.price_title', 'account.notif_prefs.price_sub'),
+    'arrivals': ('ntsa-notif-arrivals', 'account.notif_prefs.arrivals_title', 'account.notif_prefs.arrivals_sub'),
   };
 
   Map<String, bool> _values = {};
@@ -42,7 +43,7 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Notification Preferences')),
+      appBar: AppBar(title: Text(context.tr('account.notif_prefs.title'))),
       body: SafeArea(
         child: _values.isEmpty
             ? const Center(child: CircularProgressIndicator())
@@ -50,8 +51,8 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
                 children: _keys.entries.map((e) {
                   final (_, title, subtitle) = e.value;
                   return SwitchListTile(
-                    title: Text(title, style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
-                    subtitle: Text(subtitle, style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                    title: Text(context.tr(title), style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: Text(context.tr(subtitle), style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
                     value: _values[e.key] ?? true,
                     activeThumbColor: AppColors.orange,
                     onChanged: (v) => _set(e.key, v),

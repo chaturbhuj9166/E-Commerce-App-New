@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
+import '../../l10n/tr.dart';
 import '../../models/coupon.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/shop_provider.dart';
@@ -77,11 +78,11 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
     }
     final match = shop.coupons.where((c) => c.code == code).toList();
     if (match.isEmpty) {
-      setState(() => _couponError = 'Invalid or expired coupon');
+      setState(() => _couponError = context.tr('checkout.coupon.invalid'));
       return;
     }
     if (subtotalPaise < match.first.minOrderPaise) {
-      setState(() => _couponError = 'Needs a minimum order of ${formatPaise(match.first.minOrderPaise)}');
+      setState(() => _couponError = context.tr('checkout.coupon.min_order', {'amount': formatPaise(match.first.minOrderPaise)}));
       return;
     }
     setState(() => _appliedCoupon = match.first);
@@ -122,7 +123,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
     final deliveryFeePaise = context.watch<ShopProvider>().deliveryChargeFor(cart.subtotalPaise - discountPaise);
     final totalPaise = cart.subtotalPaise + deliveryFeePaise - discountPaise;
     return Scaffold(
-      appBar: AppBar(title: const Text('Checkout')),
+      appBar: AppBar(title: Text(context.tr('checkout.title'))),
       body: SafeArea(
         child: Column(
           children: [
@@ -131,7 +132,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
-                  const Text('Order Summary', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                  Text(context.tr('checkout.summary.title'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                   const SizedBox(height: 10),
                   ...cart.items.where((i) => i.available).map((item) => Padding(
                         padding: const EdgeInsets.only(bottom: 10),
@@ -149,7 +150,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text('${item.product.name} × ${item.quantity}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5)),
-                                  if (item.variantText.isNotEmpty) Text(item.variantText, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                  if (item.variantText.isNotEmpty) Text(item.variantLabel(context), style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                                 ],
                               ),
                             ),
@@ -158,7 +159,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                         ),
                       )),
                   const Divider(height: 24),
-                  const Text('Apply Coupon', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                  Text(context.tr('checkout.coupon.title'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                   const SizedBox(height: 10),
                   if (_appliedCoupon != null)
                     Container(
@@ -168,7 +169,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                         children: [
                           const Icon(Icons.local_offer_rounded, color: AppColors.success, size: 18),
                           const SizedBox(width: 8),
-                          Expanded(child: Text('${_appliedCoupon!.code} applied — ${_appliedCoupon!.summary}', style: const TextStyle(color: AppColors.success, fontSize: 12.5, fontWeight: FontWeight.w600))),
+                          Expanded(child: Text(context.tr('checkout.coupon.applied', {'code': _appliedCoupon!.code, 'summary': _appliedCoupon!.summaryOf(context)}), style: const TextStyle(color: AppColors.success, fontSize: 12.5, fontWeight: FontWeight.w600))),
                           GestureDetector(onTap: () => setState(() => _appliedCoupon = null), child: const Icon(Icons.close, size: 18, color: AppColors.success)),
                         ],
                       ),
@@ -180,22 +181,22 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                           child: TextField(
                             controller: _couponController,
                             textCapitalization: TextCapitalization.characters,
-                            decoration: const InputDecoration(hintText: 'Enter coupon code'),
+                            decoration: InputDecoration(hintText: context.tr('checkout.coupon.hint')),
                           ),
                         ),
                         const SizedBox(width: 10),
-                        OutlinedButton(onPressed: _applying ? null : () => _applyCoupon(cart.subtotalPaise), child: const Text('Apply')),
+                        OutlinedButton(onPressed: _applying ? null : () => _applyCoupon(cart.subtotalPaise), child: Text(context.tr('checkout.coupon.apply'))),
                       ],
                     ),
                   if (_couponError != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_couponError!, style: const TextStyle(color: AppColors.danger, fontSize: 12))),
                   const Divider(height: 24),
-                  const Text('Price Details', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                  Text(context.tr('checkout.summary.price_details'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                   const SizedBox(height: 10),
-                  _PriceRow(label: 'Items Total', value: formatPaise(cart.subtotalPaise)),
-                  _PriceRow(label: 'Delivery Fee', value: deliveryFeePaise == 0 ? 'FREE' : formatPaise(deliveryFeePaise), valueColor: deliveryFeePaise == 0 ? AppColors.success : null),
-                  if (discountPaise > 0) _PriceRow(label: 'Coupon Discount', value: '-${formatPaise(discountPaise)}', valueColor: AppColors.success),
+                  _PriceRow(label: context.tr('checkout.summary.items_total'), value: formatPaise(cart.subtotalPaise)),
+                  _PriceRow(label: context.tr('checkout.summary.delivery_fee'), value: deliveryFeePaise == 0 ? context.tr('checkout.summary.free') : formatPaise(deliveryFeePaise), valueColor: deliveryFeePaise == 0 ? AppColors.success : null),
+                  if (discountPaise > 0) _PriceRow(label: context.tr('checkout.summary.coupon_discount'), value: '-${formatPaise(discountPaise)}', valueColor: AppColors.success),
                   const Divider(height: 24),
-                  _PriceRow(label: 'Total Amount', value: formatPaise(totalPaise), bold: true),
+                  _PriceRow(label: context.tr('checkout.summary.total_amount'), value: formatPaise(totalPaise), bold: true),
                   if (_error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_error!, style: const TextStyle(color: AppColors.danger))),
                   const SizedBox(height: 16),
                 ],
@@ -205,7 +206,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
               top: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
-                child: PrimaryButton(label: 'Place Order', loading: _placing, onPressed: cart.items.isEmpty || cart.hasUnavailable || cart.loading ? null : () => _placeOrder(cart)),
+                child: PrimaryButton(label: context.tr('checkout.summary.place_order'), loading: _placing, onPressed: cart.items.isEmpty || cart.hasUnavailable || cart.loading ? null : () => _placeOrder(cart)),
               ),
             ),
           ],

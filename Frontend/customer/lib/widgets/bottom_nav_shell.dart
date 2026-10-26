@@ -9,6 +9,7 @@ import '../screens/cart/cart_screen.dart';
 import '../screens/categories/all_categories_screen.dart';
 import '../screens/home/home_tab.dart';
 import '../screens/wishlist/wishlist_screen.dart';
+import '../l10n/tr.dart';
 
 /// The 5 root sections from the layout's bottom nav: Home, Categories,
 /// Cart, Wishlist, Account (screens 6, 7, 11, 12 & 18).
@@ -41,11 +42,11 @@ class _BottomNavShellState extends State<BottomNavShell> {
   ];
 
   static const _items = [
-    (Icons.home_rounded, 'Home'),
-    (Icons.grid_view_rounded, 'Categories'),
-    (Icons.shopping_cart_rounded, 'Cart'),
-    (Icons.favorite_rounded, 'Wishlist'),
-    (Icons.person_rounded, 'Account'),
+    (Icons.home_rounded, 'w.nav.home'),
+    (Icons.grid_view_rounded, 'w.nav.categories'),
+    (Icons.shopping_cart_rounded, 'w.nav.cart'),
+    (Icons.favorite_rounded, 'w.nav.wishlist'),
+    (Icons.person_rounded, 'w.nav.account'),
   ];
 
   @override
@@ -64,7 +65,7 @@ class _BottomNavShellState extends State<BottomNavShell> {
       floatingActionButton: FloatingActionButton(
         heroTag: 'ai-assistant',
         backgroundColor: AppColors.orange,
-        tooltip: 'Shopping Assistant',
+        tooltip: context.tr('ai.title'),
         onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AiAssistantScreen())),
         child: const Icon(Icons.smart_toy_rounded, color: Colors.white),
       ),
@@ -105,7 +106,7 @@ class _BottomNavShellState extends State<BottomNavShell> {
                           ],
                         ),
                         const SizedBox(height: 3),
-                        Text(label, style: TextStyle(fontSize: 10.5, color: color, fontWeight: selected ? FontWeight.w600 : FontWeight.w400)),
+                        Text(context.tr(label), style: TextStyle(fontSize: 10.5, color: color, fontWeight: selected ? FontWeight.w600 : FontWeight.w400)),
                       ],
                     ),
                   ),

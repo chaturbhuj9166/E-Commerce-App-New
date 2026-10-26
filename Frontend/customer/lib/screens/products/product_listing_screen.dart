@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
+import '../../l10n/tr.dart';
 import '../../models/product.dart';
 import '../../providers/shop_provider.dart';
 import '../../providers/wishlist_provider.dart';
@@ -16,11 +17,7 @@ const _clearPriceRange = RangeValues(-1, -1);
 
 /// Matches [Product.conditionLabel] for a bare condition code, for the
 /// filter chips, which only have the code (not a whole Product) to work with.
-String _conditionLabel(String condition) => const {
-      'REFURBISHED': 'Refurbished',
-      'OPEN_BOX': 'Open box',
-      'USED': 'Used',
-    }[condition] ?? 'New';
+String _conditionLabel(BuildContext context, String condition) => context.tr(Product.conditionKey(condition));
 
 /// What "Filter" narrows the list down to. Every field left at its default
 /// (null / false) means "don't filter on this".
@@ -138,7 +135,7 @@ class _ProductListingScreenState extends State<ProductListingScreen> {
               child: Row(
                 children: [
                   _FilterChipButton(
-                    label: 'Sort',
+                    label: context.tr('plp.sort'),
                     icon: Icons.swap_vert_rounded,
                     onTap: () async {
                       final choice = await showModalBottomSheet<_SortBy>(
@@ -153,7 +150,7 @@ class _ProductListingScreenState extends State<ProductListingScreen> {
                   ),
                   const SizedBox(width: 8),
                   _FilterChipButton(
-                    label: _priceRange == null ? 'Price' : '₹${_priceRange!.start.round()} – ₹${_priceRange!.end.round()}',
+                    label: _priceRange == null ? context.tr('plp.price') : '₹${_priceRange!.start.round()} – ₹${_priceRange!.end.round()}',
                     icon: Icons.expand_more_rounded,
                     active: _priceRange != null,
                     onTap: () async {
@@ -170,7 +167,7 @@ class _ProductListingScreenState extends State<ProductListingScreen> {
                   ),
                   const SizedBox(width: 8),
                   _FilterChipButton(
-                    label: 'Filter',
+                    label: context.tr('plp.filter'),
                     icon: Icons.tune_rounded,
                     active: _filters.isActive,
                     onTap: () async {
@@ -198,11 +195,11 @@ class _ProductListingScreenState extends State<ProductListingScreen> {
                           child: Column(mainAxisSize: MainAxisSize.min, children: [
                             Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger))),
                             const SizedBox(height: 12),
-                            OutlinedButton(onPressed: _fetch, child: const Text('Retry')),
+                            OutlinedButton(onPressed: _fetch, child: Text(context.tr('common.retry'))),
                           ]),
                         )
                       : _products.isEmpty
-                      ? Center(child: Text('No products found', style: TextStyle(color: AppColors.textMuted)))
+                      ? Center(child: Text(context.tr('plp.no_products'), style: TextStyle(color: AppColors.textMuted)))
                       : GridView.builder(
                           padding: const EdgeInsets.all(14),
                           itemCount: _products.length,
@@ -281,7 +278,7 @@ class _PriceSheetState extends State<_PriceSheet> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Price range', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                Text(context.tr('plp.price_range'), style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                 Text('₹${_range.start.round()} – ₹${_range.end.round()}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.navy)),
               ],
             ),
@@ -301,7 +298,7 @@ class _PriceSheetState extends State<_PriceSheet> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(context).pop(_clearPriceRange),
-                      child: const Text('Clear'),
+                      child: Text(context.tr('plp.clear')),
                     ),
                   ),
                 if (widget.current != null) const SizedBox(width: 10),
@@ -310,7 +307,7 @@ class _PriceSheetState extends State<_PriceSheet> {
                   child: FilledButton(
                     style: FilledButton.styleFrom(backgroundColor: AppColors.navy),
                     onPressed: () => Navigator.of(context).pop(_range),
-                    child: const Text('Apply'),
+                    child: Text(context.tr('plp.apply')),
                   ),
                 ),
               ],
@@ -368,37 +365,37 @@ class _FilterSheetState extends State<_FilterSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Filter', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            Text(context.tr('plp.filter'), style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
             section(
-              'Customer rating',
+              context.tr('plp.filter.rating'),
               Wrap(spacing: 8, children: [
-                chip('Any', _minRating == null, () => setState(() => _minRating = null)),
-                chip('4★ & up', _minRating == 4, () => setState(() => _minRating = 4)),
-                chip('3★ & up', _minRating == 3, () => setState(() => _minRating = 3)),
+                chip(context.tr('plp.filter.any'), _minRating == null, () => setState(() => _minRating = null)),
+                chip(context.tr('plp.filter.rating_4'), _minRating == 4, () => setState(() => _minRating = 4)),
+                chip(context.tr('plp.filter.rating_3'), _minRating == 3, () => setState(() => _minRating = 3)),
               ]),
             ),
             section(
-              'Discount',
+              context.tr('plp.filter.discount'),
               Wrap(spacing: 8, children: [
-                chip('Any', _minDiscount == null, () => setState(() => _minDiscount = null)),
-                chip('25% or more', _minDiscount == 25, () => setState(() => _minDiscount = 25)),
-                chip('50% or more', _minDiscount == 50, () => setState(() => _minDiscount = 50)),
+                chip(context.tr('plp.filter.any'), _minDiscount == null, () => setState(() => _minDiscount = null)),
+                chip(context.tr('plp.filter.discount_25'), _minDiscount == 25, () => setState(() => _minDiscount = 25)),
+                chip(context.tr('plp.filter.discount_50'), _minDiscount == 50, () => setState(() => _minDiscount = 50)),
               ]),
             ),
             if (widget.availableConditions.isNotEmpty)
               section(
-                'Condition',
+                context.tr('plp.filter.condition'),
                 Wrap(spacing: 8, children: [
-                  chip('Any', _condition == null, () => setState(() => _condition = null)),
+                  chip(context.tr('plp.filter.any'), _condition == null, () => setState(() => _condition = null)),
                   for (final c in widget.availableConditions)
-                    chip(_conditionLabel(c), _condition == c, () => setState(() => _condition = c)),
+                    chip(_conditionLabel(context, c), _condition == c, () => setState(() => _condition = c)),
                 ]),
               ),
             CheckboxListTile(
               value: _inStockOnly,
               onChanged: (v) => setState(() => _inStockOnly = v ?? false),
-              title: const Text('In stock only', style: TextStyle(fontSize: 13.5)),
+              title: Text(context.tr('plp.filter.in_stock_only'), style: TextStyle(fontSize: 13.5)),
               controlAffinity: ListTileControlAffinity.leading,
               contentPadding: EdgeInsets.zero,
               activeColor: AppColors.navy,
@@ -409,7 +406,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => Navigator.of(context).pop(const _Filters()),
-                    child: const Text('Clear all'),
+                    child: Text(context.tr('plp.filter.clear_all')),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -418,7 +415,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                   child: FilledButton(
                     style: FilledButton.styleFrom(backgroundColor: AppColors.navy),
                     onPressed: () => Navigator.of(context).pop(_Filters(minRating: _minRating, minDiscount: _minDiscount, condition: _condition, inStockOnly: _inStockOnly)),
-                    child: const Text('Apply'),
+                    child: Text(context.tr('plp.apply')),
                   ),
                 ),
               ],
@@ -436,11 +433,11 @@ class _SortSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const labels = {
-      _SortBy.relevance: 'Relevance',
-      _SortBy.priceLowHigh: 'Price: Low to High',
-      _SortBy.priceHighLow: 'Price: High to Low',
-      _SortBy.rating: 'Customer Rating',
+    final labels = {
+      _SortBy.relevance: context.tr('plp.sort.relevance'),
+      _SortBy.priceLowHigh: context.tr('plp.sort.price_low_high'),
+      _SortBy.priceHighLow: context.tr('plp.sort.price_high_low'),
+      _SortBy.rating: context.tr('plp.sort.rating'),
     };
     return SafeArea(
       child: RadioGroup<_SortBy>(

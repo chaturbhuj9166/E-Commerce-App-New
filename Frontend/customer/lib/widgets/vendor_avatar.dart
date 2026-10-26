@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../core/app_colors.dart';
 import '../providers/vendor_provider.dart';
 import 'app_network_image.dart';
+import '../l10n/tr.dart';
 
 /// Circular profile photo for the signed-in wholesale partner. When
 /// [editable] it is tappable: picks an image and uploads it through
@@ -30,8 +31,8 @@ class _VendorAvatarState extends State<VendorAvatar> {
       context: context,
       builder: (context) => SafeArea(
         child: Wrap(children: [
-          ListTile(leading: const Icon(Icons.photo_camera_outlined), title: const Text('Take a photo'), onTap: () async => Navigator.of(context).pop(await ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 800))),
-          ListTile(leading: const Icon(Icons.photo_library_outlined), title: const Text('Choose from gallery'), onTap: () async => Navigator.of(context).pop(await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 800))),
+          ListTile(leading: const Icon(Icons.photo_camera_outlined), title: Text(context.tr('w.take_photo')), onTap: () async => Navigator.of(context).pop(await ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 800))),
+          ListTile(leading: const Icon(Icons.photo_library_outlined), title: Text(context.tr('w.choose_gallery')), onTap: () async => Navigator.of(context).pop(await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 800))),
         ]),
       ),
     );
@@ -48,7 +49,7 @@ class _VendorAvatarState extends State<VendorAvatar> {
     } catch (_) {
       if (mounted) {
         setState(() => _preview = null);
-        messenger.showSnackBar(const SnackBar(content: Text("Couldn't update your photo. Please try again.")));
+        messenger.showSnackBar(SnackBar(content: Text(context.tr('w.photo_failed'))));
       }
     } finally {
       if (mounted) setState(() => _uploading = false);

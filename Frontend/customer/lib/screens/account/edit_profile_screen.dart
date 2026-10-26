@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import '../../l10n/tr.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
@@ -25,8 +26,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       context: context,
       builder: (context) => SafeArea(
         child: Wrap(children: [
-          ListTile(leading: const Icon(Icons.photo_camera_outlined), title: const Text('Take a photo'), onTap: () async => Navigator.of(context).pop(await ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 800))),
-          ListTile(leading: const Icon(Icons.photo_library_outlined), title: const Text('Choose from gallery'), onTap: () async => Navigator.of(context).pop(await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 800))),
+          ListTile(leading: const Icon(Icons.photo_camera_outlined), title: Text(context.tr('account.edit_profile.take_photo')), onTap: () async => Navigator.of(context).pop(await ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 800))),
+          ListTile(leading: const Icon(Icons.photo_library_outlined), title: Text(context.tr('account.edit_profile.choose_gallery')), onTap: () async => Navigator.of(context).pop(await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 800))),
         ]),
       ),
     );
@@ -56,7 +57,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final user = context.watch<AuthProvider>().user;
     final loading = context.watch<AuthProvider>().loading;
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit Profile')),
+      appBar: AppBar(title: Text(context.tr('account.edit_profile.title'))),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
@@ -89,14 +90,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
             ),
             const SizedBox(height: 28),
-            TextField(controller: _name, maxLength: 100, decoration: const InputDecoration(labelText: 'Full name', counterText: '')),
+            TextField(controller: _name, maxLength: 100, decoration: InputDecoration(labelText: context.tr('account.edit_profile.full_name'), counterText: '')),
             if (user?.email != null) ...[
               const SizedBox(height: 14),
-              TextField(enabled: false, controller: TextEditingController(text: user!.email), decoration: const InputDecoration(labelText: 'Email')),
+              TextField(enabled: false, controller: TextEditingController(text: user!.email), decoration: InputDecoration(labelText: context.tr('account.edit_profile.email'))),
             ],
             if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: const TextStyle(color: AppColors.danger))),
             const SizedBox(height: 24),
-            PrimaryButton(label: 'Save Changes', loading: loading, onPressed: _save),
+            PrimaryButton(label: context.tr('account.edit_profile.save_changes'), loading: loading, onPressed: _save),
           ],
         ),
       ),

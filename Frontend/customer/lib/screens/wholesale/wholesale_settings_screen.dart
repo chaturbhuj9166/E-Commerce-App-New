@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/tr.dart';
 import '../../core/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/cart_provider.dart';
@@ -38,7 +39,7 @@ class WholesaleSettingsScreen extends StatelessWidget {
     final vendor = context.watch<VendorProvider>();
     final isDark = context.watch<ThemeProvider>().isDark;
     return Scaffold(
-      appBar: AppBar(automaticallyImplyLeading: !embedded, title: const Text('Settings')),
+      appBar: AppBar(automaticallyImplyLeading: !embedded, title: Text(context.tr('ws.nav.settings'))),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -54,10 +55,10 @@ class WholesaleSettingsScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(vendor.name ?? 'Wholesale Partner', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                        Text(vendor.name ?? context.tr('ws.partner_default'), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                         if (vendor.limits != null)
                           Text(
-                            'Order range ${formatPaise(vendor.limits!.minPaise)} – ${formatPaise(vendor.limits!.maxPaise)}',
+                            context.tr('ws.settings.order_range', {'min': formatPaise(vendor.limits!.minPaise), 'max': formatPaise(vendor.limits!.maxPaise)}),
                             style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
                           ),
                       ],
@@ -71,41 +72,41 @@ class WholesaleSettingsScreen extends StatelessWidget {
             // works here as-is: track, get the delivery OTP, cancel.
             _Tile(
               icon: Icons.receipt_long_rounded,
-              label: 'My Orders',
+              label: context.tr('ws.settings.my_orders'),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyOrdersScreen())),
             ),
             _Tile(
               icon: Icons.chat_bubble_outline_rounded,
-              label: 'Message Admin',
+              label: context.tr('ws.messages.title'),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WholesaleMessagesScreen())),
             ),
             _Tile(
               icon: Icons.dark_mode_outlined,
-              label: 'Dark Mode',
+              label: context.tr('ws.settings.dark_mode'),
               trailing: Switch(value: isDark, onChanged: (v) => context.read<ThemeProvider>().setDark(v), activeThumbColor: AppColors.orange),
             ),
             _Tile(
               icon: Icons.description_outlined,
-              label: 'Terms & Conditions',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LegalTextScreen(
-                    title: 'Terms & Conditions',
+              label: context.tr('ws.settings.terms'),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => LegalTextScreen(
+                    title: context.tr('ws.settings.terms'),
                     sections: [
                       (
-                        'Wholesale Orders',
-                        'These wholesale terms cover minimum/maximum order values, payment and delivery for verified NTSA business buyers.',
+                        context.tr('ws.settings.terms_heading'),
+                        context.tr('ws.settings.terms_body'),
                       ),
                     ],
                   ))),
             ),
             _Tile(
               icon: Icons.info_outline_rounded,
-              label: 'About NTSA',
+              label: context.tr('ws.settings.about'),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AboutScreen())),
             ),
             const SizedBox(height: 18),
             _Tile(
               icon: Icons.logout_rounded,
-              label: 'Exit Wholesale Portal',
+              label: context.tr('ws.settings.exit'),
               danger: true,
               onTap: () => _exit(context),
             ),

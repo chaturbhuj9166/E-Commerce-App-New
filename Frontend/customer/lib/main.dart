@@ -1,12 +1,15 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
+import 'l10n/app_languages.dart';
 import 'core/api_client.dart';
 import 'core/app_theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/cart_provider.dart';
+import 'providers/locale_provider.dart';
 import 'providers/saved_for_later_provider.dart';
 import 'providers/shop_provider.dart';
 import 'providers/theme_provider.dart';
@@ -69,9 +72,10 @@ class NtsaApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => WishlistProvider()),
         ChangeNotifierProvider(create: (_) => VendorProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()..restore()),
+        ChangeNotifierProvider(create: (_) => LocaleProvider()..restore()),
       ],
-      child: Consumer<ThemeProvider>(
-        builder: (context, theme, _) => MaterialApp(
+      child: Consumer2<ThemeProvider, LocaleProvider>(
+        builder: (context, theme, localeProvider, _) => MaterialApp(
           title: 'NTSA',
           debugShowCheckedModeBanner: false,
           navigatorKey: navigatorKey,
@@ -79,6 +83,16 @@ class NtsaApp extends StatelessWidget {
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),
           themeMode: theme.isDark ? ThemeMode.dark : ThemeMode.light,
+          // The shopper picks the language after signing in (or from Account).
+          // The Global* delegates give Material widgets, dates and right-to-left
+          // layout for every language in kLanguages.
+          locale: localeProvider.locale,
+          supportedLocales: [for (final l in kLanguages) Locale(l.code)],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: const SplashScreen(),
         ),
       ),

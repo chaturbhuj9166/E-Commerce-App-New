@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
+import '../../l10n/tr.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/bottom_nav_shell.dart';
+import '../language/language_select_screen.dart';
 import '../../widgets/primary_button.dart';
 
 /// Second step of phone sign-in. In demo mode the Backend hands back the OTP
@@ -65,12 +67,12 @@ class _OtpScreenState extends State<OtpScreen> {
       _secondsLeft = (sent['resendInSeconds'] as num?)?.toInt() ?? widget.resendInSeconds;
     });
     _startTimer();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A new OTP has been sent')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('auth.otp.new_otp_sent'))));
   }
 
   Future<void> _verify() async {
     if (!RegExp(r'^\d{6}$').hasMatch(_otp.text)) {
-      setState(() => _error = 'Enter the 6-digit OTP');
+      setState(() => _error = context.tr('auth.otp.enter_6_digit'));
       return;
     }
     setState(() => _error = null);
@@ -78,9 +80,9 @@ class _OtpScreenState extends State<OtpScreen> {
     final ok = await auth.continueWithDemo(phone: widget.phone, otp: _otp.text);
     if (!mounted) return;
     if (ok) {
-      Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const BottomNavShell()), (route) => false);
+      goAfterLogin(context, (_) => const BottomNavShell());
     } else {
-      setState(() => _error = auth.error ?? 'Could not verify OTP');
+      setState(() => _error = auth.error ?? context.tr('auth.otp.could_not_verify'));
     }
   }
 
@@ -94,9 +96,9 @@ class _OtpScreenState extends State<OtpScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 24),
           children: [
             const SizedBox(height: 16),
-            const Center(child: Text('Verify your number', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800))),
+            Center(child: Text(context.tr('auth.otp.title'), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800))),
             const SizedBox(height: 6),
-            Center(child: Text('Enter the 6-digit code sent to +91 ${widget.phone}', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary))),
+            Center(child: Text(context.tr('auth.otp.code_sent_to', {'phone': widget.phone}), textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary))),
             const SizedBox(height: 28),
             TextField(
               controller: _otp,
@@ -117,17 +119,17 @@ class _OtpScreenState extends State<OtpScreen> {
                 margin: const EdgeInsets.only(top: 16),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(color: AppColors.orange.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-                child: Text('Demo mode: SMS is not connected yet, so your OTP is $_demoOtp', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12.5)),
+                child: Text(context.tr('auth.otp.demo_hint', {'otp': '$_demoOtp'}), textAlign: TextAlign.center, style: const TextStyle(fontSize: 12.5)),
               ),
             const SizedBox(height: 20),
-            PrimaryButton(label: 'Verify & Continue', loading: loading, onPressed: _verify),
+            PrimaryButton(label: context.tr('auth.otp.verify_continue'), loading: loading, onPressed: _verify),
             const SizedBox(height: 14),
             Center(
               child: _secondsLeft > 0
-                  ? Text('Resend OTP in ${_secondsLeft}s', style: TextStyle(color: AppColors.textMuted))
-                  : TextButton(onPressed: loading ? null : _resend, child: const Text('Resend OTP')),
+                  ? Text(context.tr('auth.otp.resend_in', {'s': '$_secondsLeft'}), style: TextStyle(color: AppColors.textMuted))
+                  : TextButton(onPressed: loading ? null : _resend, child: Text(context.tr('auth.otp.resend'))),
             ),
-            Center(child: TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Change number'))),
+            Center(child: TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.tr('auth.otp.change_number')))),
           ],
         ),
       ),

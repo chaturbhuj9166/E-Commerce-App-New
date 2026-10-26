@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show BuildContext;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../l10n/tr.dart';
 
 /// A cart line the shopper parked for later. There's no backend for this, so it
 /// stores just enough to show the line and re-add it to the cart on its own.
@@ -33,6 +35,13 @@ class SavedItem {
   String get variantText => [
         if (size != null) '$sizeLabel: $size',
         if (color != null) 'Color: $color',
+        ?grade,
+      ].join(' · ');
+
+  /// Translated [variantText].
+  String variantLabel(BuildContext context) => [
+        if (size != null) '$sizeLabel: $size',
+        if (color != null) context.tr('checkout.variant.color', {'color': color!}),
         ?grade,
       ].join(' · ');
 

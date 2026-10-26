@@ -14,6 +14,7 @@ import '../../widgets/primary_button.dart';
 import '../../widgets/product_card.dart';
 import '../checkout/checkout_address_screen.dart';
 import '../products/product_details_screen.dart';
+import '../../l10n/tr.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key, this.embedded = false});
@@ -80,7 +81,7 @@ class _CartScreenState extends State<CartScreen> {
       sizeLabel: item.product.sizeLabel,
       quantity: item.quantity,
     ));
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved for later')));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('cart.saved_snack'))));
   }
 
   /// Puts a saved line back into the cart; only removes it from the saved list
@@ -95,7 +96,7 @@ class _CartScreenState extends State<CartScreen> {
       return;
     }
     await saved.remove(item);
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Moved to cart')));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('cart.moved_snack'))));
   }
 
   void _openProduct(String id) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductDetailsScreen(productId: id))).then((_) {
@@ -113,7 +114,7 @@ class _CartScreenState extends State<CartScreen> {
     final saved = context.watch<SavedForLaterProvider>().items;
     final recommended = _recommendations(cart.items, shop);
     return Scaffold(
-      appBar: AppBar(automaticallyImplyLeading: !widget.embedded, title: Text('My Cart (${cart.items.length})')),
+      appBar: AppBar(automaticallyImplyLeading: !widget.embedded, title: Text(context.tr('cart.title', {'n': '${cart.items.length}'}))),
       body: SafeArea(
         child: cart.loading && cart.items.isEmpty
             ? const Center(child: CircularProgressIndicator())
@@ -136,7 +137,7 @@ class _CartScreenState extends State<CartScreen> {
                               ],
                               if (recommended.isNotEmpty) ...[
                                 const SizedBox(height: 22),
-                                _recommendedStrip('You may also like', recommended),
+                                _recommendedStrip(context.tr('cart.you_may_like'), recommended),
                               ],
                             ],
                           ),
@@ -168,27 +169,27 @@ class _CartScreenState extends State<CartScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          const Center(child: Text('Your cart is empty', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+          Center(child: Text(context.tr('cart.empty_title'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
           const SizedBox(height: 6),
-          Center(child: Text('Looks like you haven\'t added anything yet.', style: TextStyle(color: AppColors.textSecondary))),
+          Center(child: Text(context.tr('cart.empty_sub'), style: TextStyle(color: AppColors.textSecondary))),
           if (cart.error != null) ...[
             const SizedBox(height: 10),
             Center(child: Text(cart.error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger))),
-            Center(child: TextButton(onPressed: () => context.read<CartProvider>().load(), child: const Text('Retry'))),
+            Center(child: TextButton(onPressed: () => context.read<CartProvider>().load(), child: Text(context.tr('common.retry')))),
           ],
           const SizedBox(height: 18),
-          Center(child: SizedBox(width: 200, child: PrimaryButton(label: 'Start Shopping', orange: true, onPressed: _startShopping))),
+          Center(child: SizedBox(width: 200, child: PrimaryButton(label: context.tr('cart.start_shopping'), orange: true, onPressed: _startShopping))),
           if (saved.isNotEmpty) ...[
             const SizedBox(height: 30),
             _savedSection(saved),
           ],
           if (deals.isNotEmpty) ...[
             const SizedBox(height: 30),
-            _recommendedStrip('Deals of the Day', deals),
+            _recommendedStrip(context.tr('home.deals'), deals),
           ],
           if (recommended.isNotEmpty) ...[
             const SizedBox(height: 22),
-            _recommendedStrip('Recommended for you', recommended),
+            _recommendedStrip(context.tr('cart.recommended'), recommended),
           ],
         ],
       ),
@@ -224,17 +225,17 @@ class _CartScreenState extends State<CartScreen> {
                     if (item.variantText.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(item.variantText, style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
+                        child: Text(item.variantLabel(context), style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
                       ),
                     PriceTag(pricePaise: item.unitPaise, mrpPaise: item.mrpPaise, size: 14),
                     const SizedBox(height: 6),
                     if (!item.active || item.product.stock == 0)
-                      const Text('No longer available -- remove to continue', style: TextStyle(color: AppColors.danger, fontSize: 12, fontWeight: FontWeight.w600))
+                      Text(context.tr('cart.unavailable_remove'), style: const TextStyle(color: AppColors.danger, fontSize: 12, fontWeight: FontWeight.w600))
                     else ...[
                       if (!item.available)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
-                          child: Text('Only ${item.product.stock} left -- reduce quantity', style: const TextStyle(color: AppColors.danger, fontSize: 12, fontWeight: FontWeight.w600)),
+                          child: Text(context.tr('cart.only_left', {'n': '${item.product.stock}'}), style: const TextStyle(color: AppColors.danger, fontSize: 12, fontWeight: FontWeight.w600)),
                         ),
                       Row(
                         children: [
@@ -258,7 +259,7 @@ class _CartScreenState extends State<CartScreen> {
                         style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap, foregroundColor: AppColors.textSecondary),
                         onPressed: cart.loading ? null : () => _saveForLater(item),
                         icon: const Icon(Icons.bookmark_border_rounded, size: 16),
-                        label: const Text('Save for later', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                        label: Text(context.tr('cart.save_for_later'), style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
                       ),
                     ),
                   ],
@@ -290,31 +291,31 @@ class _CartScreenState extends State<CartScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Price Details', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          Text(context.tr('cart.price_details'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
           const SizedBox(height: 12),
-          _row('Price ($units item${units == 1 ? '' : 's'})', formatPaise(mrpTotal)),
-          if (savings > 0) _row('Discount', '-${formatPaise(savings)}', color: AppColors.success),
-          _row('Delivery', delivery == 0 ? 'FREE' : formatPaise(delivery), color: delivery == 0 ? AppColors.success : null),
+          _row(context.tr(units == 1 ? 'cart.price_one' : 'cart.price_many', {'n': '$units'}), formatPaise(mrpTotal)),
+          if (savings > 0) _row(context.tr('cart.discount'), '-${formatPaise(savings)}', color: AppColors.success),
+          _row(context.tr('cart.delivery'), delivery == 0 ? context.tr('cart.free') : formatPaise(delivery), color: delivery == 0 ? AppColors.success : null),
           const Divider(height: 20),
-          _row('Total Amount', formatPaise(cart.subtotalPaise + delivery), bold: true),
+          _row(context.tr('cart.total_amount'), formatPaise(cart.subtotalPaise + delivery), bold: true),
           if (delivery > 0 && freeAt != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),
-              child: Text('Add ${formatPaise(freeAt - cart.subtotalPaise)} more to get free delivery', style: const TextStyle(fontSize: 12, color: AppColors.orange, fontWeight: FontWeight.w600)),
+              child: Text(context.tr('cart.add_more_free', {'amount': formatPaise(freeAt - cart.subtotalPaise)}), style: const TextStyle(fontSize: 12, color: AppColors.orange, fontWeight: FontWeight.w600)),
             ),
           if (savings > 0) ...[
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-              child: Text('🎉 You save ${formatPaise(savings)} on this order', style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.w600, fontSize: 12.5)),
+              child: Text(context.tr('cart.you_save', {'amount': formatPaise(savings)}), style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.w600, fontSize: 12.5)),
             ),
           ],
           const SizedBox(height: 10),
           Row(children: [
             Icon(Icons.verified_user_outlined, size: 16, color: AppColors.textMuted),
             const SizedBox(width: 6),
-            Expanded(child: Text('Safe and secure payments · Easy returns', style: TextStyle(fontSize: 11.5, color: AppColors.textMuted))),
+            Expanded(child: Text(context.tr('cart.secure'), style: TextStyle(fontSize: 11.5, color: AppColors.textMuted))),
           ]),
         ],
       ),
@@ -338,7 +339,7 @@ class _CartScreenState extends State<CartScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Saved for later (${saved.length})', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+        Text(context.tr('cart.saved_title', {'n': '${saved.length}'}), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
         const SizedBox(height: 10),
         for (final item in saved) ...[_savedTile(item), const SizedBox(height: 10)],
       ],
@@ -368,7 +369,7 @@ class _CartScreenState extends State<CartScreen> {
                 if (item.variantText.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(item.variantText, style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
+                    child: Text(item.variantLabel(context), style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
                   ),
                 PriceTag(pricePaise: item.pricePaise, mrpPaise: item.mrpPaise, size: 14),
                 const SizedBox(height: 4),
@@ -378,7 +379,7 @@ class _CartScreenState extends State<CartScreen> {
                     style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap, foregroundColor: AppColors.orange),
                     onPressed: () => _moveToCart(item),
                     icon: const Icon(Icons.add_shopping_cart_rounded, size: 16),
-                    label: const Text('Move to cart', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                    label: Text(context.tr('cart.move_to_cart'), style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
                   ),
                 ),
               ],
@@ -439,9 +440,9 @@ class _CartScreenState extends State<CartScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (cart.hasUnavailable)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 8),
-                  child: Text('Remove or update the unavailable items to check out.', style: TextStyle(color: AppColors.danger, fontSize: 12)),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(context.tr('cart.fix_unavailable'), style: const TextStyle(color: AppColors.danger, fontSize: 12)),
                 ),
               Row(
                 children: [
@@ -450,13 +451,13 @@ class _CartScreenState extends State<CartScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(formatPaise(cart.subtotalPaise + delivery), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                      Text(delivery > 0 ? 'Total (incl. delivery)' : 'Total Amount', style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
+                      Text(context.tr(delivery > 0 ? 'cart.total_incl_delivery' : 'cart.total_amount'), style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
                     ],
                   ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: PrimaryButton(
-                      label: 'Proceed to Checkout',
+                      label: context.tr('cart.checkout'),
                       onPressed: cart.hasUnavailable || cart.loading
                           ? null
                           : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CheckoutAddressScreen())),

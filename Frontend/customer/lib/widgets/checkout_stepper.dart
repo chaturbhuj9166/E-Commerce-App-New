@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
+import '../l10n/tr.dart';
 
 class CheckoutStepper extends StatelessWidget {
   const CheckoutStepper({super.key, required this.step});
@@ -7,7 +8,7 @@ class CheckoutStepper extends StatelessWidget {
   /// 1 = Address, 2 = Payment, 3 = Review.
   final int step;
 
-  static const _labels = ['Address', 'Payment', 'Review'];
+  static const _labels = ['w.stepper.address', 'w.stepper.payment', 'w.stepper.review'];
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +44,7 @@ class CheckoutStepper extends StatelessWidget {
               final n = e.key + 1;
               return Expanded(
                 child: Text(
-                  e.value,
+                  context.tr(e.value),
                   textAlign: n == 1 ? TextAlign.left : (n == 3 ? TextAlign.right : TextAlign.center),
                   style: TextStyle(fontSize: 11.5, fontWeight: n == step ? FontWeight.w600 : FontWeight.w400, color: n == step ? AppColors.navy : AppColors.textMuted),
                 ),

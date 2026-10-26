@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/tr.dart';
 import 'legal_text_screen.dart';
 
 class PrivacyPolicyScreen extends StatelessWidget {
@@ -6,28 +7,28 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const LegalTextScreen(
-      title: 'Privacy Policy',
+    return LegalTextScreen(
+      title: context.tr('account.privacy.title'),
       sections: [
         (
-          'Information We Collect',
-          'We collect the details you give us when creating an account (name, email, phone), delivery addresses, order and payment history, and product reviews you post.',
+          context.tr('account.privacy.h1'),
+          context.tr('account.privacy.p1'),
         ),
         (
-          'How We Use It',
-          'Your information is used to process orders, deliver products, provide customer support, and show you relevant offers. We never sell your personal data to third parties.',
+          context.tr('account.privacy.h2'),
+          context.tr('account.privacy.p2'),
         ),
         (
-          'Payments',
-          'Payments are processed securely through our payment partner. NTSA does not store your full card or bank details on its own servers.',
+          context.tr('account.privacy.h3'),
+          context.tr('account.privacy.p3'),
         ),
         (
-          'Your Choices',
-          'You can edit your profile, manage notification preferences, or request account deletion at any time from the Account section of the app.',
+          context.tr('account.privacy.h4'),
+          context.tr('account.privacy.p4'),
         ),
         (
-          'Contact Us',
-          'For any privacy questions, reach out to us from the Help & Support section.',
+          context.tr('account.privacy.h5'),
+          context.tr('account.privacy.p5'),
         ),
       ],
     );

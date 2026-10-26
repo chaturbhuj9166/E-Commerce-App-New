@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/tr.dart';
 import '../../core/app_colors.dart';
 import '../../providers/vendor_provider.dart';
 import '../../widgets/chat_attachment.dart';
@@ -70,7 +71,7 @@ class _WholesaleMessagesScreenState extends State<WholesaleMessagesScreen> {
   /// send button only ever posts URLs.
   Future<void> _attach(ImageSource source, {bool video = false}) async {
     if (_attachments.length >= 4) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Up to four attachments per message')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('ws.messages.max_attachments'))));
       return;
     }
     final picker = ImagePicker();
@@ -97,7 +98,7 @@ class _WholesaleMessagesScreenState extends State<WholesaleMessagesScreen> {
         children: [
           ListTile(
             leading: const Icon(Icons.photo_camera_outlined),
-            title: const Text('Take a photo'),
+            title: Text(sheet.tr('ws.messages.take_photo')),
             onTap: () {
               Navigator.pop(sheet);
               _attach(ImageSource.camera);
@@ -105,7 +106,7 @@ class _WholesaleMessagesScreenState extends State<WholesaleMessagesScreen> {
           ),
           ListTile(
             leading: const Icon(Icons.photo_library_outlined),
-            title: const Text('Choose a photo'),
+            title: Text(sheet.tr('ws.messages.choose_photo')),
             onTap: () {
               Navigator.pop(sheet);
               _attach(ImageSource.gallery);
@@ -113,7 +114,7 @@ class _WholesaleMessagesScreenState extends State<WholesaleMessagesScreen> {
           ),
           ListTile(
             leading: const Icon(Icons.videocam_outlined),
-            title: const Text('Record a video'),
+            title: Text(sheet.tr('ws.messages.record_video')),
             onTap: () {
               Navigator.pop(sheet);
               _attach(ImageSource.camera, video: true);
@@ -121,7 +122,7 @@ class _WholesaleMessagesScreenState extends State<WholesaleMessagesScreen> {
           ),
           ListTile(
             leading: const Icon(Icons.video_library_outlined),
-            title: const Text('Choose a video'),
+            title: Text(sheet.tr('ws.messages.choose_video')),
             onTap: () {
               Navigator.pop(sheet);
               _attach(ImageSource.gallery, video: true);
@@ -161,7 +162,7 @@ class _WholesaleMessagesScreenState extends State<WholesaleMessagesScreen> {
   Widget build(BuildContext context) {
     final messages = context.watch<VendorProvider>().messages;
     return Scaffold(
-      appBar: AppBar(automaticallyImplyLeading: !widget.embedded, title: const Text('Message Admin')),
+      appBar: AppBar(automaticallyImplyLeading: !widget.embedded, title: Text(context.tr('ws.messages.title'))),
       body: SafeArea(
         child: Column(
           children: [
@@ -190,7 +191,7 @@ class _WholesaleMessagesScreenState extends State<WholesaleMessagesScreen> {
                                         setState(() => _loading = true);
                                         _load();
                                       },
-                                      child: const Text('Retry'),
+                                      child: Text(context.tr('common.retry')),
                                     ),
                                   ],
                                 ),
@@ -202,7 +203,7 @@ class _WholesaleMessagesScreenState extends State<WholesaleMessagesScreen> {
                                 child: Padding(
                                   padding: const EdgeInsets.all(24),
                                   child: Text(
-                                    'Send a message to the NTSA team about your account, an order, or anything else.',
+                                    context.tr('ws.messages.empty'),
                                     textAlign: TextAlign.center,
                                     style: TextStyle(color: AppColors.textMuted),
                                   ),
@@ -239,7 +240,7 @@ class _WholesaleMessagesScreenState extends State<WholesaleMessagesScreen> {
                                           Text(m.body, style: TextStyle(color: m.fromAdmin ? AppColors.textPrimary : Colors.white, fontSize: 13.5)),
                                         const SizedBox(height: 4),
                                         Text(
-                                          m.fromAdmin ? 'NTSA Support' : 'You',
+                                          m.fromAdmin ? context.tr('ws.messages.sender_support') : context.tr('ws.messages.sender_you'),
                                           style: TextStyle(color: m.fromAdmin ? AppColors.textMuted : Colors.white70, fontSize: 10.5),
                                         ),
                                       ],
@@ -273,7 +274,7 @@ class _WholesaleMessagesScreenState extends State<WholesaleMessagesScreen> {
                       children: [
                         IconButton(
                           onPressed: _uploading ? null : _attachSheet,
-                          tooltip: 'Attach a photo or video',
+                          tooltip: context.tr('ws.messages.attach_tooltip'),
                           icon: _uploading
                               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                               : const Icon(Icons.attach_file_rounded),
@@ -284,7 +285,7 @@ class _WholesaleMessagesScreenState extends State<WholesaleMessagesScreen> {
                             minLines: 1,
                             maxLines: 4,
                             maxLength: 1000,
-                            decoration: const InputDecoration(hintText: 'Type a message…', counterText: ''),
+                            decoration: InputDecoration(hintText: context.tr('ws.messages.hint'), counterText: ''),
                             onSubmitted: (_) => _send(),
                           ),
                         ),

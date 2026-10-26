@@ -6,6 +6,7 @@ import '../../providers/shop_provider.dart';
 import '../../widgets/app_network_image.dart';
 import '../../widgets/price_tag.dart';
 import '../products/product_details_screen.dart';
+import '../../l10n/tr.dart';
 
 /// A lightweight shopping assistant: the shopper describes what they're
 /// after in plain words and it searches the catalog (matching name and
@@ -21,11 +22,14 @@ class AiAssistantScreen extends StatefulWidget {
 }
 
 class _ChatMessage {
-  _ChatMessage.user(this.text) : isUser = true, products = null;
-  _ChatMessage.bot({this.text, this.products}) : isUser = false;
+  _ChatMessage.user(this.text) : isUser = true, products = null, textKey = null, textArgs = null;
+  _ChatMessage.bot({this.textKey, this.textArgs, this.products}) : isUser = false, text = null;
 
   final bool isUser;
   final String? text;
+  /// Bot messages keep a translation key (+ args) and are translated when drawn.
+  final String? textKey;
+  final Map<String, String>? textArgs;
   final List<Product>? products;
 }
 
@@ -33,7 +37,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   final _controller = TextEditingController();
   final _scroll = ScrollController();
   final List<_ChatMessage> _messages = [
-    _ChatMessage.bot(text: 'Hi! Tell me what you\'re looking for — you can add a budget or a colour too.\nTry: "shoes under 1000", "white shirt", or "headphones between 500 and 2000".'),
+    _ChatMessage.bot(textKey: 'ai.greeting'),
   ];
   bool _loading = false;
 
@@ -172,7 +176,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       }
       if (!mounted) return;
       if (results.isEmpty) {
-        setState(() => _messages.add(_ChatMessage.bot(text: 'I couldn\'t find anything matching that. Try describing it differently, or browse categories from Home.')));
+        setState(() => _messages.add(_ChatMessage.bot(textKey: 'ai.not_found')));
       } else {
         final bits = <String>[];
         if (p.term.isNotEmpty) bits.add(p.term);
@@ -180,19 +184,25 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         if (p.minPrice != null && p.maxPrice != null) {
           bits.add('₹${p.minPrice}–₹${p.maxPrice}');
         } else if (p.maxPrice != null) {
-          bits.add('under ₹${p.maxPrice}');
+          bits.add(context.tr('ai.price_under', {'amount': '₹${p.maxPrice}'}));
         } else if (p.minPrice != null) {
-          bits.add('above ₹${p.minPrice}');
+          bits.add(context.tr('ai.price_above', {'amount': '₹${p.minPrice}'}));
         }
-        final summary = colorMissed
-            ? 'I couldn\'t find ${p.color} ones exactly, but here are the closest matches:'
-            : bits.isEmpty
-                ? 'Here\'s what I found:'
-                : 'Here\'s what I found for ${bits.join(' · ')}:';
-        setState(() => _messages.add(_ChatMessage.bot(text: summary, products: results.take(8).toList())));
+        final String summaryKey;
+        Map<String, String>? summaryArgs;
+        if (colorMissed) {
+          summaryKey = 'ai.color_missed';
+          summaryArgs = {'color': '${p.color}'};
+        } else if (bits.isEmpty) {
+          summaryKey = 'ai.found';
+        } else {
+          summaryKey = 'ai.found_for';
+          summaryArgs = {'bits': bits.join(' · ')};
+        }
+        setState(() => _messages.add(_ChatMessage.bot(textKey: summaryKey, textArgs: summaryArgs, products: results.take(8).toList())));
       }
     } catch (e) {
-      if (mounted) setState(() => _messages.add(_ChatMessage.bot(text: 'Something went wrong while searching. Please try again.')));
+      if (mounted) setState(() => _messages.add(_ChatMessage.bot(textKey: 'ai.error')));
     } finally {
       if (mounted) {
         setState(() => _loading = false);
@@ -217,7 +227,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
           children: [
             Icon(Icons.smart_toy_rounded, color: AppColors.orange, size: 22),
             const SizedBox(width: 8),
-            const Text('Shopping Assistant'),
+            Text(context.tr('ai.title')),
           ],
         ),
       ),
@@ -251,13 +261,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (m.text != null)
+                        if (m.text != null || m.textKey != null)
                           Container(
                             constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
                             margin: const EdgeInsets.symmetric(vertical: 5),
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                             decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.border)),
-                            child: Text(m.text!, style: TextStyle(color: AppColors.textPrimary, fontSize: 13.5)),
+                            child: Text(m.textKey != null ? context.tr(m.textKey!, m.textArgs) : m.text!, style: TextStyle(color: AppColors.textPrimary, fontSize: 13.5)),
                           ),
                         if (m.products != null)
                           SizedBox(
@@ -284,7 +294,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                     Expanded(
                       child: TextField(
                         controller: _controller,
-                        decoration: const InputDecoration(hintText: 'Describe what you need…'),
+                        decoration: InputDecoration(hintText: context.tr('ai.hint')),
                         onSubmitted: _send,
                       ),
                     ),

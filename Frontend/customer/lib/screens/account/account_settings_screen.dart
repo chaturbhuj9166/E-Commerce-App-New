@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/tr.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../providers/auth_provider.dart';
@@ -11,7 +12,7 @@ class AccountSettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
     return Scaffold(
-      appBar: AppBar(title: const Text('Account Settings')),
+      appBar: AppBar(title: Text(context.tr('account.settings_page.title'))),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -22,11 +23,11 @@ class AccountSettingsScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _row('Name', user?.name ?? 'NTSA Customer'),
+                  _row(context.tr('account.settings_page.name'), user?.name ?? context.tr('account.common.default_name')),
                   const Divider(height: 20),
-                  _row('Email', user?.email ?? 'Not added'),
+                  _row(context.tr('account.settings_page.email'), user?.email ?? context.tr('account.settings_page.not_added')),
                   const Divider(height: 20),
-                  _row('Phone', user?.phone ?? 'Not added'),
+                  _row(context.tr('account.settings_page.phone'), user?.phone ?? context.tr('account.settings_page.not_added')),
                 ],
               ),
             ),
@@ -34,12 +35,12 @@ class AccountSettingsScreen extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EditProfileScreen())),
               icon: const Icon(Icons.edit_outlined, size: 18),
-              label: const Text('Edit name & photo'),
+              label: Text(context.tr('account.settings_page.edit_name_photo')),
               style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
             ),
             const SizedBox(height: 24),
             Text(
-              'Signing in with Google or your phone number will let you change your email and phone number here too. For now, sign-in is handled by NTSA\'s demo login.',
+              context.tr('account.settings_page.note'),
               style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
             ),
           ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/tr.dart';
 import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
 import '../../models/address.dart';
@@ -34,11 +35,11 @@ class _AddressesScreenState extends State<AddressesScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete address?'),
+        title: Text(context.tr('address.delete_title')),
         content: Text('${a.name}, ${a.line1}, ${a.city}'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.of(context).pop(true), style: TextButton.styleFrom(foregroundColor: AppColors.danger), child: const Text('Delete')),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(context.tr('common.cancel'))),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), style: TextButton.styleFrom(foregroundColor: AppColors.danger), child: Text(context.tr('common.delete'))),
         ],
       ),
     );
@@ -55,7 +56,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
   Widget build(BuildContext context) {
     final addresses = _addresses;
     return Scaffold(
-      appBar: AppBar(title: const Text('My Addresses')),
+      appBar: AppBar(title: Text(context.tr('address.title'))),
       body: SafeArea(
         child: addresses == null
             ? Center(
@@ -64,11 +65,11 @@ class _AddressesScreenState extends State<AddressesScreen> {
                     : Column(mainAxisSize: MainAxisSize.min, children: [
                         Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger))),
                         const SizedBox(height: 12),
-                        OutlinedButton(onPressed: _load, child: const Text('Retry')),
+                        OutlinedButton(onPressed: _load, child: Text(context.tr('common.retry'))),
                       ]),
               )
             : addresses.isEmpty
-                ? Center(child: Text('No saved addresses', style: TextStyle(color: AppColors.textMuted)))
+                ? Center(child: Text(context.tr('address.empty'), style: TextStyle(color: AppColors.textMuted)))
                 : ListView.separated(
                     padding: const EdgeInsets.all(14),
                     itemCount: addresses.length,

@@ -5,6 +5,7 @@ import '../models/product.dart';
 import '../providers/vendor_provider.dart';
 import 'app_network_image.dart';
 import 'price_tag.dart';
+import '../l10n/tr.dart';
 
 /// The wholesale-priced product grid, shared by the wholesale Home tab and
 /// its per-category listing so both stay visually identical.
@@ -18,7 +19,7 @@ class WholesaleProductGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final vendor = context.watch<VendorProvider>();
     if (products.isEmpty) {
-      return Center(child: Text('No products found', style: TextStyle(color: AppColors.textMuted)));
+      return Center(child: Text(context.tr('w.no_products'), style: TextStyle(color: AppColors.textMuted)));
     }
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
@@ -65,8 +66,8 @@ class WholesaleProductGrid extends StatelessWidget {
                     // Wholesale price against the market price (MRP), so the
                     // buyer sees the full margin, not just the retail cut.
                     PriceTag(pricePaise: p.wholesaleFor(null), mrpPaise: p.mrpFor(null) ?? p.pricePaise, size: 14),
-                    Text('Customer price ${formatPaise(p.pricePaise)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
-                    Text('You save ${formatPaise((p.mrpFor(null) ?? p.pricePaise) - p.wholesaleFor(null))} per unit', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10.5, color: AppColors.success, fontWeight: FontWeight.w600)),
+                    Text(context.tr('w.customer_price', {'price': formatPaise(p.pricePaise)}), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                    Text(context.tr('w.you_save_per_unit', {'amount': formatPaise((p.mrpFor(null) ?? p.pricePaise) - p.wholesaleFor(null))}), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10.5, color: AppColors.success, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 6),
                     p.hasVariants
                         ? SizedBox(
@@ -75,7 +76,7 @@ class WholesaleProductGrid extends StatelessWidget {
                             child: OutlinedButton(
                               onPressed: VendorProvider.maxQuantity(p) == 0 ? null : openDetails,
                               child: Text(
-                                VendorProvider.maxQuantity(p) == 0 ? 'Out of stock' : qty > 0 ? '$qty in order · Edit' : 'Choose options',
+                                VendorProvider.maxQuantity(p) == 0 ? context.tr('w.out_of_stock') : qty > 0 ? context.tr('w.in_order_edit', {'n': '$qty'}) : context.tr('w.choose_options'),
                                 style: const TextStyle(fontSize: 12),
                               ),
                             ),
@@ -86,7 +87,7 @@ class WholesaleProductGrid extends StatelessWidget {
                             height: 32,
                             child: OutlinedButton(
                               onPressed: max == 0 ? null : () => context.read<VendorProvider>().setQuantity(p.id, 1),
-                              child: Text(max == 0 ? 'Out of stock' : 'Add', style: const TextStyle(fontSize: 12)),
+                              child: Text(max == 0 ? context.tr('w.out_of_stock') : context.tr('w.add'), style: const TextStyle(fontSize: 12)),
                             ),
                           )
                         : Row(

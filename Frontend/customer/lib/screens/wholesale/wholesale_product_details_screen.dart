@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/tr.dart';
 import '../../core/app_colors.dart';
 import '../../models/product.dart';
 import '../../providers/vendor_provider.dart';
@@ -34,8 +35,14 @@ class _WholesaleProductDetailsScreenState extends State<WholesaleProductDetailsS
     if (!_picked) {
       setState(() => _missingPick = true);
       final p = _product;
-      final missing = [if (p.colors.isNotEmpty && _color == null) 'color', if (p.sizes.isNotEmpty && _size == null) p.sizeLabel.toLowerCase()].join(' and ');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please select a $missing first')));
+      final missing = <String>[if (p.colors.isNotEmpty && _color == null) 'color', if (p.sizes.isNotEmpty && _size == null) 'size'];
+      final sizeLabel = p.sizeLabel.toLowerCase();
+      final msg = missing.length == 2
+          ? context.tr('ws.product.select_color_and_size_first', {'size': sizeLabel})
+          : missing.first == 'color'
+              ? context.tr('ws.product.select_color_first')
+              : context.tr('ws.product.select_size_first', {'size': sizeLabel});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       return;
     }
     context.read<VendorProvider>().setQuantity(_product.id, 1, size: _size, color: _color);
@@ -46,7 +53,7 @@ class _WholesaleProductDetailsScreenState extends State<WholesaleProductDetailsS
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(selected == null ? 'Select $title' : '$title : $selected', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: missing ? AppColors.danger : AppColors.textPrimary)),
+        Text(selected == null ? context.tr('ws.product.select_option', {'title': title}) : context.tr('ws.product.option_selected', {'title': title, 'selected': selected}), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: missing ? AppColors.danger : AppColors.textPrimary)),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -103,21 +110,21 @@ class _WholesaleProductDetailsScreenState extends State<WholesaleProductDetailsS
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Text('Customer price ${formatPaise(product.priceFor(_size, _color))}', style: TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+                      Text(context.tr('ws.product.customer_price', {'price': formatPaise(product.priceFor(_size, _color))}), style: TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
                       const SizedBox(width: 10),
-                      Flexible(child: Text('You save ${formatPaise((product.mrpFor(_size, _color) ?? product.priceFor(_size, _color)) - product.wholesaleFor(_size, _color))} per unit', style: const TextStyle(fontSize: 12.5, color: AppColors.success, fontWeight: FontWeight.w600))),
+                      Flexible(child: Text(context.tr('ws.product.you_save', {'amount': formatPaise((product.mrpFor(_size, _color) ?? product.priceFor(_size, _color)) - product.wholesaleFor(_size, _color))}), style: const TextStyle(fontSize: 12.5, color: AppColors.success, fontWeight: FontWeight.w600))),
                     ],
                   ),
                   if (product.sizePrices.isNotEmpty && _size == null)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
-                      child: Text('Price depends on the ${product.sizeLabel.toLowerCase()} you choose', style: TextStyle(fontSize: 12, color: AppColors.orange, fontWeight: FontWeight.w500)),
+                      child: Text(context.tr('ws.product.price_depends', {'size': product.sizeLabel.toLowerCase()}), style: TextStyle(fontSize: 12, color: AppColors.orange, fontWeight: FontWeight.w500)),
                     ),
                   const SizedBox(height: 6),
-                  Text('${product.stock} units in stock', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+                  Text(context.tr('ws.product.units_in_stock', {'n': '${product.stock}'}), style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
                   const SizedBox(height: 18),
                   if (product.colors.isNotEmpty)
-                    _chips('Color', product.colors, _color, (c) => _color = c, label: (c) {
+                    _chips(context.tr('ws.product.color'), product.colors, _color, (c) => _color = c, label: (c) {
                       final extra = product.extraFor(c);
                       return extra > 0 ? '$c  (+${formatPaise(extra)})' : c;
                     }),
@@ -127,7 +134,7 @@ class _WholesaleProductDetailsScreenState extends State<WholesaleProductDetailsS
                       return extra > 0 ? '$s  (+${formatPaise(extra)})' : s;
                     }),
                   if (otherLines.isNotEmpty) ...[
-                    Text('Already in your order', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
+                    Text(context.tr('ws.product.already_in_order'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
                     const SizedBox(height: 6),
                     ...otherLines.map((e) => Padding(
                           padding: const EdgeInsets.symmetric(vertical: 3),
@@ -135,14 +142,14 @@ class _WholesaleProductDetailsScreenState extends State<WholesaleProductDetailsS
                         )),
                     const SizedBox(height: 16),
                   ],
-                  Text('Description', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
+                  Text(context.tr('ws.product.description'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
                   const SizedBox(height: 6),
                   Text(product.description, style: TextStyle(fontSize: 13.5, color: AppColors.textSecondary, height: 1.5)),
                   if (product.attributes.isNotEmpty) ...[
                     const SizedBox(height: 18),
                     const Divider(),
                     const SizedBox(height: 6),
-                    Text('Specifications', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
+                    Text(context.tr('ws.product.specifications'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary)),
                     const SizedBox(height: 8),
                     ...product.attributes.map((a) => Padding(
                           padding: const EdgeInsets.symmetric(vertical: 4),
@@ -170,12 +177,12 @@ class _WholesaleProductDetailsScreenState extends State<WholesaleProductDetailsS
                   child: ElevatedButton(
                     onPressed: VendorProvider.maxQuantity(product) == 0 || (_picked && max == 0) ? null : _add,
                     style: ElevatedButton.styleFrom(backgroundColor: AppColors.orange, foregroundColor: Colors.white),
-                    child: Text(VendorProvider.maxQuantity(product) == 0 || (_picked && max == 0) ? 'Out of Stock' : 'Add to Order', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    child: Text(VendorProvider.maxQuantity(product) == 0 || (_picked && max == 0) ? context.tr('ws.product.out_of_stock') : context.tr('ws.product.add_to_order'), style: const TextStyle(fontWeight: FontWeight.w700)),
                   ),
                 )
               : Row(
                   children: [
-                    Expanded(child: Text('In your order${[?_size, ?_color].isEmpty ? '' : ' (${[?_size, ?_color].join(' · ')})'}:', style: TextStyle(fontSize: 13, color: AppColors.textSecondary))),
+                    Expanded(child: Text([?_size, ?_color].isEmpty ? context.tr('ws.product.in_your_order') : context.tr('ws.product.in_your_order_variant', {'variant': [?_size, ?_color].join(' · ')}), style: TextStyle(fontSize: 13, color: AppColors.textSecondary))),
                     WholesaleQtyButton(icon: Icons.remove, size: 36, onTap: () => vendor.setQuantity(product.id, qty - 1, size: _size, color: _color)),
                     Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text('$qty', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16))),
                     WholesaleQtyButton(icon: Icons.add, size: 36, onTap: qty >= max ? null : () => vendor.setQuantity(product.id, qty + 1, size: _size, color: _color)),

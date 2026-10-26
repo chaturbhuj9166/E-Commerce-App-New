@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/api_client.dart';
+import '../../l10n/tr.dart';
 import '../../core/app_colors.dart';
 import '../../providers/vendor_provider.dart';
 import '../../widgets/price_tag.dart';
@@ -25,7 +26,7 @@ enum _VendorPayment { cod, demo }
 final _phonePattern = RegExp(r'^\+?[0-9]{10,15}$');
 final _postalPattern = RegExp(r'^[0-9]{6}$');
 String _stripPhone(String v) => v.replaceAll(RegExp(r'[\s-]'), '');
-String? _required(String? v) => v!.trim().isEmpty ? 'Required' : null;
+String? _required(BuildContext context, String? v) => v!.trim().isEmpty ? context.tr('ws.checkout.required') : null;
 
 class _WholesaleCheckoutScreenState extends State<WholesaleCheckoutScreen> {
   final _formKey = GlobalKey<FormState>();
@@ -79,11 +80,12 @@ class _WholesaleCheckoutScreenState extends State<WholesaleCheckoutScreen> {
       // This screen is disposed once the route below replaces the stack, so
       // the continue button must not use its context.
       final nav = Navigator.of(context);
+      final continueLabel = context.tr('ws.checkout.back_to_catalog');
       nav.pushAndRemoveUntil(
         MaterialPageRoute(
           builder: (_) => OrderPlacedScreen(
             orderId: orderId,
-            continueLabel: 'Back to Wholesale Catalog',
+            continueLabel: continueLabel,
             onContinue: () => nav.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const WholesaleHomeScreen()), (route) => false),
           ),
         ),
@@ -100,45 +102,45 @@ class _WholesaleCheckoutScreenState extends State<WholesaleCheckoutScreen> {
   Widget build(BuildContext context) {
     final vendor = context.watch<VendorProvider>();
     return Scaffold(
-      appBar: AppBar(title: const Text('Wholesale Checkout')),
+      appBar: AppBar(title: Text(context.tr('ws.checkout.title'))),
       body: SafeArea(
         child: Form(
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              const Text('Delivery Address', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              Text(context.tr('ws.checkout.delivery_address'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
               const SizedBox(height: 10),
-              TextFormField(controller: _name, maxLength: 200, decoration: const InputDecoration(labelText: 'Business / contact name', counterText: ''), validator: _required),
+              TextFormField(controller: _name, maxLength: 200, decoration: InputDecoration(labelText: context.tr('ws.checkout.name_label'), counterText: ''), validator: (v) => _required(context, v)),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _phone,
-                decoration: const InputDecoration(labelText: 'Phone number'),
+                decoration: InputDecoration(labelText: context.tr('ws.checkout.phone_label')),
                 keyboardType: TextInputType.phone,
-                validator: (v) => _phonePattern.hasMatch(_stripPhone(v!)) ? null : 'Enter a valid phone number (10-15 digits)',
+                validator: (v) => _phonePattern.hasMatch(_stripPhone(v!)) ? null : context.tr('ws.checkout.phone_invalid'),
               ),
               const SizedBox(height: 10),
-              TextFormField(controller: _line1, maxLength: 200, decoration: const InputDecoration(labelText: 'Address', counterText: ''), validator: _required),
+              TextFormField(controller: _line1, maxLength: 200, decoration: InputDecoration(labelText: context.tr('ws.checkout.address_label'), counterText: ''), validator: (v) => _required(context, v)),
               const SizedBox(height: 10),
-              TextFormField(controller: _city, maxLength: 200, decoration: const InputDecoration(labelText: 'City', counterText: ''), validator: _required),
+              TextFormField(controller: _city, maxLength: 200, decoration: InputDecoration(labelText: context.tr('ws.checkout.city_label'), counterText: ''), validator: (v) => _required(context, v)),
               const SizedBox(height: 10),
-              TextFormField(controller: _state, maxLength: 200, decoration: const InputDecoration(labelText: 'State', counterText: ''), validator: _required),
+              TextFormField(controller: _state, maxLength: 200, decoration: InputDecoration(labelText: context.tr('ws.checkout.state_label'), counterText: ''), validator: (v) => _required(context, v)),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _postalCode,
-                decoration: const InputDecoration(labelText: 'Postal code'),
+                decoration: InputDecoration(labelText: context.tr('ws.checkout.postal_label')),
                 keyboardType: TextInputType.number,
-                validator: (v) => _postalPattern.hasMatch(v!.trim()) ? null : 'Enter a 6-digit postal code',
+                validator: (v) => _postalPattern.hasMatch(v!.trim()) ? null : context.tr('ws.checkout.postal_invalid'),
               ),
               const SizedBox(height: 20),
-              const Text('Payment Method', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              Text(context.tr('ws.checkout.payment_method'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
               RadioGroup<_VendorPayment>(
                 groupValue: _demoPayments ? _method : _VendorPayment.cod,
                 onChanged: (v) => setState(() => _method = v!),
                 child: Column(
                   children: [
-                    RadioListTile<_VendorPayment>(value: _VendorPayment.cod, title: const Text('Cash on Delivery'), activeColor: AppColors.navy),
-                    if (_demoPayments) RadioListTile<_VendorPayment>(value: _VendorPayment.demo, title: const Text('Pay Online'), activeColor: AppColors.navy),
+                    RadioListTile<_VendorPayment>(value: _VendorPayment.cod, title: Text(context.tr('ws.checkout.cod')), activeColor: AppColors.navy),
+                    if (_demoPayments) RadioListTile<_VendorPayment>(value: _VendorPayment.demo, title: Text(context.tr('ws.checkout.pay_online')), activeColor: AppColors.navy),
                   ],
                 ),
               ),
@@ -149,15 +151,15 @@ class _WholesaleCheckoutScreenState extends State<WholesaleCheckoutScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Total Amount', style: TextStyle(fontWeight: FontWeight.w600)),
+                    Text(context.tr('ws.cart.total_amount'), style: TextStyle(fontWeight: FontWeight.w600)),
                     Text(formatPaise(vendor.subtotalPaise), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                   ],
                 ),
               ),
-              if (vendor.limitsMissing) const Padding(padding: EdgeInsets.only(top: 12), child: Text(VendorProvider.noLimitsMessage, style: TextStyle(color: AppColors.danger))),
+              if (vendor.limitsMissing) Padding(padding: const EdgeInsets.only(top: 12), child: Text(context.tr('ws.limits.none_configured'), style: const TextStyle(color: AppColors.danger))),
               if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: const TextStyle(color: AppColors.danger))),
               const SizedBox(height: 20),
-              PrimaryButton(label: 'Place Order', loading: _placing, onPressed: vendor.limitsMissing || vendor.cart.isEmpty ? null : _placeOrder),
+              PrimaryButton(label: context.tr('ws.checkout.place_order'), loading: _placing, onPressed: vendor.limitsMissing || vendor.cart.isEmpty ? null : _placeOrder),
             ],
           ),
         ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/tr.dart';
 import '../../core/app_colors.dart';
 
 /// Shared layout for the Privacy Policy and Terms & Conditions screens.
@@ -21,7 +22,7 @@ class LegalTextScreen extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(color: AppColors.orange.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
               child: Text(
-                'Draft placeholder -- have this reviewed by a legal advisor before the app goes live.',
+                context.tr('account.legal.draft_notice'),
                 style: const TextStyle(color: AppColors.orangeDark, fontSize: 12, fontWeight: FontWeight.w600),
               ),
             ),

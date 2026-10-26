@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
+import '../../l10n/tr.dart';
 import '../../models/address.dart';
 import '../../widgets/checkout_stepper.dart';
 import '../../widgets/primary_button.dart';
@@ -64,14 +65,14 @@ class _CheckoutAddressScreenState extends State<CheckoutAddressScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Checkout')),
+      appBar: AppBar(title: Text(context.tr('checkout.title'))),
       body: SafeArea(
         child: Column(
           children: [
             const CheckoutStepper(step: 1),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Align(alignment: Alignment.centerLeft, child: Text('Select Delivery Address', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15))),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Align(alignment: Alignment.centerLeft, child: Text(context.tr('checkout.address.select'), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15))),
             ),
             Expanded(
               child: _loading
@@ -81,7 +82,7 @@ class _CheckoutAddressScreenState extends State<CheckoutAddressScreen> {
                           child: Column(mainAxisSize: MainAxisSize.min, children: [
                             Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger))),
                             const SizedBox(height: 12),
-                            OutlinedButton(onPressed: _load, child: const Text('Retry')),
+                            OutlinedButton(onPressed: _load, child: Text(context.tr('common.retry'))),
                           ]),
                         )
                       : ListView(
@@ -95,7 +96,7 @@ class _CheckoutAddressScreenState extends State<CheckoutAddressScreen> {
                         OutlinedButton.icon(
                           onPressed: _addAddress,
                           icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Add New Address'),
+                          label: Text(context.tr('checkout.address.add_new')),
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size.fromHeight(50),
                             side: BorderSide(color: AppColors.border),
@@ -111,7 +112,7 @@ class _CheckoutAddressScreenState extends State<CheckoutAddressScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
                 child: PrimaryButton(
-                  label: 'Continue',
+                  label: context.tr('common.continue'),
                   onPressed: _selectedId == null
                       ? null
                       : () => Navigator.of(context).push(MaterialPageRoute(
@@ -191,7 +192,7 @@ class _AddAddressSheetState extends State<_AddAddressSheet> {
   final _postalCode = TextEditingController();
 
   // Mirrors Backend addressSchema: 1-200 chars, phone ^\+?[0-9]{10,15}$.
-  static String? _required(String? v) => (v ?? '').trim().isEmpty ? 'Required' : null;
+  String? _required(String? v) => (v ?? '').trim().isEmpty ? context.tr('checkout.address.required') : null;
   static String _cleanPhone(String v) => v.replaceAll(RegExp(r'[\s\-()]'), '');
 
   @override
@@ -213,33 +214,33 @@ class _AddAddressSheetState extends State<_AddAddressSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Add New Address', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              Text(context.tr('checkout.address.add_sheet_title'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
               const SizedBox(height: 14),
-              TextFormField(controller: _name, maxLength: 200, decoration: const InputDecoration(labelText: 'Full name', counterText: ''), validator: _required),
+              TextFormField(controller: _name, maxLength: 200, decoration: InputDecoration(labelText: context.tr('checkout.address.full_name'), counterText: ''), validator: _required),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _phone,
-                decoration: const InputDecoration(labelText: 'Phone number'),
+                decoration: InputDecoration(labelText: context.tr('checkout.address.phone')),
                 keyboardType: TextInputType.phone,
-                validator: (v) => RegExp(r'^\+?[0-9]{10,15}$').hasMatch(_cleanPhone(v ?? '')) ? null : 'Enter a valid 10-15 digit phone number',
+                validator: (v) => RegExp(r'^\+?[0-9]{10,15}$').hasMatch(_cleanPhone(v ?? '')) ? null : context.tr('checkout.address.phone_invalid'),
               ),
               const SizedBox(height: 10),
-              TextFormField(controller: _line1, maxLength: 200, decoration: const InputDecoration(labelText: 'Address', counterText: ''), validator: _required),
+              TextFormField(controller: _line1, maxLength: 200, decoration: InputDecoration(labelText: context.tr('checkout.address.address'), counterText: ''), validator: _required),
               const SizedBox(height: 10),
-              TextFormField(controller: _city, maxLength: 200, decoration: const InputDecoration(labelText: 'City', counterText: ''), validator: _required),
+              TextFormField(controller: _city, maxLength: 200, decoration: InputDecoration(labelText: context.tr('checkout.address.city'), counterText: ''), validator: _required),
               const SizedBox(height: 10),
-              TextFormField(controller: _state, maxLength: 200, decoration: const InputDecoration(labelText: 'State', counterText: ''), validator: _required),
+              TextFormField(controller: _state, maxLength: 200, decoration: InputDecoration(labelText: context.tr('checkout.address.state'), counterText: ''), validator: _required),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _postalCode,
                 maxLength: 6,
-                decoration: const InputDecoration(labelText: 'Postal code', counterText: ''),
+                decoration: InputDecoration(labelText: context.tr('checkout.address.postal_code'), counterText: ''),
                 keyboardType: TextInputType.number,
-                validator: (v) => RegExp(r'^[0-9]{6}$').hasMatch(v?.trim() ?? '') ? null : 'Enter a 6-digit PIN code',
+                validator: (v) => RegExp(r'^[0-9]{6}$').hasMatch(v?.trim() ?? '') ? null : context.tr('checkout.address.pin_invalid'),
               ),
               const SizedBox(height: 16),
               PrimaryButton(
-                label: 'Save Address',
+                label: context.tr('checkout.address.save'),
                 onPressed: () {
                   if (!_formKey.currentState!.validate()) return;
                   Navigator.of(context).pop(Address(

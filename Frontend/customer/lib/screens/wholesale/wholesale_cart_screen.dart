@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/tr.dart';
 import '../../core/app_colors.dart';
 import '../../models/product.dart';
 import '../../providers/vendor_provider.dart';
@@ -23,7 +24,7 @@ class WholesaleCartScreen extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 12),
-        const Text('Add more to your order', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+        Text(context.tr('ws.cart.add_more'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
         const SizedBox(height: 10),
         SizedBox(
           height: 196,
@@ -84,10 +85,10 @@ class WholesaleCartScreen extends StatelessWidget {
     final blocked = belowMin || aboveMax || vendor.limitsMissing;
 
     return Scaffold(
-      appBar: AppBar(title: Text('Wholesale Cart (${items.length})')),
+      appBar: AppBar(title: Text(context.tr('ws.cart.title', {'n': '${items.length}'}))),
       body: SafeArea(
         child: items.isEmpty
-            ? Center(child: Text('Your wholesale cart is empty', style: TextStyle(color: AppColors.textMuted)))
+            ? Center(child: Text(context.tr('ws.cart.empty'), style: TextStyle(color: AppColors.textMuted)))
             : Column(
                 children: [
                   Expanded(
@@ -99,7 +100,7 @@ class WholesaleCartScreen extends StatelessWidget {
                         if (i == items.length) return _moreProducts(context, vendor);
                         final (product, line, qty) = items[i];
                         final max = vendor.lineMax(line);
-                        final variant = [if (line.size != null) '${product.sizeLabel}: ${line.size}', if (line.color != null) 'Color: ${line.color}'].join(' · ');
+                        final variant = [if (line.size != null) '${product.sizeLabel}: ${line.size}', if (line.color != null) context.tr('ws.cart.variant_color', {'color': line.color!})].join(' · ');
                         return Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
@@ -144,23 +145,23 @@ class WholesaleCartScreen extends StatelessWidget {
                               padding: const EdgeInsets.only(bottom: 10),
                               child: Text(
                                 limits == null
-                                    ? VendorProvider.noLimitsMessage
+                                    ? context.tr('ws.limits.none_configured')
                                     : belowMin
-                                        ? 'Minimum order value is ${formatPaise(limits.minPaise)}. Add ${formatPaise(limits.minPaise - vendor.subtotalPaise)} more to checkout.'
-                                        : 'Maximum order value is ${formatPaise(limits.maxPaise)}. Please reduce your cart.',
+                                        ? context.tr('ws.cart.min_order_warning', {'min': formatPaise(limits.minPaise), 'more': formatPaise(limits.minPaise - vendor.subtotalPaise)})
+                                        : context.tr('ws.cart.max_order_warning', {'max': formatPaise(limits.maxPaise)}),
                                 style: const TextStyle(color: AppColors.danger, fontSize: 12.5),
                               ),
                             ),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Total Amount', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                              Text(context.tr('ws.cart.total_amount'), style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
                               Text(formatPaise(vendor.subtotalPaise), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                             ],
                           ),
                           const SizedBox(height: 10),
                           PrimaryButton(
-                            label: 'Proceed to Checkout',
+                            label: context.tr('ws.cart.proceed'),
                             onPressed: blocked
                                 ? null
                                 : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WholesaleCheckoutScreen())),

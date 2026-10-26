@@ -3,11 +3,27 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
+import '../../l10n/tr.dart';
 import '../../models/order.dart';
 import '../../providers/cart_provider.dart';
 import '../../widgets/price_tag.dart';
 import '../../widgets/primary_button.dart';
 import '../cart/cart_screen.dart';
+
+/// Translated label for a server order status; unknown values are prettified.
+String orderStatusLabel(BuildContext context, String status) {
+  const keys = {
+    'PENDING_PAYMENT': 'orders.status.pending_payment',
+    'PLACED': 'orders.status.placed',
+    'PACKED': 'orders.status.packed',
+    'SHIPPED': 'orders.status.shipped',
+    'OUT_FOR_DELIVERY': 'orders.status.out_for_delivery',
+    'DELIVERED': 'orders.status.delivered',
+    'CANCELLED': 'orders.status.cancelled',
+  };
+  final key = keys[status];
+  return key != null ? context.tr(key) : status.replaceAll('_', ' ');
+}
 
 class OrderTrackingScreen extends StatefulWidget {
   const OrderTrackingScreen({super.key, required this.orderId});
@@ -27,15 +43,15 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   bool _reordering = false;
   final Set<String> _refunding = {};
 
-  static const _stepLabels = {
-    'PLACED': 'Order Placed',
-    'PACKED': 'Packed',
-    'SHIPPED': 'Shipped',
-    'OUT_FOR_DELIVERY': 'Out for Delivery',
-    'DELIVERED': 'Delivered',
+  static const _stepKeys = {
+    'PLACED': 'orders.step.placed',
+    'PACKED': 'orders.step.packed',
+    'SHIPPED': 'orders.step.shipped',
+    'OUT_FOR_DELIVERY': 'orders.step.out_for_delivery',
+    'DELIVERED': 'orders.step.delivered',
   };
 
-  static const _refundLabels = {'REQUESTED': 'Refund requested', 'APPROVED': 'Refund approved', 'REJECTED': 'Refund rejected'};
+  static const _refundKeys = {'REQUESTED': 'orders.refund.requested', 'APPROVED': 'orders.refund.approved', 'REJECTED': 'orders.refund.rejected'};
 
   /// The Backend allows a buyer to cancel only before the order is packed.
   static bool _canCancel(Order order) => order.status == 'PLACED' || order.status == 'PENDING_PAYMENT';
@@ -64,13 +80,14 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   /// (web) -- whichever PDF viewer is already there handles printing and
   /// saving, so there is no in-app PDF renderer to maintain here.
   Future<void> _viewInvoice() async {
+    final failed = context.tr('orders.track.bill_error');
     setState(() => _invoiceBusy = true);
     try {
       final uri = await ApiClient.instance.invoiceUrl(widget.orderId);
       final opened = await launchUrl(uri, mode: LaunchMode.externalApplication, webOnlyWindowName: '_blank');
-      if (!opened) _snack('Could not open the bill');
+      if (!opened) _snack(failed);
     } catch (_) {
-      _snack('Could not open the bill');
+      _snack(failed);
     } finally {
       if (mounted) setState(() => _invoiceBusy = false);
     }
@@ -85,16 +102,16 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Delivery OTP'),
+          title: Text(context.tr('orders.otp.title')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               SelectableText(data['otp'].toString(), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: 6)),
               const SizedBox(height: 10),
-              Text('Share this code with the delivery partner only when you receive your order. Valid for $minutes minutes.', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+              Text(context.tr('orders.otp.body', {'minutes': '$minutes'}), textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
             ],
           ),
-          actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Done'))],
+          actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.tr('orders.otp.done')))],
         ),
       );
     } catch (e) {
@@ -108,10 +125,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   Future<void> _cancelOrder() async {
     final reason = await showDialog<String>(context: context, builder: (_) => const _CancelDialog());
     if (reason == null || !mounted) return;
+    final cancelledMsg = context.tr('orders.track.cancelled_snack');
     setState(() => _cancelling = true);
     try {
       await ApiClient.instance.post('/orders/${widget.orderId}/cancel', data: {if (reason.isNotEmpty) 'reason': reason});
-      _snack('Order cancelled');
+      _snack(cancelledMsg);
       await _load();
     } catch (e) {
       _snack(e.toString());
@@ -125,11 +143,15 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   Future<void> _buyAgain(Order order) async {
     final lines = order.items.where((i) => i.productId != null).toList();
     if (lines.isEmpty) {
-      _snack('These items are no longer available to reorder');
+      _snack(context.tr('orders.track.reorder_unavailable'));
       return;
     }
     setState(() => _reordering = true);
     final cart = context.read<CartProvider>();
+    final cartAdded = context.tr('pdp.cart.added');
+    final noneAdded = context.tr('orders.track.reorder_failed');
+    String someAdded(int n) => context.tr('orders.track.added_some', {'n': '$n', 'total': '${lines.length}'});
+    final viewCart = context.tr('orders.track.view_cart');
     var added = 0;
     try {
       for (final item in lines) {
@@ -145,13 +167,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     }
     if (!mounted) return;
     if (added == 0) {
-      _snack('Could not add these items — they may be out of stock');
+      _snack(noneAdded);
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(added == lines.length ? 'Added to cart' : 'Added $added of ${lines.length} items to cart'),
-        action: SnackBarAction(label: 'View cart', onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CartScreen()))),
+        content: Text(added == lines.length ? cartAdded : someAdded(added)),
+        action: SnackBarAction(label: viewCart, onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CartScreen()))),
       ),
     );
   }
@@ -159,10 +181,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   Future<void> _requestRefund(OrderItem item) async {
     final reason = await showDialog<String>(context: context, builder: (_) => _RefundDialog(itemName: item.name));
     if (reason == null || !mounted) return;
+    final requestedMsg = context.tr('orders.refund.requested');
     setState(() => _refunding.add(item.id));
     try {
       await ApiClient.instance.post('/orders/${widget.orderId}/refunds', data: {'itemId': item.id, 'reason': reason});
-      _snack('Refund requested');
+      _snack(requestedMsg);
       await _load();
     } catch (e) {
       _snack(e.toString());
@@ -176,11 +199,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     final order = _order;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Order Tracking'),
+        title: Text(context.tr('orders.track.title')),
         actions: [
           if (order != null)
             IconButton(
-              tooltip: 'View bill',
+              tooltip: context.tr('orders.track.view_bill'),
               onPressed: _invoiceBusy ? null : _viewInvoice,
               icon: _invoiceBusy
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
@@ -197,7 +220,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
                         Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger)),
                         const SizedBox(height: 12),
-                        OutlinedButton(onPressed: _load, child: const Text('Retry')),
+                        OutlinedButton(onPressed: _load, child: Text(context.tr('common.retry'))),
                       ]),
                     ),
             )
@@ -210,13 +233,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                       child: ListView(
                         padding: const EdgeInsets.all(16),
                         children: [
-                          Text('Order #${order.id.substring(0, order.id.length.clamp(0, 10)).toUpperCase()}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                          Text('Placed on ${order.createdAt.day}/${order.createdAt.month}/${order.createdAt.year}', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                          Text(context.tr('orders.track.order_no', {'id': order.id.substring(0, order.id.length.clamp(0, 10)).toUpperCase()}), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                          Text(context.tr('orders.track.placed_on', {'date': '${order.createdAt.day}/${order.createdAt.month}/${order.createdAt.year}'}), style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
                           const SizedBox(height: 24),
                           if (order.status == 'PENDING_PAYMENT')
-                            const _StatusBanner(icon: Icons.hourglass_top_rounded, color: AppColors.orange, title: 'Awaiting payment', message: 'This order is reserved until payment completes. Unpaid orders are cancelled automatically after 30 minutes.')
+                            _StatusBanner(icon: Icons.hourglass_top_rounded, color: AppColors.orange, title: context.tr('orders.track.awaiting_title'), message: context.tr('orders.track.awaiting_message'))
                           else if (order.status == 'CANCELLED')
-                            const _StatusBanner(icon: Icons.cancel_outlined, color: AppColors.danger, title: 'Order cancelled', message: 'This order was cancelled and will not be delivered.')
+                            _StatusBanner(icon: Icons.cancel_outlined, color: AppColors.danger, title: context.tr('orders.track.cancelled_title'), message: context.tr('orders.track.cancelled_message'))
                           else
                             ..._timeline(order),
                           if (order.status != 'CANCELLED' && order.status != 'DELIVERED' && (order.deliveryPartner != null || order.expectedDeliveryAt != null)) ...[
@@ -224,14 +247,14 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                             _DeliveryInfo(partner: order.deliveryPartner, expectedAt: order.expectedDeliveryAt),
                           ],
                           const SizedBox(height: 8),
-                          const Text('Items', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                          Text(context.tr('orders.track.items'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                           const SizedBox(height: 8),
                           ...order.items.map((item) => _itemRow(order, item)),
                           const Divider(height: 24),
                           if (order.discountPaise > 0)
-                            _row('Coupon${order.couponCode != null ? ' (${order.couponCode})' : ''}', '-${formatPaise(order.discountPaise)}', color: AppColors.success),
-                          if (order.deliveryPaise > 0) _row('Delivery', formatPaise(order.deliveryPaise)),
-                          _row('Total', formatPaise(order.totalPaise), bold: true),
+                            _row(order.couponCode != null ? context.tr('orders.track.coupon_code', {'code': order.couponCode!}) : context.tr('orders.track.coupon'), '-${formatPaise(order.discountPaise)}', color: AppColors.success),
+                          if (order.deliveryPaise > 0) _row(context.tr('orders.track.delivery'), formatPaise(order.deliveryPaise)),
+                          _row(context.tr('orders.track.total'), formatPaise(order.totalPaise), bold: true),
                         ],
                       ),
                     ),
@@ -239,12 +262,12 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                   if (order.status == 'OUT_FOR_DELIVERY')
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
-                      child: PrimaryButton(label: 'Get delivery OTP', orange: true, loading: _otpBusy, onPressed: _getDeliveryOtp),
+                      child: PrimaryButton(label: context.tr('orders.track.get_otp'), orange: true, loading: _otpBusy, onPressed: _getDeliveryOtp),
                     ),
                   if (order.status == 'DELIVERED')
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
-                      child: PrimaryButton(label: 'Buy again', orange: true, loading: _reordering, onPressed: _reordering ? null : () => _buyAgain(order)),
+                      child: PrimaryButton(label: context.tr('orders.track.buy_again'), orange: true, loading: _reordering, onPressed: _reordering ? null : () => _buyAgain(order)),
                     ),
                   if (_canCancel(order))
                     Padding(
@@ -256,7 +279,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                           icon: _cancelling
                               ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
                               : const Icon(Icons.close_rounded, size: 18),
-                          label: const Text('Cancel order'),
+                          label: Text(context.tr('orders.track.cancel_order')),
                           style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger, side: const BorderSide(color: AppColors.danger), padding: const EdgeInsets.symmetric(vertical: 13)),
                         ),
                       ),
@@ -289,8 +312,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_stepLabels[Order.statusSteps[i]]!, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: done ? AppColors.textPrimary : AppColors.textMuted)),
-                    if (done) Text('Completed', style: TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+                    Text(context.tr(_stepKeys[Order.statusSteps[i]]!), style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: done ? AppColors.textPrimary : AppColors.textMuted)),
+                    if (done) Text(context.tr('orders.track.completed'), style: TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
                   ],
                 ),
               ),
@@ -302,7 +325,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   }
 
   Widget _itemRow(Order order, OrderItem item) {
-    final refundLabel = _refundLabels[item.refundStatus];
+    final refundKey = _refundKeys[item.refundStatus];
+    final refundLabel = refundKey == null ? null : context.tr(refundKey);
     final canRefund = order.status == 'DELIVERED' && item.refundEligible && !order.isVendorOrder && item.id.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -320,7 +344,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                   TextButton(
                     style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                     onPressed: _refunding.contains(item.id) ? null : () => _requestRefund(item),
-                    child: Text(_refunding.contains(item.id) ? 'Requesting…' : 'Request refund'),
+                    child: Text(_refunding.contains(item.id) ? context.tr('orders.refund.requesting') : context.tr('orders.refund.request')),
                   ),
               ],
             ),
@@ -385,8 +409,8 @@ class _DeliveryInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final eta = expectedAt == null ? null : '${expectedAt!.day} ${months[expectedAt!.month - 1]}';
+    const monthKeys = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    final eta = expectedAt == null ? null : '${expectedAt!.day} ${context.tr('orders.month.${monthKeys[expectedAt!.month - 1]}')}';
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
@@ -399,10 +423,10 @@ class _DeliveryInfo extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (eta != null) Text('Expected by $eta', style: const TextStyle(fontWeight: FontWeight.w700)),
+                if (eta != null) Text(context.tr('orders.track.expected_by', {'date': eta}), style: const TextStyle(fontWeight: FontWeight.w700)),
                 if (partner != null) Padding(
                   padding: EdgeInsets.only(top: eta != null ? 2 : 0),
-                  child: Text('Delivered by $partner', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+                  child: Text(context.tr('orders.track.delivered_by', {'partner': partner!}), style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
                 ),
               ],
             ),
@@ -433,27 +457,27 @@ class _CancelDialogState extends State<_CancelDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Cancel this order?'),
+      title: Text(context.tr('orders.cancel.title')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('The items go back on sale and any coupon you used is returned to you.', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+          Text(context.tr('orders.cancel.body'), style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
           const SizedBox(height: 12),
           TextField(
             controller: _reason,
             autofocus: true,
             maxLength: 300,
-            decoration: const InputDecoration(labelText: 'Reason (optional)', hintText: 'e.g. Ordered by mistake', counterText: ''),
+            decoration: InputDecoration(labelText: context.tr('orders.cancel.reason_label'), hintText: context.tr('orders.cancel.reason_hint'), counterText: ''),
           ),
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Keep order')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.tr('orders.cancel.keep'))),
         TextButton(
           onPressed: () => Navigator.of(context).pop(_reason.text.trim()),
           style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-          child: const Text('Cancel order'),
+          child: Text(context.tr('orders.track.cancel_order')),
         ),
       ],
     );
@@ -481,7 +505,7 @@ class _RefundDialogState extends State<_RefundDialog> {
   Widget build(BuildContext context) {
     final valid = _reason.text.trim().length >= 5;
     return AlertDialog(
-      title: const Text('Request refund'),
+      title: Text(context.tr('orders.refund.request')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -494,13 +518,13 @@ class _RefundDialogState extends State<_RefundDialog> {
             maxLines: 3,
             maxLength: 1000,
             onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(labelText: 'Reason', hintText: 'At least 5 characters'),
+            decoration: InputDecoration(labelText: context.tr('orders.refund.reason_label'), hintText: context.tr('orders.refund.reason_hint')),
           ),
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-        TextButton(onPressed: valid ? () => Navigator.of(context).pop(_reason.text.trim()) : null, child: const Text('Submit')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.tr('common.cancel'))),
+        TextButton(onPressed: valid ? () => Navigator.of(context).pop(_reason.text.trim()) : null, child: Text(context.tr('orders.refund.submit'))),
       ],
     );
   }

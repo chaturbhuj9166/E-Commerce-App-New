@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
+import '../../l10n/tr.dart';
 import '../../providers/cart_provider.dart';
 import '../../widgets/checkout_stepper.dart';
 import '../../widgets/price_tag.dart';
@@ -47,14 +48,14 @@ class _CheckoutPaymentScreenState extends State<CheckoutPaymentScreen> {
     // The balance may have loaded (or the cart changed) after Wallet was picked.
     final method = _method == PaymentMethod.wallet && !walletUsable ? PaymentMethod.razorpay : _method;
     return Scaffold(
-      appBar: AppBar(title: const Text('Checkout')),
+      appBar: AppBar(title: Text(context.tr('checkout.title'))),
       body: SafeArea(
         child: Column(
           children: [
             const CheckoutStepper(step: 2),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Align(alignment: Alignment.centerLeft, child: Text('Select Payment Method', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15))),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Align(alignment: Alignment.centerLeft, child: Text(context.tr('checkout.payment.select'), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15))),
             ),
             Expanded(
               child: ListView(
@@ -62,34 +63,34 @@ class _CheckoutPaymentScreenState extends State<CheckoutPaymentScreen> {
                 children: [
                   _PaymentTile(
                     icon: Icons.qr_code_rounded,
-                    title: 'UPI (Google Pay, PhonePe, etc.)',
+                    title: context.tr('checkout.payment.upi'),
                     selected: method == PaymentMethod.razorpay && _gatewayTile == 'upi',
                     onTap: () => _pickGateway('upi'),
                   ),
                   _PaymentTile(
                     icon: Icons.credit_card_rounded,
-                    title: 'Credit / Debit Card',
+                    title: context.tr('checkout.payment.card'),
                     selected: method == PaymentMethod.razorpay && _gatewayTile == 'card',
                     onTap: () => _pickGateway('card'),
                   ),
                   _PaymentTile(
                     icon: Icons.account_balance_rounded,
-                    title: 'Net Banking',
+                    title: context.tr('checkout.payment.netbanking'),
                     selected: method == PaymentMethod.razorpay && _gatewayTile == 'netbanking',
                     onTap: () => _pickGateway('netbanking'),
                   ),
                   _PaymentTile(
                     icon: Icons.account_balance_wallet_rounded,
-                    title: 'Wallet (NTSA Wallet)',
+                    title: context.tr('checkout.payment.wallet'),
                     subtitle: _walletBalance == null
-                        ? 'Balance unavailable'
-                        : 'Balance: ${formatPaise(_walletBalance!)}${walletUsable ? '' : ' — insufficient'}',
+                        ? context.tr('checkout.payment.balance_unavailable')
+                        : context.tr(walletUsable ? 'checkout.payment.balance' : 'checkout.payment.balance_insufficient', {'amount': formatPaise(_walletBalance!)}),
                     selected: method == PaymentMethod.wallet,
                     onTap: walletUsable ? () => setState(() => _method = PaymentMethod.wallet) : null,
                   ),
                   _PaymentTile(
                     icon: Icons.payments_outlined,
-                    title: 'Cash on Delivery',
+                    title: context.tr('checkout.payment.cod'),
                     selected: method == PaymentMethod.cod,
                     onTap: () => setState(() => _method = PaymentMethod.cod),
                   ),
@@ -97,10 +98,10 @@ class _CheckoutPaymentScreenState extends State<CheckoutPaymentScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10)),
-                    child: const Row(children: [
-                      Icon(Icons.verified_user_rounded, color: AppColors.success, size: 18),
-                      SizedBox(width: 8),
-                      Expanded(child: Text('100% Secure Payments — your data is always protected', style: TextStyle(fontSize: 12, color: AppColors.success))),
+                    child: Row(children: [
+                      const Icon(Icons.verified_user_rounded, color: AppColors.success, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(context.tr('checkout.payment.secure'), style: const TextStyle(fontSize: 12, color: AppColors.success))),
                     ]),
                   ),
                 ],
@@ -111,7 +112,7 @@ class _CheckoutPaymentScreenState extends State<CheckoutPaymentScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
                 child: PrimaryButton(
-                  label: 'Continue',
+                  label: context.tr('common.continue'),
                   orange: true,
                   onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => OrderSummaryScreen(addressId: widget.addressId, method: method),

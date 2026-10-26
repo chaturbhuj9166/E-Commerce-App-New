@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
 import '../../core/image_upload.dart';
+import '../../l10n/tr.dart';
 import '../../widgets/primary_button.dart';
 
 class WriteReviewScreen extends StatefulWidget {
@@ -34,7 +35,7 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
 
   Future<void> _submit() async {
     if (_comment.text.trim().isEmpty) {
-      setState(() => _error = 'Please write a few words about the product');
+      setState(() => _error = context.tr('review.error.empty'));
       return;
     }
     setState(() {
@@ -64,14 +65,14 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Write a Review')),
+      appBar: AppBar(title: Text(context.tr('review.write'))),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
             Text(widget.productName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
             const SizedBox(height: 16),
-            const Text('Your rating', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            Text(context.tr('review.your_rating'), style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
             const SizedBox(height: 8),
             Row(
               children: List.generate(5, (i) => IconButton(
@@ -84,10 +85,10 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
               controller: _comment,
               maxLines: 4,
               maxLength: 1000,
-              decoration: const InputDecoration(labelText: 'Share your experience', hintText: 'What did you like or dislike?'),
+              decoration: InputDecoration(labelText: context.tr('review.comment.label'), hintText: context.tr('review.comment.hint')),
             ),
             const SizedBox(height: 8),
-            const Text('Add photos (optional, up to 3)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            Text(context.tr('review.photos'), style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -121,7 +122,7 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
             ),
             if (_error != null) Padding(padding: const EdgeInsets.only(top: 14), child: Text(_error!, style: const TextStyle(color: AppColors.danger))),
             const SizedBox(height: 20),
-            PrimaryButton(label: 'Submit Review', loading: _submitting, onPressed: _submit),
+            PrimaryButton(label: context.tr('review.submit'), loading: _submitting, onPressed: _submit),
           ],
         ),
       ),

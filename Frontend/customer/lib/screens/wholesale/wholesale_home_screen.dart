@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/tr.dart';
 import '../../core/app_colors.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/vendor_provider.dart';
@@ -23,7 +24,7 @@ class WholesaleHomeScreen extends StatefulWidget {
 class _WholesaleHomeScreenState extends State<WholesaleHomeScreen> {
   int _index = 0;
 
-  static const _titles = ['Wholesale', 'Categories', 'Messages', 'Settings'];
+  static const _titles = ['ws.nav.wholesale', 'ws.nav.categories', 'ws.nav.messages', 'ws.nav.settings'];
 
   final _tabs = const [
     WholesaleCatalogTab(),
@@ -33,10 +34,10 @@ class _WholesaleHomeScreenState extends State<WholesaleHomeScreen> {
   ];
 
   static const _items = [
-    (Icons.home_rounded, 'Home'),
-    (Icons.grid_view_rounded, 'Categories'),
-    (Icons.chat_bubble_rounded, 'Messages'),
-    (Icons.settings_rounded, 'Settings'),
+    (Icons.home_rounded, 'ws.nav.home'),
+    (Icons.grid_view_rounded, 'ws.nav.categories'),
+    (Icons.chat_bubble_rounded, 'ws.nav.messages'),
+    (Icons.settings_rounded, 'ws.nav.settings'),
   ];
 
   @override
@@ -55,11 +56,11 @@ class _WholesaleHomeScreenState extends State<WholesaleHomeScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(color: AppColors.iconAccentSoft, borderRadius: BorderRadius.circular(6)),
-                    child: Text('WHOLESALE', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppColors.iconAccent, letterSpacing: 0.5)),
+                    child: Text(context.tr('ws.home.badge'), style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppColors.iconAccent, letterSpacing: 0.5)),
                   ),
                 ],
               )
-            : Text(_titles[_index]),
+            : Text(context.tr(_titles[_index])),
       ),
       body: IndexedStack(key: ValueKey(isDark), index: _index, children: _tabs),
       bottomNavigationBar: DecoratedBox(
@@ -97,7 +98,7 @@ class _WholesaleHomeScreenState extends State<WholesaleHomeScreen> {
           children: [
             Icon(icon, color: color, size: 23),
             const SizedBox(height: 3),
-            Text(label, style: TextStyle(fontSize: 10.5, color: color, fontWeight: selected ? FontWeight.w600 : FontWeight.w400)),
+            Text(context.tr(label), style: TextStyle(fontSize: 10.5, color: color, fontWeight: selected ? FontWeight.w600 : FontWeight.w400)),
           ],
         ),
       ),

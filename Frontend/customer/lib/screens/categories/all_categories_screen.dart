@@ -4,6 +4,7 @@ import '../../core/app_colors.dart';
 import '../../providers/shop_provider.dart';
 import '../../widgets/category_icon.dart';
 import '../products/product_listing_screen.dart';
+import '../../l10n/tr.dart';
 
 class AllCategoriesScreen extends StatefulWidget {
   const AllCategoriesScreen({super.key, this.embedded = false});
@@ -33,17 +34,17 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: !widget.embedded,
-        title: const Text('All Categories'),
+        title: Text(context.tr('cat.title')),
       ),
       body: SafeArea(
         child: categories.isEmpty
             ? Center(
                 child: shop.categoriesError == null
-                    ? (shop.categoriesLoaded ? Text('No categories yet', style: TextStyle(color: AppColors.textMuted)) : const CircularProgressIndicator())
+                    ? (shop.categoriesLoaded ? Text(context.tr('cat.empty'), style: TextStyle(color: AppColors.textMuted)) : const CircularProgressIndicator())
                     : Column(mainAxisSize: MainAxisSize.min, children: [
                         Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Text(shop.categoriesError!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger))),
                         const SizedBox(height: 12),
-                        OutlinedButton(onPressed: () => context.read<ShopProvider>().loadCategories(), child: const Text('Retry')),
+                        OutlinedButton(onPressed: () => context.read<ShopProvider>().loadCategories(), child: Text(context.tr('common.retry'))),
                       ]),
               )
             : RefreshIndicator(

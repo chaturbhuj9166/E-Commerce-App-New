@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
+import '../l10n/tr.dart';
 import '../widgets/ntsa_logo.dart';
 import 'auth/login_screen.dart';
 
@@ -22,9 +23,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int _page = 0;
 
   static const _pages = [
-    _OnboardingPage('assets/images/onboarding_shop.png', 'Shop Everything', 'From electronics to groceries, fashion to furniture — all in one app.'),
-    _OnboardingPage('assets/images/onboarding_deals.png', 'Unbeatable Deals', 'Best prices, exclusive offers and exciting discounts everyday.'),
-    _OnboardingPage('assets/images/onboarding_delivery.png', 'Fast & Reliable Delivery', 'Your favorites, delivered with care — right to your doorstep.'),
+    _OnboardingPage('assets/images/onboarding_shop.png', 'onboarding.shop.title', 'onboarding.shop.desc'),
+    _OnboardingPage('assets/images/onboarding_deals.png', 'onboarding.deals.title', 'onboarding.deals.desc'),
+    _OnboardingPage('assets/images/onboarding_delivery.png', 'onboarding.delivery.title', 'onboarding.delivery.desc'),
   ];
 
   @override
@@ -48,7 +49,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const NtsaLogo(size: 22),
-                  TextButton(onPressed: _goToLogin, child: Text('Skip', style: TextStyle(color: AppColors.textMuted))),
+                  TextButton(onPressed: _goToLogin, child: Text(context.tr('onboarding.skip'), style: TextStyle(color: AppColors.textMuted))),
                 ],
               ),
             ),
@@ -66,9 +67,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       children: [
                         SizedBox(height: 220, child: Image.asset(page.image, fit: BoxFit.contain)),
                         const SizedBox(height: 28),
-                        Text(page.title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                        Text(context.tr(page.title), textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
                         const SizedBox(height: 12),
-                        Text(page.description, textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary, fontSize: 13.5, height: 1.5)),
+                        Text(context.tr(page.description), textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary, fontSize: 13.5, height: 1.5)),
                       ],
                     ),
                   );

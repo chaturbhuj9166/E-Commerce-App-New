@@ -1,4 +1,6 @@
 import 'category.dart' show ShopCategory;
+import 'package:flutter/widgets.dart' show BuildContext;
+import '../l10n/tr.dart';
 import 'review.dart';
 
 class Product {
@@ -82,6 +84,14 @@ class Product {
   String get image => images.isNotEmpty ? images.first : '';
   bool get hasVariants => sizes.isNotEmpty || colors.isNotEmpty || conditionGrades.isNotEmpty;
   bool get isNewStock => condition == 'NEW';
+  /// Translation key for a bare condition code (NEW / REFURBISHED / OPEN_BOX / USED).
+  static String conditionKey(String condition) => const {
+        'REFURBISHED': 'pdp.condition.refurbished',
+        'OPEN_BOX': 'pdp.condition.open_box',
+        'USED': 'pdp.condition.used',
+      }[condition] ?? 'pdp.condition.new';
+  /// Translated [conditionLabel].
+  String conditionLabelOf(BuildContext context) => context.tr(conditionKey(condition));
   /// Short label for the badge on listings, e.g. "Refurbished".
   String get conditionLabel => const {
         'REFURBISHED': 'Refurbished',

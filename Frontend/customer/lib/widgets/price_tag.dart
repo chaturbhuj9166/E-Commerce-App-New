@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
+import '../l10n/tr.dart';
 
 /// Whole rupees print without decimals; anything with paise shows both
 /// digits (rounding ₹99.50 up to ₹100 would misstate the price).
@@ -27,7 +28,7 @@ class PriceTag extends StatelessWidget {
             style: TextStyle(fontSize: size - 3, color: AppColors.textMuted, decoration: TextDecoration.lineThrough),
           ),
         if (hasDiscount)
-          Text('$percentOff% OFF', style: TextStyle(fontSize: size - 4, fontWeight: FontWeight.w700, color: AppColors.success)),
+          Text(context.tr('w.percent_off', {'n': '$percentOff'}), style: TextStyle(fontSize: size - 4, fontWeight: FontWeight.w700, color: AppColors.success)),
       ],
     );
   }

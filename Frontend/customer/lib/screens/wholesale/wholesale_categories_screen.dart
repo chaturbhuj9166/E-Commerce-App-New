@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../l10n/tr.dart';
 import '../../core/app_colors.dart';
 import '../../providers/shop_provider.dart';
 import '../../providers/vendor_provider.dart';
@@ -51,7 +52,7 @@ class _WholesaleCategoriesScreenState extends State<WholesaleCategoriesScreen> {
     final stocked = context.watch<VendorProvider>().products.map((p) => p.category?.id).whereType<String>().toSet();
     final categories = stocked.isEmpty ? all : all.where((c) => stocked.contains(c.id)).toList();
     return Scaffold(
-      appBar: AppBar(automaticallyImplyLeading: !widget.embedded, title: const Text('All Categories')),
+      appBar: AppBar(automaticallyImplyLeading: !widget.embedded, title: Text(context.tr('ws.categories.title'))),
       body: SafeArea(
         child: categories.isEmpty
             ? Center(
@@ -62,7 +63,7 @@ class _WholesaleCategoriesScreenState extends State<WholesaleCategoriesScreen> {
                         children: [
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 24),
-                            child: Text(_error ?? 'No categories available', textAlign: TextAlign.center, style: TextStyle(color: _error != null ? AppColors.danger : AppColors.textMuted)),
+                            child: Text(_error ?? context.tr('ws.categories.empty'), textAlign: TextAlign.center, style: TextStyle(color: _error != null ? AppColors.danger : AppColors.textMuted)),
                           ),
                           const SizedBox(height: 10),
                           OutlinedButton(
@@ -70,7 +71,7 @@ class _WholesaleCategoriesScreenState extends State<WholesaleCategoriesScreen> {
                               setState(() => _loaded = false);
                               _load();
                             },
-                            child: const Text('Retry'),
+                            child: Text(context.tr('common.retry')),
                           ),
                         ],
                       ),
