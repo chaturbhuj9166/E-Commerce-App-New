@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../core/api_client.dart';
@@ -15,6 +18,13 @@ class AuthProvider extends ChangeNotifier {
   String? role;
   bool loading = false;
   String? error;
+
+  /// Stored when Firebase's codeSent callback fires, to build the credential.
+  String? _verificationId;
+
+  /// Real Firebase phone-OTP runs on Android (where Firebase is initialised);
+  /// the web build has no Firebase config and keeps the demo login.
+  bool get _firebaseReady => !kIsWeb && Firebase.apps.isNotEmpty;
 
   bool get isSignedIn => user != null;
 
@@ -61,13 +71,53 @@ class AuthProvider extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      return await ApiClient.instance.post('/auth/demo/otp', data: {'phone': phone}) as Map<String, dynamic>;
+      if (!_firebaseReady) {
+        // Web / no-Firebase build: the backend hands the OTP back itself.
+        return await ApiClient.instance.post('/auth/demo/otp', data: {'phone': phone}) as Map<String, dynamic>;
+      }
+      // Android: Firebase sends the SMS (or a test number's fixed code).
+      final completer = Completer<Map<String, dynamic>?>();
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: '+91$phone',
+        timeout: const Duration(seconds: 60),
+        verificationCompleted: (_) {
+          // Android auto-retrieval may fire; the user still types the code on
+          // the next screen, so there's nothing to do here.
+        },
+        verificationFailed: (e) {
+          error = _firebaseError(e);
+          if (!completer.isCompleted) completer.complete(null);
+        },
+        codeSent: (verificationId, _) {
+          _verificationId = verificationId;
+          if (!completer.isCompleted) completer.complete({'resendInSeconds': 60});
+        },
+        codeAutoRetrievalTimeout: (verificationId) {
+          _verificationId = verificationId;
+        },
+      );
+      return await completer.future;
     } catch (e) {
       error = e.toString();
       return null;
     } finally {
       loading = false;
       notifyListeners();
+    }
+  }
+
+  String _firebaseError(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'invalid-verification-code':
+        return 'That OTP is incorrect. Please try again.';
+      case 'invalid-phone-number':
+        return 'That phone number looks invalid.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please try again in a while.';
+      case 'session-expired':
+        return 'The code expired. Please resend the OTP.';
+      default:
+        return e.message ?? 'Verification failed. Please try again.';
     }
   }
 
@@ -79,11 +129,28 @@ class AuthProvider extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
+      // Android phone sign-in: verify the code with Firebase, then swap the
+      // Firebase ID token for our own session at POST /auth/firebase.
+      if (_firebaseReady && phone != null && phone.isNotEmpty && otp != null && _verificationId != null) {
+        final credential = PhoneAuthProvider.credential(verificationId: _verificationId!, smsCode: otp);
+        final result = await FirebaseAuth.instance.signInWithCredential(credential);
+        final idToken = await result.user?.getIdToken();
+        if (idToken == null) throw Exception('Could not get a Firebase token');
+        final data = await ApiClient.instance.post('/auth/firebase', data: {'idToken': idToken}) as Map<String, dynamic>;
+        await ApiClient.instance.saveToken(data['token'] as String);
+        role = 'CUSTOMER';
+        user = AppUser.fromJson(data['user'] as Map<String, dynamic>);
+        return true;
+      }
+      // Web, or the Google/Apple buttons (no phone): the backend's demo login.
       final data = await ApiClient.instance.post('/auth/demo', data: {if (phone != null && phone.isNotEmpty) 'phone': phone, 'otp': ?otp}) as Map<String, dynamic>;
       await ApiClient.instance.saveToken(data['token'] as String);
       role = 'CUSTOMER';
       user = AppUser.fromJson(data['user'] as Map<String, dynamic>);
       return true;
+    } on FirebaseAuthException catch (e) {
+      error = _firebaseError(e);
+      return false;
     } catch (e) {
       error = e.toString();
       return false;
@@ -121,6 +188,11 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    if (_firebaseReady) {
+      try {
+        await FirebaseAuth.instance.signOut();
+      } catch (_) {}
+    }
     await ApiClient.instance.clearToken();
     user = null;
     role = null;

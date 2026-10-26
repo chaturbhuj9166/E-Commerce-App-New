@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
+import 'firebase_options.dart';
 import 'core/api_client.dart';
 import 'core/app_theme.dart';
 import 'providers/auth_provider.dart';
@@ -15,7 +18,17 @@ import 'screens/splash_screen.dart';
 final navigatorKey = GlobalKey<NavigatorState>();
 final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Firebase powers real phone-OTP sign-in on Android. The web build has no
+  // Firebase config, so it skips init and keeps the demo login working.
+  if (!kIsWeb) {
+    try {
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    } catch (e) {
+      debugPrint('Firebase init failed, falling back to demo login: $e');
+    }
+  }
   ApiClient.onUnauthorized = _sessionExpired;
   runApp(const NtsaApp());
 }
