@@ -169,3 +169,37 @@
 [data-theme="dark"] .kebab-menu{background:#141c30;border-color:#28344d}
 [data-theme="dark"] .kebab-menu button{color:#e6ebf2}
 [data-theme="dark"] .kebab-menu button:hover{background:#1b2740}
+.late-banner{width:100%;display:flex;align-items:center;gap:16px;text-align:left;border:0;border-radius:12px;background:linear-gradient(135deg,#c0392b,#a32b1f);color:#fff;padding:16px 22px;margin:0 0 22px;box-shadow:0 8px 24px #a32b1f44;cursor:pointer}
+.late-banner:hover:not(:disabled){filter:brightness(1.06)}
+.late-banner>svg{flex-shrink:0;background:#ffffff2e;border-radius:50%;padding:8px;width:42px;height:42px}
+.late-banner>div{flex:1;min-width:0}
+.late-banner strong{display:block;font-size:16px;color:#fff}
+.late-banner span{display:block;font-size:12px;opacity:.9;margin-top:3px;line-height:1.5}
+.late-banner .late-banner-cta{display:flex;align-items:center;gap:6px;white-space:nowrap;font-weight:650;background:#ffffff26;border-radius:8px;padding:9px 14px;margin:0;opacity:1}
+.modal.modal-wide{width:920px}
+.late-team{display:flex;align-items:flex-end;gap:12px;background:#f6f8fa;border:1px solid #e5ebef;border-radius:10px;padding:14px;margin-bottom:16px}
+.late-team .button{min-height:42px}
+.late-card{border:1px solid #f1d4d0;border-left:4px solid #c0392b;border-radius:10px;padding:14px 16px;margin-bottom:12px;background:#fffafa}
+.late-card>header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
+.late-card-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.late-card-title strong{font-size:14px}
+.late-chip{background:#c0392b;color:#fff;font-size:11px;font-weight:650;border-radius:20px;padding:3px 10px}
+.late-card-body{display:grid;grid-template-columns:1.1fr 1fr;gap:18px}
+.late-card-body small{line-height:1.6}
+.late-warn{color:#b4690e;font-weight:600}
+.late-actions{display:flex;flex-direction:column;gap:8px}
+.late-row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px}
+.late-row>span:first-child{display:flex;align-items:center;gap:6px;color:#44606d;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.late-contact{display:flex;gap:6px;flex-shrink:0}
+.late-btn{display:inline-flex;align-items:center;gap:5px;border:1px solid #cfdde5;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:600;color:#245;text-decoration:none;background:#fff}
+.late-btn:hover{background:#eef4f7}
+.late-btn.wa{border-color:#bfe3cd;color:#1f7a45;background:#f1fbf5}
+.late-btn.wa:hover{background:#e2f6ea}
+.late-no-phone{font-size:11px;color:#9aa8b0}
+.late-open{align-self:flex-start;margin-top:4px}
+@media(max-width:800px){.late-banner{flex-wrap:wrap}.late-card-body{grid-template-columns:1fr}.modal.modal-wide{width:100%}.late-team{flex-wrap:wrap}}
+[data-theme="dark"] .late-team{background:#141c30;border-color:#28344d}
+[data-theme="dark"] .late-card{background:#1d1620;border-color:#4a2a2e;border-left-color:#e0584a}
+[data-theme="dark"] .late-btn{background:#141c30;border-color:#28344d;color:#cdd7e6}
+[data-theme="dark"] .late-btn.wa{background:#12301f;border-color:#1f5a38;color:#7fd8a3}
+[data-theme="dark"] .late-row>span:first-child{color:#9fb0c4}

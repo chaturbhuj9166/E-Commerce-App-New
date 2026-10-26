@@ -8,6 +8,7 @@ import { ArrowUpRight, Check, ShoppingBag, Package, Users, Wallet, Clock3, Clipb
 import { money } from '../api';
 import { Badge, Empty, ProductImage } from '../ui';
 import { OrderTable } from './shared';
+import { LateOrdersBanner } from './late-orders';
 
 const NAVY = '#163041', ORANGE = '#ffac50', GREEN = '#499b76', BLUE = '#5d8fc2', AMBER = '#d79a3c', RED = '#b15d5d';
 const STATUS_COLOR = { DELIVERED: GREEN, PLACED: BLUE, PACKED: AMBER, SHIPPED: AMBER, OUT_FOR_DELIVERY: AMBER, CANCELLED: RED, PENDING_PAYMENT: '#9aa8b0' };
@@ -33,7 +34,7 @@ function TrendStat({ icon: Icon, label, value, changePct, note }) {
   </section>;
 }
 
-export function OverviewPage({ isAdmin, me, vendors, orders, products, toPack, applications, notifications, reports, reportsDays, setReportsDays, loadingReports, go, openModal, clearNotifications, clearNotification }) {
+export function OverviewPage({ isAdmin, me, vendors, orders, products, toPack, applications, notifications, reports, reportsDays, setReportsDays, loadingReports, go, openModal, clearNotifications, clearNotification, lateOrders }) {
   const pendingApplications = applications.filter(a => a.status === 'PENDING').length;
   const lowStock = products.filter(p => p.stock < 10);
   const s = reports?.summary;
@@ -51,6 +52,7 @@ export function OverviewPage({ isAdmin, me, vendors, orders, products, toPack, a
   ];
 
   return <>
+    <LateOrdersBanner late={lateOrders} onOpen={() => openModal({ type: 'LateOrders' })}/>
     <section className="hero">
       <div>
         <div className="hero-kicker"><span/> YOUR BUSINESS, AT A GLANCE</div>

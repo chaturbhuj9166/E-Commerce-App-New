@@ -185,6 +185,9 @@ model Settings {
   invoiceColumns Json?
   // Whether NTSA's own (non-seller) product photos get the logo stamp.
   watermarkOwn Boolean @default(true)
+  // Who the admin calls or messages when an order runs late (the delivery
+  // team's number). Set from the late-orders list itself.
+  deliveryTeamPhone String?
   updatedAt DateTime @updatedAt
   @@map("settings")
 }

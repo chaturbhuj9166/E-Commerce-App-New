@@ -11,7 +11,7 @@ export function PasswordField({ label, ...props }) {
 }
 export function Badge({ children }) { return <span className={`badge ${['DELIVERED', 'APPROVED', 'Active'].includes(children) ? 'green' : ['CANCELLED', 'REJECTED', 'Disabled'].includes(children) ? 'red' : ''}`}>{String(children).replaceAll('_', ' ')}</span>; }
 export function Empty({ text = 'Nothing here yet.' }) { return <div className="empty"><Package size={36}/><h3>{text}</h3><p>New activity will appear here.</p></div>; }
-export function Modal({ title, close, children }) { return <div className="overlay" onClick={close}><section role="dialog" aria-modal="true" aria-label={title} className="modal" onClick={e => e.stopPropagation()}><header><h2>{title}</h2><button className="icon-button" aria-label="Close dialog" onClick={close}><X/></button></header>{children}</section></div>; }
+export function Modal({ title, close, children, wide }) { return <div className="overlay" onClick={close}><section role="dialog" aria-modal="true" aria-label={title} className={wide ? 'modal modal-wide' : 'modal'} onClick={e => e.stopPropagation()}><header><h2>{title}</h2><button className="icon-button" aria-label="Close dialog" onClick={close}><X/></button></header>{children}</section></div>; }
 export function Stat({ icon: Icon, label, value, note }) { return <section className="stat"><div className="stat-top"><span>{label}</span><Icon size={19}/></div><strong>{value}</strong><p>{note}</p></section>; }
 // A product thumbnail. With photos it opens a full-size lightbox on click
 // (and steps through every photo the product has); without, a placeholder.

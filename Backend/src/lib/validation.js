@@ -206,6 +206,7 @@ export const settingsSchema = z.object({
   invoiceTerms: z.string().trim().max(1500).nullable().optional(),
   invoiceBankDetails: z.string().trim().max(600).nullable().optional(),
   watermarkOwn: z.boolean().optional(),
+  deliveryTeamPhone: z.string().trim().regex(/^\+?[0-9]{10,15}$/, 'Enter a valid phone number').nullable().optional(),
   // Which item-table columns show and what each is called. `item` and `amount`
   // are always shown; the rest can be toggled and renamed.
   // Built-in columns (item/variant/hsn/qty/rate/amount) plus any number of

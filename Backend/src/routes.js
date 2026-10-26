@@ -363,6 +363,41 @@ router.put('/admin/settings', async (req, res) => {
   if (data.invoiceColumns === null) data.invoiceColumns = Prisma.DbNull;
   res.json(await db.settings.upsert({ where: { id: 'singleton' }, update: data, create: { id: 'singleton', ...data } }));
 });
+// Orders past the delivery date the customer was promised and still not
+// delivered, most overdue first. Each carries who to chase -- the shops
+// involved and the delivery team's number -- so the admin can call or message
+// straight from the list. Orders from before delivery dates were stored fall
+// back to a 7-day promise from the day they were placed.
+const LATE_STATUSES = ['PLACED', 'PACKED', 'SHIPPED', 'OUT_FOR_DELIVERY'];
+router.get('/admin/late-orders', async (req, res) => {
+  const DAY = 86400000, now = Date.now();
+  const [orders, settings] = await Promise.all([
+    db.order.findMany({
+      where: { status: { in: LATE_STATUSES } }, orderBy: { createdAt: 'asc' }, take: 500,
+      include: {
+        user: { select: { name: true, phone: true } }, vendor: { select: { name: true, phone: true } },
+        items: { select: { id: true, name: true, quantity: true, packedAt: true, sellerId: true, seller: { select: { id: true, shopName: true, ownerName: true, phone: true } } } },
+      },
+    }),
+    getSettings(),
+  ]);
+  const late = orders
+    .map(o => { const dueAt = o.expectedDeliveryAt ?? new Date(o.createdAt.getTime() + 7 * DAY); return { o, dueAt, lateMs: now - dueAt.getTime() }; })
+    .filter(x => x.lateMs > 0)
+    .sort((a, b) => b.lateMs - a.lateMs)
+    .map(({ o, dueAt, lateMs }) => {
+      const sellers = [...new Map(o.items.filter(i => i.seller).map(i => [i.seller.id, i.seller])).values()];
+      return {
+        id: o.id, status: o.status, totalPaise: o.totalPaise, paymentMethod: o.paymentMethod, createdAt: o.createdAt,
+        dueAt, hoursLate: Math.floor(lateMs / 3600000), daysLate: Math.floor(lateMs / DAY), deliveryPartner: o.deliveryPartner,
+        customer: { name: o.address?.name || o.user?.name || o.vendor?.name || 'Customer', phone: o.address?.phone || o.user?.phone || o.vendor?.phone || null, city: o.address?.city || null },
+        sellers,
+        unpackedCount: o.items.filter(i => i.sellerId && !i.packedAt).length,
+        items: o.items.map(i => ({ name: i.name, quantity: i.quantity, sellerName: i.seller?.shopName ?? null })),
+      };
+    });
+  res.json({ deliveryTeamPhone: settings?.deliveryTeamPhone ?? null, count: late.length, oldestDaysLate: late[0]?.daysLate ?? 0, orders: late });
+});
 // The admin's custom charge/discount lines on one order's bill.
 router.patch('/admin/orders/:id/invoice-extras', async (req, res) => {
   const { extras } = invoiceExtrasSchema.parse(req.body);
